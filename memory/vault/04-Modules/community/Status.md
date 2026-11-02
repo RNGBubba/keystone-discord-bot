@@ -19,6 +19,18 @@ and is covered by a test. Select interactions, thread/voice behavior, live role
 grants and the scheduler tick are still unverified. The Postgres guild lock is
 exercised on PGlite, not a Postgres server.
 
+P7 added the durable timer for reminders and schedules in pass 45. `/tools
+reminder` and `/tools schedule` still write the same `community_records` rows,
+but now enqueue `content.deliver` with a due-time delay and an idempotency key.
+`ContentService.deliver` re-reads the record, refuses a future due time, claims
+it with one conditional `UPDATE … WHERE data->>'sent' <> 'true'`, then sends by
+DM or channel; a failed send restores `sent:false`, and only Discord accepting
+the message leaves the claim in place. `tick()` calls the same `deliver` method
+and remains the reconciliation/backstop path, so the timer and the sweep can run
+concurrently without sending twice. The live probe ran this against real
+Postgres rows (`content-timer-delivery`, including a concurrent claim); Discord
+was a recording port, not a gateway.
+
 P7 added the auto-responder in pass 25. Exact, contains and regex triggers are
 guild records; a message gets at most one reply, exact beats contains and
 contains beats regex, and each trigger carries its own cooldown. `/tools` gained
@@ -41,18 +53,18 @@ test rather than a live click.
 ## Verified
 
 ```text
-pnpm check                            exit 0 · 435 tests / 65 files
+pnpm check                            exit 0 · 457 tests / 68 files
   responder.test.ts                   5 tests (auto-responder service)
-  community.test.ts                  12 tests
+  community.test.ts                  14 tests (including timer delivery and a concurrent claim)
   extras.test.ts                      7 tests
-  commands.test.ts                   11 tests
+  commands.test.ts                   12 tests (incl. reminder/schedule timer wiring)
   economy.test.ts                     6 tests
   apps/bot/src/community-events.test.ts 3 tests (dev marker + responder)
   apps/bot/src/prefix.test.ts         8 tests (dev bridge)
   context.test.ts                     2 tests (Rank card menu)
-  packages/db/src/community.test.ts   5 tests (incl. responder reopen)
+  packages/db/src/community.test.ts   6 tests (incl. responder reopen and delivery claim)
   packages/db/src/economy.test.ts     2 tests
-pnpm budget                           20/100 roots · 138 subcommands · 158 actions · 4 context menus, status OK
+pnpm budget                           20/100 roots · 139 subcommands · 159 actions · 4 context menus, status OK
 pnpm memory:check                     current (pass 33)
 ```
 
@@ -84,7 +96,7 @@ Feature proofs (P3 plus the P4 economy hardening):
 | Live leaderboard | `!rank leaderboard` returned the real XP-leaderboard embed in `#ai-chat` |
 | Ticket stats placement | Guild stats renders without a ticket id; only the `ManageGuild` permission guard can stop it |
 | Embeds/tags | Valid embed sends; empty embed rejected; tag create/read |
-| Reminders/schedules | Nothing before due; one delivery each after due; second tick is inert |
+| Reminders/schedules | One delayed `content.deliver` job per record with a due delay; nothing before due; one delivery each after due; redelivery and second tick inert; two concurrent claims send once |
 | Polls | One vote per member, totals counted |
 | Feeds | RSS parse, GUID dedupe, one post |
 | Sticky | Duplicate message event does not increment; threshold posts once; next threshold deletes only the recorded previous sticky |
@@ -155,9 +167,13 @@ No document claims a live Discord run for a row marked “staging”.
 
 ## Known limitations
 
-- The scheduler tick runs only while the bot process is alive; reminders,
-  giveaways, delayed autoroles and season rollover survive in the store but an
-  offline bot delays them. Durable queue handoff is still P3 follow-up work.
+- Reminders and scheduled messages now use the bot-side durable timer; in
+  memory mode the queue is process-local, so the 60-second `tick` re-delivers
+  overdue records after a restart. Giveaways, delayed autoroles, birthdays,
+  seasons, feeds and stat channels still run on that tick and are delayed while
+  the bot is offline.
+- The timer consumer lives in the bot because it needs the gateway; the worker
+  deliberately does not pretend to send Discord messages.
 - `statChannels.online` is approximated with `guild.memberCount`; presence is not
   requested.
 - Daily uses the kernel cooldown with a window to the next UTC midnight; the day
@@ -183,5 +199,7 @@ No document claims a live Discord run for a row marked “staging”.
 - P5 dashboard/fleet, importers and export/restore.
 - P4 AI layer and economy hardening are in-repo; see
   [[04-Modules/ai/Status|AI status]] for its provider/live/pgvector gaps.
-- Move reminders/giveaways/delayed roles/season rollover onto the durable queue.
+- Move giveaways, delayed autoroles, birthdays and season rollover onto the
+  same durable timer; reminders/schedules are done.
+- Prove a live Discord delivery (DM and channel) with the new timer.
 - Add a repair/refund path for a failed shop role grant.

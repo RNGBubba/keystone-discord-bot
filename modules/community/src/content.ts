@@ -6,6 +6,7 @@ import type {
   CommunityStore,
   EmbedField,
   EmbedPayload,
+  JobQueue,
 } from "@keystone/kernel";
 import type { CommunitySettings } from "./settings";
 
@@ -35,6 +36,15 @@ export interface ReminderRecord {
   text: string;
   sent: boolean;
 }
+
+export type DeliveryKind = "reminder" | "scheduled_message";
+
+export type DeliveryOutcome =
+  | { status: "sent" }
+  | { status: "already-sent" }
+  | { status: "missing" }
+  | { status: "not-due"; remainingMs: number }
+  | { status: "failed"; detail: string };
 
 export interface PollRecord {
   id: string;
@@ -151,6 +161,7 @@ export class ContentService {
     channelId: string | undefined,
     text: string,
     dueAt: string,
+    queue?: JobQueue,
   ): Promise<ReminderRecord> {
     if (new Date(dueAt).getTime() <= this.now()) {
       throw new UserError("A reminder must be in the future.");
@@ -164,6 +175,7 @@ export class ContentService {
       sent: false,
     };
     await this.store.putRecord(guildId, "reminder", record.id, record);
+    await scheduleDelivery(queue, guildId, "reminder", record, this.now());
     return record;
   }
 
@@ -172,6 +184,7 @@ export class ContentService {
     channelId: string,
     text: string,
     dueAt: string,
+    queue?: JobQueue,
   ): Promise<ReminderRecord> {
     if (new Date(dueAt).getTime() <= this.now()) {
       throw new UserError("A scheduled message must be in the future.");
@@ -185,7 +198,55 @@ export class ContentService {
       sent: false,
     };
     await this.store.putRecord(guildId, "scheduled_message", record.id, record);
+    await scheduleDelivery(queue, guildId, "scheduled_message", record, this.now());
     return record;
+  }
+
+  /**
+   * Deliver one due reminder or scheduled message. The timer handler calls this
+   * with the record id; `tick` calls it too, so a recovered record takes the
+   * same path as a queued one. `sent` is written only after Discord accepted
+   * the message, which makes a redelivered job harmless.
+   */
+  async deliver(guildId: string, kind: DeliveryKind, id: string): Promise<DeliveryOutcome> {
+    const record = await this.store.getRecord<ReminderRecord>(guildId, kind, id);
+    if (!record) return { status: "missing" };
+    if (record.data.sent) return { status: "already-sent" };
+
+    const due = new Date(record.data.dueAt).getTime();
+    const remainingMs = due - this.now();
+    if (Number.isFinite(remainingMs) && remainingMs > 0) {
+      return { status: "not-due", remainingMs };
+    }
+
+    // Claim before sending. The timer and the 60-second reconciliation sweep can
+    // see the same record at the same time; only the writer of `sent:true` sends.
+    const claimed = await this.store.claimSent<ReminderRecord>(guildId, kind, id);
+    if (!claimed) return { status: "already-sent" };
+
+    const result = record.data.channelId
+      ? await this.actions.sendMessage(guildId, record.data.channelId, {
+          content:
+            kind === "reminder"
+              ? `<@${record.data.userId}> reminder: ${record.data.text}`
+              : record.data.text,
+        })
+      : kind === "reminder"
+        ? await this.actions.sendDM(record.data.userId, {
+            content: `Reminder: ${record.data.text}`,
+          })
+        : { ok: false, detail: "A scheduled message has no channel." };
+
+    if (!result.ok) {
+      // Release the claim so a retry can try again; a reminder that could not be
+      // delivered must not be marked as sent.
+      await this.store.putRecord(guildId, kind, record.key, {
+        ...claimed.data,
+        sent: false,
+      });
+      return { status: "failed", detail: result.detail ?? "send failed" };
+    }
+    return { status: "sent" };
   }
 
   async createPoll(
@@ -324,31 +385,40 @@ export class ContentService {
 
     for (const record of await this.store.listRecords<ReminderRecord>(guildId, "reminder", 100)) {
       if (record.data.sent || new Date(record.data.dueAt).getTime() > now) continue;
-      if (record.data.channelId) {
-        await this.actions.sendMessage(guildId, record.data.channelId, {
-          content: `<@${record.data.userId}> reminder: ${record.data.text}`,
-        });
-      } else {
-        await this.actions.sendDM(record.data.userId, { content: `Reminder: ${record.data.text}` });
+      if ((await this.deliver(guildId, "reminder", record.key)).status === "sent") {
+        reminders += 1;
       }
-      await this.store.putRecord(guildId, "reminder", record.key, { ...record.data, sent: true });
-      reminders += 1;
     }
 
-    for (const record of await this.store.listRecords<ReminderRecord>(guildId, "scheduled_message", 100)) {
+    for (const record of await this.store.listRecords<ReminderRecord>(
+      guildId,
+      "scheduled_message",
+      100,
+    )) {
       if (record.data.sent || new Date(record.data.dueAt).getTime() > now) continue;
-      if (record.data.channelId) {
-        await this.actions.sendMessage(guildId, record.data.channelId, {
-          content: record.data.text,
-        });
+      if ((await this.deliver(guildId, "scheduled_message", record.key)).status === "sent") {
+        scheduled += 1;
       }
-      await this.store.putRecord(guildId, "scheduled_message", record.key, {
-        ...record.data,
-        sent: true,
-      });
-      scheduled += 1;
     }
 
     return { reminders, scheduled };
   }
+}
+
+async function scheduleDelivery(
+  queue: JobQueue | undefined,
+  guildId: string,
+  kind: DeliveryKind,
+  record: ReminderRecord,
+  now: number,
+): Promise<void> {
+  if (!queue) return;
+  await queue.enqueue(
+    "content.deliver",
+    { guildId, kind, id: record.id },
+    {
+      delayMs: Math.max(0, new Date(record.dueAt).getTime() - now),
+      idempotencyKey: `content.deliver:${kind}:${record.id}`,
+    },
+  );
 }

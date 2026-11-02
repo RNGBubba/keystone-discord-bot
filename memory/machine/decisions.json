@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-01",
+  "updatedAt": "2026-11-02",
   "decisions": [
     {
       "id": "ADR-0001",
@@ -144,6 +144,14 @@
       "status": "accepted",
       "date": "2026-11-01",
       "path": "vault/03-Architecture/ADR/ADR-0018-real-subcommands.md",
+      "alternatives": true
+    },
+    {
+      "id": "ADR-0019",
+      "title": "A bot-side timer queue for work that needs Discord",
+      "status": "accepted",
+      "date": "2026-11-02",
+      "path": "vault/03-Architecture/ADR/ADR-0019-bot-side-timer-queue.md",
       "alternatives": true
     }
   ]

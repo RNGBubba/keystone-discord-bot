@@ -541,6 +541,31 @@ export class DrizzleCommunityStore implements CommunityStore {
     return toRecord<T>(row);
   }
 
+  async claimSent<T>(
+    guildId: string,
+    kind: string,
+    key: string,
+  ): Promise<CommunityRecord<T> | undefined> {
+    // The predicate is part of the UPDATE, not a read followed by a write, so
+    // the timer and the 60-second sweep cannot both win and send twice.
+    const [row] = await this.db
+      .update(communityRecords)
+      .set({
+        data: sql`jsonb_set(${communityRecords.data}, '{sent}', 'true'::jsonb, true)`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(communityRecords.guildId, guildId),
+          eq(communityRecords.kind, kind),
+          eq(communityRecords.key, key),
+          sql`coalesce(${communityRecords.data} ->> 'sent', 'false') <> 'true'`,
+        ),
+      )
+      .returning();
+    return row ? toRecord<T>(row) : undefined;
+  }
+
   async listRecords<T>(
     guildId: string,
     kind: string,

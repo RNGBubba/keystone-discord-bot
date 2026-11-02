@@ -13,10 +13,12 @@ import {
 } from "@keystone/kernel";
 import { caseEmbed, caseListEmbed } from "../format";
 import { appealButton } from "../cases";
+import { TemporaryActionService } from "../temporary";
 import { moderationSettingsSchema, type ModerationSettings } from "../settings";
 
 const ACTIONS = [
   "ban",
+  "temp-role",
   "kick",
   "timeout",
   "warn",
@@ -39,9 +41,15 @@ const OPTIONS = {
   user: { type: "user", name: "user", description: "Member to act on (or filter history)" },
   reason: { type: "string", name: "reason", description: "Why; required for punitive actions" },
   case: { type: "integer", name: "case", description: "Case number for case, note or review" },
-  duration: { type: "integer", name: "duration", description: "Timeout minutes or slowmode seconds" },
+  duration: {
+    type: "integer",
+    name: "duration",
+    description: "Minutes for ban/temp-role/timeout, or seconds for slowmode",
+    minValue: 1,
+  },
   limit: { type: "integer", name: "limit", description: "Purge count, 1-100 (default 10)" },
   channel: { type: "channel", name: "channel", description: "Channel for purge, lock or slowmode" },
+  role: { type: "role", name: "role", description: "Role for a temporary role grant" },
   dry_run: { type: "boolean", name: "dry_run", description: "Preview only; never overrides a safe default" },
 } satisfies Record<string, CommandOption>;
 
@@ -116,10 +124,12 @@ async function runAction(
     reason: string;
     rule?: string;
     evidence?: unknown;
+    /** Set only after the action succeeds; the case is the durable record. */
+    expiresAt?: string;
     run: () => Promise<ModerationActionResult>;
   },
 ): Promise<{ record: ModerationCase; result: ModerationActionResult }> {
-  const record = await ports.cases.open({
+  let record = await ports.cases.open({
     guildId: ctx.guildId!,
     actorId: ctx.userId,
     targetId: input.targetId,
@@ -131,15 +141,34 @@ async function runAction(
   });
 
   const result = await input.run();
+  if (result.ok && input.expiresAt) {
+    record = (await ports.cases.setExpiry(record.id, input.expiresAt)) ?? record;
+  }
   await ports.cases.note(
     record.id,
     ctx.userId,
     result.ok ? "action completed" : `action failed: ${result.detail ?? "unknown error"}`,
   );
   await ports.cases.setState(record.id, "open");
+  record = { ...record, state: "open" };
   await notify(ctx, ports.actions, settings, record);
 
   return { record, result };
+}
+
+/**
+ * Queue the release after the case exists. If enqueueing fails, the case still
+ * carries `expiresAt` and the next startup recovery sweep will schedule it.
+ */
+async function scheduleExpiry(
+  ctx: CommandContext,
+  ports: ModerationPort,
+  settings: ModerationSettings,
+  record: ModerationCase,
+): Promise<void> {
+  if (!record.expiresAt) return;
+  const service = new TemporaryActionService(ports.cases, ports.actions, settings, ctx.now);
+  await service.schedule(ctx.timers ?? ctx.queue, record);
 }
 
 export const mod = defineCommand({
@@ -147,7 +176,8 @@ export const mod = defineCommand({
   description: "Moderate members, inspect cases and review the queue.",
   guards: [requireGuild, requirePermissions("ModerateMembers")],
   subcommands: [
-    { name: "ban", description: "Ban a member with a case and reason.", options: opts("user", "reason", "dry_run") },
+    { name: "ban", description: "Ban a member; add duration for a temporary ban.", options: opts("user", "reason", "duration", "dry_run") },
+    { name: "temp-role", description: "Grant a role for a number of minutes, then remove it.", options: opts("user", "role", "reason", "duration", "dry_run") },
     { name: "kick", description: "Kick a member with a case and reason.", options: opts("user", "reason", "dry_run") },
     { name: "timeout", description: "Time out a member for a number of minutes.", options: opts("user", "reason", "duration", "dry_run") },
     { name: "warn", description: "Record a warning on a member's case history.", options: opts("user", "reason") },
@@ -169,6 +199,13 @@ export const mod = defineCommand({
     const action = ctx.commandPath[0] ?? optionText(ctx, "action");
     if (!isAction(action)) throw new UserError("Choose a valid action.");
     const dryRun = ctx.interaction.options.dry_run === false ? false : settings.dryRun;
+
+    // A temporary role can grant any role the bot can manage. ModerateMembers
+    // alone must not let a moderator escalate through a role above their own
+    // rank, so this subcommand also requires ManageRoles from the caller.
+    if (action === "temp-role" && !ctx.interaction.permissions.includes("ManageRoles")) {
+      throw new UserError("Temporary roles require the ManageRoles permission.");
+    }
 
     // Read-only paths first: they cannot create a case by accident.
     if (action === "case") {
@@ -324,14 +361,41 @@ export const mod = defineCommand({
       return;
     }
 
+    if (action === "temp-role") {
+      const target = requireTarget(ctx);
+      const reason = requireReason(ctx);
+      const roleId = optionText(ctx, "role");
+      const minutes = optionInteger(ctx, "duration");
+      if (!roleId) throw new UserError("Choose the role to grant with the `role` option.");
+      if (!minutes) throw new UserError("A temporary role needs a `duration` in minutes.");
+      const expiresAt = new Date(ctx.now() + Math.min(minutes, 525_600) * 60_000).toISOString();
+      const { record, result } = await runAction(ctx, ports, settings, {
+        action: "temp-role",
+        targetId: target,
+        reason,
+        evidence: { roleId },
+        expiresAt,
+        run: () => ports.actions.addRole(guildId, target, roleId, reason),
+      });
+      if (result.ok) await scheduleExpiry(ctx, ports, settings, record);
+      await replyResult(ctx, record, result);
+      return;
+    }
+
     // ban / kick / timeout: each needs a member and a reason.
     const target = requireTarget(ctx);
     const reason = requireReason(ctx);
     const actionName = action;
+    const banMinutes = actionName === "ban" ? optionInteger(ctx, "duration") : undefined;
+    const expiresAt =
+      banMinutes !== undefined
+        ? new Date(ctx.now() + Math.min(banMinutes, 525_600) * 60_000).toISOString()
+        : undefined;
     const { record, result } = await runAction(ctx, ports, settings, {
       action: actionName,
       targetId: target,
       reason,
+      expiresAt,
       run: () => {
         if (actionName === "ban") return ports.actions.ban(guildId, target, reason);
         if (actionName === "kick") return ports.actions.kick(guildId, target, reason);
@@ -339,6 +403,9 @@ export const mod = defineCommand({
         return ports.actions.timeout(guildId, target, minutes * 60, reason);
       },
     });
+    if (result.ok && record.expiresAt) {
+      await scheduleExpiry(ctx, ports, settings, record);
+    }
     await replyResult(ctx, record, result);
   },
   notes:
@@ -352,6 +419,10 @@ function describeAction(ctx: CommandContext, action: ModAction): string {
   if (action === "unlock") return `would unlock ${target}`;
   if (action === "slowmode") return `would set slowmode on ${target}`;
   if (action === "timeout") return `would time out ${target} for ${optionInteger(ctx, "duration") ?? 10} minutes`;
+  if (action === "temp-role")
+    return `would grant ${optionText(ctx, "role") ?? "a role"} to ${target} for ${optionInteger(ctx, "duration") ?? 10} minutes`;
+  if (action === "ban" && optionInteger(ctx, "duration") !== undefined)
+    return `would temporarily ban ${target} for ${optionInteger(ctx, "duration")} minutes`;
   return `would ${action} ${target}`;
 }
 

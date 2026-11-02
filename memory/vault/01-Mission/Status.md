@@ -2,6 +2,23 @@
 
 ## Now
 
+**Pass 45 added the first P7 timer slice** (2026-11-02): temporary moderation
+and scheduled delivery now share one delayed queue. `/mod ban` accepts a
+`duration`, `/mod temp-role` is a real subcommand, and both write `expires_at`
+on the case and enqueue one `moderation.expire` job keyed by the case id. The
+expiry atomically claims the case by clearing the timestamp, releases the
+ban/role through `ModerationActions`, appends an `expired` event and closes the
+case; a failed release restores the timestamp and records a note, and startup
+recovery expires overdue cases and reschedules future ones. `/tools reminder`
+and `/tools schedule` enqueue `content.deliver` on the same bot-side queue,
+where one conditional claim decides which of the timer and the sweep sends; a
+failed send releases the claim, so `sent` survives only a successful send.
+Migration `0014_case_expiry` is applied. `pnpm probe:live` is **12/12**, adding
+a delayed BullMQ timer, a real Postgres case expiry and real reminder/scheduled
+delivery. The Discord port was recorded, not sent to a guild, so the three timer
+rows remain marked **live unverified for Discord**. Tests are **457 / 68
+files**. See [pass 45](../../journal/2026-11-02-pass-45.md).
+
 **Pass 44 opened the live SQL window** (2026-11-02): `docker compose up -d
 --wait postgres redis` started Postgres 16.15 and Redis, `pnpm db:migrate`
 applied all 13 migrations, and `pnpm probe:live` passed **9/9** checks (pool

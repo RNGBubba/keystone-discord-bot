@@ -5,7 +5,7 @@
 > Generated from the live `ModuleRegistry`. This is the list Discord receives.
 > Run `pnpm commands:catalog` after changing a command definition.
 
-**20 roots · 138 subcommands · 158 total actions · 4 context menus · 20/100 global roots used.**
+**20 roots · 139 subcommands · 159 total actions · 4 context menus · 20/100 global roots used.**
 
 A root is one of Discord's 100 global chat-input commands. Subcommands live
 inside that root and do not spend another slot. Type `/` in Discord, choose a
@@ -20,7 +20,7 @@ and appear under right-click → Apps.
 | `/setup` | `setup` | 5 |
 | `/config` | `setup` | 4 |
 | `/export` | `setup` | 6 |
-| `/mod` | `moderation` | 14 |
+| `/mod` | `moderation` | 15 |
 | `/appeal` | `moderation` | 2 |
 | `/verify` | `moderation` | 2 |
 | `/rank` | `community` | 12 |
@@ -101,7 +101,8 @@ Moderate members, inspect cases and review the queue.
 
 | Subcommand | Description | Options |
 | --- | --- | --- |
-| `/mod ban` | Ban a member with a case and reason. | `user`, `reason`, `dry_run` |
+| `/mod ban` | Ban a member; add duration for a temporary ban. | `user`, `reason`, `duration`, `dry_run` |
+| `/mod temp-role` | Grant a role for a number of minutes, then remove it. | `user`, `role`, `reason`, `duration`, `dry_run` |
 | `/mod kick` | Kick a member with a case and reason. | `user`, `reason`, `dry_run` |
 | `/mod timeout` | Time out a member for a number of minutes. | `user`, `reason`, `duration`, `dry_run` |
 | `/mod warn` | Record a warning on a member's case history. | `user`, `reason` |

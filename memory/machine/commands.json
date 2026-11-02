@@ -3,8 +3,8 @@
   "updatedAt": "2026-11-02",
   "source": "packages/kernel ModuleRegistry catalog()",
   "roots": 20,
-  "subcommands": 138,
-  "actions": 158,
+  "subcommands": 139,
+  "actions": 159,
   "contextMenus": 4,
   "userContextMenus": 2,
   "messageContextMenus": 2,
@@ -196,10 +196,22 @@
       "subcommands": [
         {
           "name": "ban",
-          "description": "Ban a member with a case and reason.",
+          "description": "Ban a member; add duration for a temporary ban.",
           "options": [
             "user",
             "reason",
+            "duration",
+            "dry_run"
+          ]
+        },
+        {
+          "name": "temp-role",
+          "description": "Grant a role for a number of minutes, then remove it.",
+          "options": [
+            "user",
+            "role",
+            "reason",
+            "duration",
             "dry_run"
           ]
         },

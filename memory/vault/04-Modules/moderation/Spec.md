@@ -12,14 +12,26 @@ reason, evidence and an appeal path. The default is dry-run.
 
 | Command | Options | Guards | Behaviour |
 | --- | --- | --- | --- |
-| `/mod` | subcommands `ban`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`, `case`, `note`, `history`, `links`, `filters`, `review`; each declares only the options it needs (`user`, `reason`, `case`, `duration`, `limit`, `channel`, `dry_run`) | guild-only, `ModerateMembers` | Executes one manual action or reads the case/review queue. `links` lists link findings, `filters` lists link/profanity/zalgo findings, and `review` closes the loop. Every enforced action opens a case before the external call. |
+| `/mod` | subcommands `ban`, `temp-role`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`, `case`, `note`, `history`, `links`, `filters`, `review`; each declares only the options it needs (`user`, `role`, `reason`, `case`, `duration`, `limit`, `channel`, `dry_run`) | guild-only, `ModerateMembers` | Executes one manual action or reads the case/review queue. `ban` accepts an optional `duration` and `temp-role` requires `user`, `role` and `duration`; both write `expires_at` after the action succeeds. `links` lists link findings, `filters` lists link/profanity/zalgo findings, and `review` closes the loop. Every enforced action opens a case before the external call. |
 | `/appeal` | subcommands `open` (`case` required, `message`) and `status` (optional `case`) | guild-only, 5 s cooldown | `open` appends an `appealed` event to the caller's own case; never edits history or reverses automatically. `status` reads the append-only appeal events and the current case state, and refuses a case that is not the caller's. |
 | `/verify` | subcommands `start` and `status` | guild-only, 5 s cooldown | `start` requires a persisted quarantine, then checks the join gate, its own state and DM-ability before sending the existing verification button through `ModerationActions.directMessage`; no community port is involved. `status` reads the persisted `members` row. Neither subcommand marks a member verified directly, and a member with no record is refused by name. |
 
-`/mod` is a hub: those fourteen subcommands cost **one** global root. The module
+`/mod` is a hub: those fifteen subcommands cost **one** global root. The module
 spends 3 of Discord's 100 roots (`/mod`, `/appeal`, `/verify`); `/appeal`'s two
-subcommands, `/verify`'s two subcommands and `/mod`'s fourteen cost no extra
+subcommands, `/verify`'s two subcommands and `/mod`'s fifteen cost no extra
 slots.
+
+### Temporary actions
+
+A temporary ban or role grant is one case with an `expires_at` timestamp, not a
+second record. After the action succeeds, the command enqueues one delayed
+`moderation.expire` job whose idempotency key is the case id. The handler calls
+`CaseStore.claimExpiry`, which clears the timestamp only if it is still set and
+the case is not final; the winner performs `unban` or `removeRole`, appends an
+`expired` event and closes the case. A failed external call restores the
+timestamp and records a note, so the case remains visible and retryable. Startup
+recovery reads the same rows: overdue cases expire now, future cases are
+re-enqueued. This is why a lost timer is a delay, not a lost moderation action.
 
 ### Context menus
 
@@ -63,7 +75,7 @@ destroy a message.
 | `automod.duplicateThreshold` | `3` | Repeats before a duplicate action |
 | `joinGate.enabled` | `false` | Hold new accounts until verification |
 | `joinGate.minAccountAgeDays` | `7` | Join-gate age threshold |
-| `joinGate.timeoutMinutes` | `10` | Intended review window (the expiry job is not wired yet) |
+| `joinGate.timeoutMinutes` | `10` | Intended review window (join-gate expiry still shares the temporary-action timer design but is not wired) |
 | `nativeAutoMod.sync` | `false` | Manage prefixed Discord AutoMod rules |
 
 ## Events and decisions

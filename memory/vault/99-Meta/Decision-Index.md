@@ -25,6 +25,7 @@
 | ADR-0016 | [[ADR-0016-dashboard-foundation\|Dashboard foundation: framework-free HTTP over kernel ports]] | accepted | 2026-11-01 |
 | ADR-0017 | [[ADR-0017-invite-tracking\|Invite tracking: diff the cache, store the join]] | accepted | 2026-11-01 |
 | ADR-0018 | [[ADR-0018-real-subcommands\|Real Discord subcommands, one owning module per root]] | accepted | 2026-11-01 |
+| ADR-0019 | [[ADR-0019-bot-side-timer-queue\|A bot-side timer queue for work that needs Discord]] | accepted | 2026-11-02 |
 
 ## Rules
 

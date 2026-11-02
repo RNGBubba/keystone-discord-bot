@@ -158,6 +158,22 @@ describe("DrizzleCommunityStore", () => {
     }
   });
 
+  it("claims a due delivery once so two sweepers cannot both send", async () => {
+    harness = await createMigratedPglite();
+    const store = new DrizzleCommunityStore(harness.db as never);
+    await store.putRecord("guild-a", "reminder", "r-1", {
+      dueAt: "2026-11-02T00:00:00.000Z",
+      text: "drink water",
+      sent: false,
+    });
+
+    const claimed = await store.claimSent("guild-a", "reminder", "r-1");
+    expect(claimed?.data).toMatchObject({ text: "drink water", sent: true });
+    expect(await store.claimSent("guild-a", "reminder", "r-1")).toBeUndefined();
+    expect(await store.claimSent("guild-a", "reminder", "missing")).toBeUndefined();
+    expect(await store.getRecord("guild-b", "reminder", "r-1")).toBeUndefined();
+  });
+
   it("archives the XP projection before clearing a season", async () => {
     harness = await createMigratedPglite();
     const store = new DrizzleCommunityStore(harness.db as never);

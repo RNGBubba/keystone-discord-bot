@@ -39,6 +39,6 @@ export function channelId(ctx: CommandContext, key: string): string | undefined 
   return text(ctx, key) ?? ctx.interaction.channelId ?? undefined;
 }
 
-export function timeFromMinutes(minutes: number): string {
-  return new Date(Date.now() + minutes * 60_000).toISOString();
+export function timeFromMinutes(minutes: number, now: () => number = Date.now): string {
+  return new Date(now() + minutes * 60_000).toISOString();
 }

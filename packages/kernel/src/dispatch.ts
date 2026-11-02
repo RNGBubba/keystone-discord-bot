@@ -22,6 +22,8 @@ export interface DispatchDeps {
   /** Injected so the guard and the store cannot drift apart. */
   cooldowns: CooldownStore;
   queue: JobQueue;
+  /** Delayed gateway work; see `CommandContext.timers`. */
+  timers?: JobQueue;
   health: HealthProbe;
   /** Optional: absent in tests that do not exercise moderation. */
   moderation?: import("./types").ModerationPort;
@@ -123,6 +125,7 @@ export async function dispatchCommand(
     now: deps.now ?? Date.now,
     cooldowns: deps.cooldowns,
     queue: deps.queue,
+    timers: deps.timers,
     health: deps.health,
     moderation: deps.moderation,
     community: deps.community,

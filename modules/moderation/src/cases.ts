@@ -40,6 +40,7 @@ export class InMemoryCaseStore implements CaseStore {
       rule: input.rule,
       state: input.state ?? "open",
       evidence: input.evidence,
+      expiresAt: input.expiresAt,
       createdAt: now,
       updatedAt: now,
     };
@@ -100,6 +101,64 @@ export class InMemoryCaseStore implements CaseStore {
       state,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  async updateExpiry(
+    caseId: string,
+    expiresAt: string | null,
+  ): Promise<ModerationCase | undefined> {
+    const existing = this.#cases.get(caseId);
+    if (!existing) return undefined;
+    const updated: ModerationCase = {
+      ...existing,
+      expiresAt: expiresAt ?? undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    this.#cases.set(caseId, updated);
+    return updated;
+  }
+
+  async claimExpiry(caseId: string): Promise<ModerationCase | undefined> {
+    const existing = this.#cases.get(caseId);
+    if (!existing || !existing.expiresAt) return undefined;
+    if (existing.state === "closed" || existing.state === "reversed") return undefined;
+    const claimed: ModerationCase = {
+      ...existing,
+      expiresAt: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    this.#cases.set(caseId, claimed);
+    return claimed;
+  }
+
+  async listDueExpiries(
+    guildId: string,
+    at: string,
+    limit = 100,
+  ): Promise<ModerationCase[]> {
+    const dueAt = new Date(at).getTime();
+    return [...this.#cases.values()]
+      .filter((record) => record.guildId === guildId)
+      .filter((record) => record.expiresAt !== undefined)
+      .filter((record) => new Date(record.expiresAt!).getTime() <= dueAt)
+      .filter((record) => record.state !== "closed" && record.state !== "reversed")
+      .sort((a, b) => new Date(a.expiresAt!).getTime() - new Date(b.expiresAt!).getTime())
+      .slice(0, Math.min(Math.max(limit, 1), 100));
+  }
+
+  async listPendingExpiries(
+    guildId: string,
+    after: string,
+    limit = 100,
+  ): Promise<ModerationCase[]> {
+    const afterMs = new Date(after).getTime();
+    return [...this.#cases.values()]
+      .filter((record) => record.guildId === guildId)
+      .filter((record) => record.expiresAt !== undefined)
+      .filter((record) => new Date(record.expiresAt!).getTime() > afterMs)
+      .filter((record) => record.state !== "closed" && record.state !== "reversed")
+      .sort((a, b) => new Date(a.expiresAt!).getTime() - new Date(b.expiresAt!).getTime())
+      .slice(0, Math.min(Math.max(limit, 1), 100));
   }
 
   /** Read-only helper for the in-memory analytics adapter; not part of the port. */
@@ -221,6 +280,31 @@ export class CaseService {
 
   async setState(caseId: string, state: ModerationCaseState): Promise<void> {
     await this.store.updateState(caseId, state);
+  }
+
+  async setExpiry(caseId: string, expiresAt: string): Promise<ModerationCase | undefined> {
+    return this.store.updateExpiry(caseId, expiresAt);
+  }
+
+  async claimExpiry(caseId: string): Promise<ModerationCase | undefined> {
+    return this.store.claimExpiry(caseId);
+  }
+
+  async expire(caseId: string, actorId: string, detail: string): Promise<ModerationCase | undefined> {
+    const record = await this.store.getById(caseId);
+    if (!record) return undefined;
+    if (record.state === "closed" || record.state === "reversed") return record;
+    await this.store.appendEvent(caseId, "expired", actorId, { detail });
+    await this.store.updateState(caseId, "closed");
+    return { ...record, state: "closed", updatedAt: new Date().toISOString() };
+  }
+
+  listDueExpiries(guildId: string, at: string, limit?: number): Promise<ModerationCase[]> {
+    return this.store.listDueExpiries(guildId, at, limit);
+  }
+
+  listPendingExpiries(guildId: string, after: string, limit?: number): Promise<ModerationCase[]> {
+    return this.store.listPendingExpiries(guildId, after, limit);
   }
 
   async appealByNumber(

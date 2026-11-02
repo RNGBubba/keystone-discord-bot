@@ -27,7 +27,11 @@ import { registerAiEvents } from "./ai-events";
 import { registerPrefixCommands } from "./prefix";
 import { createDiscordAttachmentReader, createDiscordExportFacts } from "./export-discord";
 import { LoggingService } from "@keystone/module-logging";
-import { buildNativeAutoModPlan, moderationSettingsSchema } from "@keystone/module-moderation";
+import {
+  TemporaryActionService,
+  buildNativeAutoModPlan,
+  moderationSettingsSchema,
+} from "@keystone/module-moderation";
 import { handleModerationButton } from "./moderation-buttons";
 
 async function main(): Promise<void> {
@@ -79,6 +83,7 @@ async function main(): Promise<void> {
     logger,
     cooldowns: runtime.cooldowns,
     queue: runtime.queue,
+    timers: runtime.timers,
     health: runtime.health,
     telemetry: runtime.telemetry,
     moderation: runtime.moderation,
@@ -151,8 +156,21 @@ async function main(): Promise<void> {
             const synced = await syncNativeAutoModRules(guild, buildNativeAutoModPlan(settings));
             logger.info("native automod synced", { guild: guild.id, rules: synced });
           }
+
+          const expiry = new TemporaryActionService(
+            runtime.moderation.cases,
+            runtime.moderation.actions,
+            settings,
+          );
+          const recovered = await expiry.recover(guild.id, runtime.timers);
+          if (recovered.expired || recovered.failed || recovered.scheduled) {
+            logger.info("temporary moderation recovered", {
+              guild: guild.id,
+              ...recovered,
+            });
+          }
         } catch (error) {
-          logger.warn("native automod sync skipped", {
+          logger.warn("native automod sync or expiry recovery skipped", {
             guild: guild.id,
             error: error instanceof Error ? error.message : String(error),
           });

@@ -17,6 +17,8 @@ import path from "node:path";
 import { loadEnv } from "@keystone/config";
 import { createLogger } from "@keystone/kernel";
 import {
+  createCaseStore,
+  createCommunityStore,
   createIdempotencyStore,
   createPortabilityStore,
   createPostgresDatabase,
@@ -26,6 +28,15 @@ import {
   probeDatabase,
   type PostgresHandle,
 } from "@keystone/db";
+import {
+  CaseService,
+  TemporaryActionService,
+  moderationSettingsSchema,
+} from "../modules/moderation/src/index";
+import {
+  ContentService,
+  communitySettingsSchema,
+} from "../modules/community/src/index";
 import { PortabilityService } from "@keystone/importer";
 import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
@@ -34,6 +45,8 @@ import { createWebRuntime } from "../apps/web/src/runtime";
 const root = path.resolve(import.meta.dirname, "..");
 const GUILD = "live-probe";
 const QUEUE = "keystone-live-probe";
+const DELAYED_QUEUE = "keystone-live-probe-delayed";
+const TEMPORARY_QUEUE = "keystone-live-probe-temporary";
 // A fresh key per run: BullMQ keeps completed jobs by id, so reusing one would
 // make the second probe wait on the first run's job instead of executing.
 const JOB_KEY = `live-probe-job-${Date.now().toString(36)}`;
@@ -196,6 +209,195 @@ async function main(): Promise<void> {
     features: [],
   });
 
+  // --- A delayed timer, not just an immediate job ---------------------------
+  const delayedKey = `live-probe-delayed-${Date.now().toString(36)}`;
+  const delayedQueue = BullJobQueue.create({ redisUrl: env.REDIS_URL, queueName: DELAYED_QUEUE });
+  let delayedRuns = 0;
+  const delayedWorker = createBullWorker({
+    redisUrl: env.REDIS_URL,
+    queueName: DELAYED_QUEUE,
+    handlers: {
+      "live.delayed": async () => {
+        delayedRuns += 1;
+      },
+    },
+    idempotency,
+    logger,
+  });
+  await delayedWorker.waitUntilReady();
+  const startedAt = Date.now();
+  await delayedQueue.enqueue(
+    "live.delayed",
+    { at: new Date().toISOString() },
+    { idempotencyKey: delayedKey, delayMs: 1_000 },
+  );
+  let delayedReceipt = await idempotency.receipt(delayedKey);
+  while (delayedReceipt?.status !== "completed" && Date.now() < startedAt + 15_000) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    delayedReceipt = await idempotency.receipt(delayedKey);
+  }
+  const elapsed = Date.now() - startedAt;
+  assert(delayedReceipt?.status === "completed", `delayed receipt is ${delayedReceipt?.status ?? "missing"}`);
+  assert(elapsed >= 800, `delayed job ran after ${elapsed}ms, before its delay`);
+  assert(delayedRuns === 1, `delayed handler ran ${delayedRuns} times`);
+  await delayedWorker.close();
+  await delayedQueue.close();
+  record({
+    id: "bullmq-delayed-timer",
+    status: "pass",
+    detail: `one delayed job fired once after ${elapsed}ms and wrote a completed receipt`,
+    features: [],
+  });
+
+  // --- Temporary moderation against real case rows -------------------------
+  const caseStore = createCaseStore(database);
+  const cases = new CaseService(caseStore);
+  let released = 0;
+  const moderationActions = {
+    async unban() {
+      released += 1;
+      return { ok: true };
+    },
+    async notify() {
+      /* the probe records the action, not a Discord message */
+    },
+  } as unknown as import("@keystone/kernel").ModerationActions;
+  const temporaryCase = await cases.open({
+    guildId: GUILD,
+    actorId: "live-probe",
+    targetId: "live-probe-target",
+    action: "ban",
+    reason: "live-probe temporary ban",
+    rule: "manual",
+    state: "open",
+  });
+  const temporarySettings = moderationSettingsSchema.parse({ modLogChannelId: "live-probe-log" });
+  const temporaryService = new TemporaryActionService(cases, moderationActions, temporarySettings);
+  const temporaryKey = `moderation:expire:${temporaryCase.id}`;
+  const scheduledCase =
+    (await cases.setExpiry(temporaryCase.id, new Date(Date.now() - 1_000).toISOString())) ??
+    temporaryCase;
+  const temporaryQueue = BullJobQueue.create({
+    redisUrl: env.REDIS_URL,
+    queueName: TEMPORARY_QUEUE,
+  });
+  const temporaryWorker = createBullWorker({
+    redisUrl: env.REDIS_URL,
+    queueName: TEMPORARY_QUEUE,
+    handlers: {
+      "moderation.expire": async (payload) => {
+        const caseId = (payload as { caseId?: unknown }).caseId;
+        if (typeof caseId !== "string") throw new Error("missing case id");
+        const result = await temporaryService.expire(caseId);
+        if (result.status !== "expired") {
+          throw new Error(`temporary case finished as ${result.status}`);
+        }
+      },
+    },
+    idempotency,
+    logger,
+  });
+  await temporaryWorker.waitUntilReady();
+  assert(
+    (await temporaryService.schedule(temporaryQueue, scheduledCase)) === temporaryKey,
+    "temporary job key does not match the expected three-part id",
+  );
+  let temporaryReceipt = await idempotency.receipt(temporaryKey);
+  const temporaryDeadline = Date.now() + 15_000;
+  while (temporaryReceipt?.status !== "completed" && Date.now() < temporaryDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    temporaryReceipt = await idempotency.receipt(temporaryKey);
+  }
+  assert(temporaryReceipt?.status === "completed", `temporary receipt is ${temporaryReceipt?.status ?? "missing"}`);
+  await temporaryWorker.close();
+  await temporaryQueue.close();
+
+  assert(released === 1, `release action ran ${released} times`);
+  const afterExpiry = await caseStore.getById(temporaryCase.id);
+  assert(afterExpiry?.state === "closed", `temporary case state is ${afterExpiry?.state ?? "missing"}`);
+  const expiryEvents = await caseStore.listEvents(temporaryCase.id);
+  assert(expiryEvents.some((event) => event.type === "expired"), "case has no expired event");
+  record({
+    id: "temporary-moderation-expiry",
+    status: "pass",
+    detail:
+      "a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event",
+    features: [],
+  });
+
+  // --- Reminder/scheduled delivery against real community rows -------------
+  const communityStore = createCommunityStore(database);
+  const delivered: string[] = [];
+  const communityActions = {
+    async sendMessage(_guildId: string, _channelId: string, message: { content?: string }) {
+      delivered.push(message.content ?? "");
+      return { ok: true, id: `live-${delivered.length}` };
+    },
+    async sendDM(_userId: string, message: { content?: string }) {
+      delivered.push(message.content ?? "");
+      return { ok: true, id: `live-${delivered.length}` };
+    },
+  } as unknown as import("@keystone/kernel").CommunityActions;
+  const content = new ContentService(
+    communityStore,
+    communityActions,
+    communitySettingsSchema.parse({}),
+  );
+  const dueAt = new Date(Date.now() - 1_000).toISOString();
+  await communityStore.putRecord(GUILD, "reminder", "live-probe-reminder", {
+    id: "live-probe-reminder",
+    userId: "live-probe-user",
+    dueAt,
+    text: "live-probe reminder",
+    sent: false,
+  });
+  await communityStore.putRecord(GUILD, "scheduled_message", "live-probe-scheduled", {
+    id: "live-probe-scheduled",
+    userId: "server",
+    channelId: "live-probe-channel",
+    dueAt,
+    text: "live-probe scheduled message",
+    sent: false,
+  });
+  assert(
+    (await content.deliver(GUILD, "reminder", "live-probe-reminder")).status === "sent",
+    "reminder was not delivered",
+  );
+  assert(
+    (await content.deliver(GUILD, "scheduled_message", "live-probe-scheduled")).status === "sent",
+    "scheduled message was not delivered",
+  );
+  assert(
+    (await content.deliver(GUILD, "reminder", "live-probe-reminder")).status === "already-sent",
+    "redelivered reminder was not idempotent",
+  );
+
+  // The timer and the 60-second sweep can call deliver at the same time. The
+  // conditional UPDATE must give the claim to exactly one of them.
+  await communityStore.putRecord(GUILD, "reminder", "live-probe-race", {
+    id: "live-probe-race",
+    userId: "live-probe-user",
+    dueAt,
+    text: "live-probe race",
+    sent: false,
+  });
+  const race = await Promise.all([
+    content.deliver(GUILD, "reminder", "live-probe-race"),
+    content.deliver(GUILD, "reminder", "live-probe-race"),
+  ]);
+  assert(
+    race.map((result) => result.status).sort().join(",") === "already-sent,sent",
+    `concurrent delivery produced ${race.map((result) => result.status).join(",")}`,
+  );
+  assert(delivered.length === 3, `expected three deliveries, got ${delivered.length}`);
+  record({
+    id: "content-timer-delivery",
+    status: "pass",
+    detail:
+      "a real community record delivered a reminder and a scheduled message once, and two concurrent claims produced exactly one send",
+    features: [],
+  });
+
   // --- Portability on real rows ---------------------------------------------
   const portability = new PortabilityService(createPortabilityStore(database));
   const source = "live-probe-src";
@@ -290,9 +492,14 @@ async function main(): Promise<void> {
   // --- Cleanup ---------------------------------------------------------------
   await database.runner.exec(`
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
-    DELETE FROM job_receipts WHERE idempotency_key LIKE 'live-probe-job-%';
+    DELETE FROM job_receipts
+      WHERE idempotency_key LIKE 'live-probe-%'
+         OR idempotency_key = '${temporaryKey}';
     DELETE FROM settings WHERE guild_id LIKE 'live-probe%';
     DELETE FROM community_records WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id LIKE 'live-probe%');
+    DELETE FROM cases WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM case_counters WHERE guild_id LIKE 'live-probe%';
     DELETE FROM guilds WHERE id LIKE 'live-probe%';
   `);
   await database.close();

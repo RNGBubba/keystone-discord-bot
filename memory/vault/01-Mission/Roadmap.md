@@ -226,7 +226,7 @@ and named. Pass 42 added `/modmail setup | open | reply | close | transcript |
 stats`: private owner-or-staff threads over two owned tables, a first-staff-reply
 claim, side-aware unread counters and a transcript archived once by a conditional
 update, with DM/thread relay deferred and named. The ledger is now **20 roots /
-138 subcommands / 158 actions / 4 context menus**; the Master-Plan records 72
+139 subcommands / 159 actions / 4 context menus** after pass 45; the Master-Plan records 72
 planned names across 14 built roots. Every recorded plan name is registered. The
 rest of this phase is open.
 
@@ -234,12 +234,13 @@ rest of this phase is open.
   components, ~4,000 text), primitives, defer-then-edit, modal
   Label/FileUpload/Radio/Checkbox.
 - New domains: role persistence; plus goodbye messages, YouTube/Twitch/RSS
-  feeds, temp ban/role expiry, join-gate expiry, panic mode, case export and
-  `command_usage` retention. Invites, the link, profanity and zalgo filters,
-  auto-responders, analytics and the four context menus, the `/setup` hub, the
-  `/appeal` hub, the `/verify` hub, forms, events and modmail are done (above).
-  Event buttons, scheduled reminders, per-timezone ICS and a real modmail relay
-  remain open.
+  feeds, join-gate expiry, panic mode, case export and `command_usage`
+  retention. Invites, the link, profanity and zalgo filters, auto-responders,
+  analytics and the four context menus, the `/setup` hub, the `/appeal` hub, the
+  `/verify` hub, forms, events and modmail are done (above). Pass 45 added
+  temporary ban/temp-role expiry and durable reminder/scheduled delivery on the
+  bot-side timer queue. Event buttons, event scheduled reminders, per-timezone
+  ICS and a real modmail relay remain open.
 - `/export`, `/config`, `/help` and the `/music` saved queue shipped; BYO
   Lavalink playback is the open half of `/music`; command-budget audit remains a
   gate, now covering the separate context-menu budgets.

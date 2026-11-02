@@ -161,6 +161,12 @@ export interface CommunityStore {
   listTicketEvents(guildId: string, ticketId: string): Promise<TicketEventRecord[]>;
   getRecord<T>(guildId: string, kind: string, key: string): Promise<CommunityRecord<T> | undefined>;
   putRecord<T>(guildId: string, kind: string, key: string, data: T): Promise<CommunityRecord<T>>;
+  /**
+   * Atomically set `data.sent = true` unless it already is. Only the caller
+   * that receives the record may send; this is what stops the timer and the
+   * reconciliation sweep from delivering the same reminder twice.
+   */
+  claimSent<T>(guildId: string, kind: string, key: string): Promise<CommunityRecord<T> | undefined>;
   listRecords<T>(guildId: string, kind: string, limit?: number): Promise<CommunityRecord<T>[]>;
   deleteRecord(guildId: string, kind: string, key: string): Promise<void>;
 }

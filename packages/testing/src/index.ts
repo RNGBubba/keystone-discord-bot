@@ -7,6 +7,7 @@ export {
   createTestContext,
   createTestSettings,
   noopQueue,
+  RecordingJobQueue,
   staticHealth,
   type FakeInteractionInit,
   type TestContext,

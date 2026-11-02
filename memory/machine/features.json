@@ -113,13 +113,16 @@
             "wick-security": "❔"
           },
           "phase": "P7",
-          "status": "open",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Expiry as a scheduled job",
+          "note": "Temporary bans and role grants write an expiry on the case, then enqueue one delayed `moderation.expire` job with the case id as the idempotency key (`moderation:expire:<caseId>`, exactly three colon parts because BullMQ 6 rejects other colon-bearing ids). The expiry atomically claims the case by clearing `expires_at`, releases the ban/role through the moderation port, records an `expired` event and closes the case. Startup recovery reschedules future cases and expires overdue ones. Live 2026-11-02: a real Postgres case expired through the service (check `temporary-moderation-expiry`), but the Discord action was recorded by the port, not sent to a guild.",
           "evidence": [
-            "modules/moderation/src/mod.test.ts"
+            "modules/moderation/src/temporary.test.ts",
+            "modules/moderation/src/mod.test.ts",
+            "packages/db/src/cases.test.ts",
+            "apps/bot/src/timers.test.ts",
+            "scripts/live-probe.ts"
           ],
-          "openReason": "Expiry jobs are not wired yet; the plan schedules them with P7 parity completion.",
           "liveVerified": false
         },
         {
@@ -1328,9 +1331,11 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Cron + timezone",
+          "note": "One-off delayed delivery: `/tools schedule` writes the record, then enqueues `content.deliver` with a due-time delay. The handler re-reads the record, claims it with one conditional update (`data->>'sent' <> 'true'`) and only then sends, so the 60-second sweep and the timer cannot both deliver it; a failed send restores the claim. Live 2026-11-02: a real community record delivered once, and two concurrent claims produced exactly one send (check `content-timer-delivery`); Discord was a recording port, not a gateway. Recurring cron/timezone is still open.",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/community.test.ts",
+            "apps/bot/src/timers.test.ts",
+            "scripts/live-probe.ts"
           ],
           "liveVerified": false
         },
@@ -1347,9 +1352,11 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Per-user, DM or channel",
+          "note": "Per-user reminders deliver by DM or channel through the same durable `content.deliver` timer as scheduled messages. Delivery claims `sent` with one conditional update before sending, so the timer and the 60-second reconciliation sweep cannot both deliver the same reminder; a failed send restores the claim. Live 2026-11-02: a real community record delivered once and a concurrent claim sent once (check `content-timer-delivery`); Discord was a recording port, not a gateway.",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/community.test.ts",
+            "apps/bot/src/timers.test.ts",
+            "scripts/live-probe.ts"
           ],
           "liveVerified": false
         },

@@ -29,6 +29,21 @@ class RecordingActions implements ModerationActions {
     return this.ok();
   }
 
+  unban(): Promise<ModerationActionResult> {
+    this.calls.push("unban");
+    return this.ok();
+  }
+
+  addRole(): Promise<ModerationActionResult> {
+    this.calls.push("add-role");
+    return this.ok();
+  }
+
+  removeRole(): Promise<ModerationActionResult> {
+    this.calls.push("remove-role");
+    return this.ok();
+  }
+
   kick(): Promise<ModerationActionResult> {
     this.calls.push("kick");
     return this.ok();

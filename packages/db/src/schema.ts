@@ -107,6 +107,8 @@ export const cases = pgTable(
     rule: text("rule"),
     state: text("state").notNull().default("open"),
     evidence: jsonValue("evidence"),
+    /** Set only on a temporary ban/role; the timer is recoverable from this. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -114,6 +116,9 @@ export const cases = pgTable(
     uniqueIndex("cases_guild_number_idx").on(table.guildId, table.caseNumber),
     index("cases_guild_target_idx").on(table.guildId, table.targetId),
     index("cases_guild_state_idx").on(table.guildId, table.state),
+    index("cases_expiry_idx")
+      .on(table.guildId, table.expiresAt)
+      .where(sql`${table.expiresAt} is not null`),
   ],
 );
 

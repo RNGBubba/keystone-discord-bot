@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModuleRegistry, SettingsService, InMemorySettingsRepository, auditBudget, type AiPort } from "@keystone/kernel";
-import { createTestContext, FakeInteraction } from "@keystone/testing";
+import { createTestContext, FakeInteraction, RecordingJobQueue } from "@keystone/testing";
 import { communityModule } from "./manifest";
 import { rank } from "./commands/rank";
 import { ticket } from "./commands/ticket";
@@ -74,6 +74,36 @@ describe("community commands", () => {
       message: "Hello {user}",
       },
     });
+  });
+
+  it("queues reminders and scheduled messages on the timer queue", async () => {
+    const timers = new RecordingJobQueue();
+    const reminder = context({ action: "reminder", value: "drink water", duration: 10 });
+    await tools.execute({ ...reminder.ctx, timers });
+    const scheduled = context(
+      {
+        action: "schedule",
+        value: "Scheduled hello",
+        duration: 10,
+        channel: "general",
+      },
+      ["ManageGuild"],
+    );
+    await tools.execute({ ...scheduled.ctx, timers });
+
+    expect(timers.enqueued.map((entry) => entry.name)).toEqual([
+      "content.deliver",
+      "content.deliver",
+    ]);
+    expect(timers.enqueued[0]?.payload).toMatchObject({ guildId: "guild-a", kind: "reminder" });
+    expect(timers.enqueued[1]?.payload).toMatchObject({
+      guildId: "guild-a",
+      kind: "scheduled_message",
+    });
+    expect(timers.enqueued.map((entry) => entry.options?.delayMs)).toEqual([
+      10 * 60_000,
+      10 * 60_000,
+    ]);
   });
 
   it("opens a ticket from the current channel", async () => {

@@ -372,6 +372,21 @@ export class InMemoryCommunityStore implements CommunityStore {
     return record;
   }
 
+  async claimSent<T>(
+    guildId: string,
+    kind: string,
+    key: string,
+  ): Promise<CommunityRecord<T> | undefined> {
+    const existing = this.#records.get(`${guildId}:${kind}:${key}`) as
+      | CommunityRecord<T>
+      | undefined;
+    if (!existing) return undefined;
+    const data = existing.data as { sent?: unknown } | null;
+    if (typeof data !== "object" || data === null) return undefined;
+    if (data.sent === true) return undefined;
+    return this.putRecord(guildId, kind, key, { ...data, sent: true } as T);
+  }
+
   async listRecords<T>(
     guildId: string,
     kind: string,

@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-45",
+    date: "2026-11-02",
+    summary:
+      "Temporary moderation and scheduled delivery: one delayed timer queue, one atomic expiry claim, and startup recovery on real case/community rows.",
+    journal: "memory/journal/2026-11-02-pass-45.md",
+  },
+  {
     pass: "pass-44",
     date: "2026-11-02",
     summary:

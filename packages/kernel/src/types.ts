@@ -236,6 +236,12 @@ export interface CommandContext {
   readonly now: () => number;
   readonly cooldowns: CooldownStore;
   readonly queue: JobQueue;
+  /**
+   * Delayed jobs that need the gateway (expiry, reminders, scheduled posts).
+   * The worker queue cannot perform Discord side effects, so these run in the
+   * bot process. Tests may omit it; the no-op queue is the default.
+   */
+  readonly timers?: JobQueue;
   readonly health: HealthProbe;
   /** Present when the composition root wired the moderation adapters. */
   readonly moderation?: ModerationPort;
@@ -383,6 +389,12 @@ export interface ModerationCase {
   readonly rule?: string;
   readonly state: ModerationCaseState;
   readonly evidence?: unknown;
+  /**
+   * When a temporary ban or role grant should be released. Present only on a
+   * case that scheduled an expiry; the case itself remains the record of what
+   * happened, and the timer is disposable.
+   */
+  readonly expiresAt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -406,6 +418,7 @@ export interface NewModerationCase {
   readonly rule?: string;
   readonly state?: ModerationCaseState;
   readonly evidence?: unknown;
+  readonly expiresAt?: string;
 }
 
 /** The narrow persistence port the moderation module owns. */
@@ -422,6 +435,21 @@ export interface CaseStore {
   /** Append-only history, oldest first. Used by appeal status, never by edits. */
   listEvents(caseId: string): Promise<CaseEvent[]>;
   updateState(caseId: string, state: ModerationCaseState): Promise<void>;
+  /** Set or clear the release time on an existing temporary case. */
+  updateExpiry(caseId: string, expiresAt: string | null): Promise<ModerationCase | undefined>;
+  /**
+   * Atomically take ownership of a due release by clearing `expires_at`.
+   * Only the worker that clears it may perform the Discord action; a failure
+   * restores the timestamp so the case can be retried.
+   */
+  claimExpiry(caseId: string): Promise<ModerationCase | undefined>;
+  /**
+   * Open temporary cases whose release time has arrived. This is the recovery
+   * path: a timer may be lost, but the case row is the durable source of truth.
+   */
+  listDueExpiries(guildId: string, at: string, limit?: number): Promise<ModerationCase[]>;
+  /** Open temporary cases still in the future, for re-scheduling after a restart. */
+  listPendingExpiries(guildId: string, after: string, limit?: number): Promise<ModerationCase[]>;
 }
 
 /**
@@ -485,6 +513,22 @@ export interface ModerationActions {
     reason: string,
     roleId?: string,
   ): Promise<ModerationActionResult>;
+  /** Lift a ban. The expiry job calls this; it never deletes the case. */
+  unban(guildId: string, userId: string, reason: string): Promise<ModerationActionResult>;
+  /** Grant a role for a temporary-role case. */
+  addRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason: string,
+  ): Promise<ModerationActionResult>;
+  /** Remove the role when a temporary-role case expires. */
+  removeRole(
+    guildId: string,
+    userId: string,
+    roleId: string,
+    reason: string,
+  ): Promise<ModerationActionResult>;
   notify(guildId: string, channelId: string | null | undefined, notice: ModerationNotice): Promise<void>;
   /**
    * DM one member, e.g. the join-gate verification button. `ok: false` carries
@@ -520,4 +564,17 @@ export interface CaseServicePort {
   /** The append-only record behind an appeal; state alone cannot prove one. */
   listEvents(caseId: string): Promise<CaseEvent[]>;
   setState(caseId: string, state: ModerationCaseState): Promise<void>;
+  /** Attach a release time after the action succeeded. */
+  setExpiry(caseId: string, expiresAt: string): Promise<ModerationCase | undefined>;
+  /** Atomic ownership of one release; see `CaseStore.claimExpiry`. */
+  claimExpiry(caseId: string): Promise<ModerationCase | undefined>;
+  /**
+   * Close a temporary case after its release action succeeded. Append the
+   * `expired` event first, then move the state, so history explains the state.
+   */
+  expire(caseId: string, actorId: string, detail: string): Promise<ModerationCase | undefined>;
+  /** Overdue temporary cases; the startup recovery sweep consumes this. */
+  listDueExpiries(guildId: string, at: string, limit?: number): Promise<ModerationCase[]>;
+  /** Future temporary cases; startup re-schedules these in memory mode. */
+  listPendingExpiries(guildId: string, after: string, limit?: number): Promise<ModerationCase[]>;
 }

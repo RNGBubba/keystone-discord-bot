@@ -5,14 +5,14 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**128 features** across 17 domains: **101 in repo**, **15 open**, **8 planned**. Live behaviour is marked separately; a green
+**128 features** across 17 domains: **102 in repo**, **14 open**, **8 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
 
 | Domain | Features | In repo | Open | Planned |
 | --- | ---: | ---: | ---: | ---: |
-| Moderation | 13 | 11 | 2 | 0 |
+| Moderation | 13 | 12 | 1 | 0 |
 | Automod | 10 | 9 | 0 | 1 |
 | Security | 9 | 8 | 1 | 0 |
 | Leveling | 7 | 7 | 0 | 0 |
@@ -39,7 +39,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Warn + history | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Bulk purge | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Slowmode / lockdown | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
-| Temp ban / temp role | P7 | ◐ open | Expiry jobs are not wired yet; the plan schedules them with P7 parity completion. · `modules/moderation/src/mod.test.ts` |
+| Temp ban / temp role | P7 | ✅ in repo | `modules/moderation/src/temporary.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/cases.test.ts`, `apps/bot/src/timers.test.ts`, `scripts/live-probe.ts` · live unverified |
 | Case lookup | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Evidence card | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Dry-run default | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
@@ -135,8 +135,8 @@ box means the code and its tests exist, not that a live guild has run it.
 | --- | --- | --- | --- |
 | Embed builder | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Custom commands / tags | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Scheduled messages | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Reminders | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
+| Scheduled messages | P3 | ✅ in repo | `modules/community/src/community.test.ts`, `apps/bot/src/timers.test.ts`, `scripts/live-probe.ts` · live unverified |
+| Reminders | P3 | ✅ in repo | `modules/community/src/community.test.ts`, `apps/bot/src/timers.test.ts`, `scripts/live-probe.ts` · live unverified |
 | Sticky messages | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | RSS / feeds | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Translation | none | — non-goal | Non-goal: unreliable, costly |

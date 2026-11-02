@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RecordingJobQueue } from "@keystone/testing";
 import { communitySettingsSchema } from "./settings";
 import { InMemoryCommunityStore } from "./store";
 import { RecordingCommunityActions, firstRow } from "./testing";
@@ -352,6 +353,84 @@ describe("P3 tickets and content", () => {
       counts: [1, 1],
       total: 2,
     });
+  });
+
+  it("queues one timer per reminder/schedule and delivers idempotently", async () => {
+    const store = new InMemoryCommunityStore();
+    const actions = new RecordingCommunityActions();
+    const clock = nowAt();
+    const queue = new RecordingJobQueue();
+    const service = new ContentService(store, actions, settings(), clock.now);
+
+    const due = new Date(clock.now() + 1_000).toISOString();
+    const reminder = await service.createReminder(
+      guild,
+      user,
+      undefined,
+      "drink water",
+      due,
+      queue,
+    );
+    const scheduled = await service.scheduleMessage(
+      guild,
+      "general",
+      "Scheduled hello",
+      due,
+      queue,
+    );
+
+    expect(queue.enqueued.map((entry) => entry.name)).toEqual([
+      "content.deliver",
+      "content.deliver",
+    ]);
+    expect(queue.enqueued[0]).toMatchObject({
+      payload: { guildId: guild, kind: "reminder", id: reminder.id },
+      options: { idempotencyKey: `content.deliver:reminder:${reminder.id}` },
+    });
+    expect(queue.enqueued[1]).toMatchObject({
+      payload: { guildId: guild, kind: "scheduled_message", id: scheduled.id },
+      options: { idempotencyKey: `content.deliver:scheduled_message:${scheduled.id}` },
+    });
+
+    expect(await service.deliver(guild, "reminder", reminder.id)).toMatchObject({
+      status: "not-due",
+    });
+    expect(actions.dms).toHaveLength(0);
+
+    clock.advance(2_000);
+    expect(await service.deliver(guild, "reminder", reminder.id)).toEqual({ status: "sent" });
+    expect(await service.deliver(guild, "scheduled_message", scheduled.id)).toEqual({
+      status: "sent",
+    });
+    expect(actions.dms[0]?.message.content).toContain("drink water");
+    expect(actions.sent.some((entry) => entry.message.content === "Scheduled hello")).toBe(true);
+
+    // A redelivered timer re-reads the record and cannot send a second copy.
+    expect(await service.deliver(guild, "reminder", reminder.id)).toEqual({
+      status: "already-sent",
+    });
+    expect(await service.deliver(guild, "scheduled_message", scheduled.id)).toEqual({
+      status: "already-sent",
+    });
+    expect(await service.deliver(guild, "reminder", "missing")).toEqual({ status: "missing" });
+  });
+
+  it("claims a delivery before sending so two sweepers cannot both send", async () => {
+    const store = new InMemoryCommunityStore();
+    const actions = new RecordingCommunityActions();
+    const clock = nowAt();
+    const service = new ContentService(store, actions, settings(), clock.now);
+
+    const due = new Date(clock.now() + 1_000).toISOString();
+    const reminder = await service.createReminder(guild, user, undefined, "drink water", due);
+    clock.advance(2_000);
+
+    const results = await Promise.all([
+      service.deliver(guild, "reminder", reminder.id),
+      service.deliver(guild, "reminder", reminder.id),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["already-sent", "sent"]);
+    expect(actions.dms).toHaveLength(1);
   });
 
   it("dedupes feeds by GUID and updates a stat channel", async () => {

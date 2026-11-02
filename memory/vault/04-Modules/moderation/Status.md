@@ -37,17 +37,26 @@ P2 core shipped in pass 05 (2026-11-01).
   writing `verified_at`. The button id parsing and member-facing checks now
   live in `apps/bot/src/moderation-buttons.ts` and are covered by 13 focused
   adapter tests; the reply strings did not change in that extraction.
+- **Temporary moderation (pass 45):** `/mod ban` accepts an optional
+  `duration` in minutes and `/mod temp-role` grants a role for a duration. Both
+  write `expires_at` on the case after the action succeeds and enqueue one
+  delayed `moderation.expire` job keyed by the case id. `CaseStore.claimExpiry`
+  clears the timestamp atomically, so two workers cannot release the same ban or
+  role twice; a failed release restores it and records a note. The expiry path
+  appends an `expired` event, closes the case and notifies the mod log. At
+  startup, `TemporaryActionService.recover` expires overdue cases and
+  re-enqueues future ones, which is the memory-mode restart path.
 - Native AutoMod rules are built and synced only when explicitly enabled.
 - Dry-run is the default and produces alerts/cases without punitive calls.
 
 ## Verified
 
 ```
-pnpm test                                  # 435 tests / 65 files
-pnpm vitest run modules/moderation         # 46 tests: link/profanity/zalgo, raid, dry-run, /mod, appeal/status, verify start/status, join-gate state, native plan, context menus
-pnpm test -- packages/db/src/cases.test.ts # 2 PGlite case-store tests, including listEvents
+pnpm test                                  # 457 tests / 68 files
+pnpm vitest run modules/moderation         # 55 tests (including 7 temporary-expiry tests)
+pnpm test -- packages/db/src/cases.test.ts # 4 PGlite case-store tests, including listEvents and atomic expiry claims
 pnpm test -- packages/db/src/member-store.test.ts # PGlite member row + verification upsert
-pnpm budget                                # 20/100 roots · 138 subcommands · 158 actions · 4 context menus, status OK
+pnpm budget                                # 20/100 roots · 139 subcommands · 159 actions · 4 context menus, status OK
 pnpm build                                 # bot, worker, migrate artefacts
 ```
 
@@ -71,6 +80,15 @@ P2 exit evidence:
   completed verification.
 - `DrizzleCaseStore` allocates 1..8 without duplicates under `Promise.all` on
   PGlite, persists cases/events/state and isolates guilds.
+- `temporary.test.ts` proves the delayed job payload/key, a not-due no-op, one
+  release with an `expired` event and a closed case, concurrent workers producing
+  exactly one release, temp-role removal of the recorded role, a failed release
+  staying open for retry, and restart recovery expiring one case and
+  rescheduling another. `mod.test.ts` adds the command paths for a temporary ban
+  and a temporary role. `apps/bot/src/timers.test.ts` runs the real in-process
+  queue and service, and proves a redelivery is a no-op. The live probe records a
+  real Postgres case expiry in `temporary-moderation-expiry`; the Discord action
+  was a recording port, not a gateway.
 
 P7 link-filter evidence (pass 23):
 
@@ -197,7 +215,8 @@ P7 appeal-hub evidence (pass 35):
 | Profanity / zalgo findings | Yes, live with the safe alert seed; `/mod filters` and `/mod review` | Repeat with a human author in staging |
 | Profanity/zalgo delete action | Profanity yes (live 2026-11-01, message gone, case kept); zalgo no | Send a disposable zalgo fixture in staging with `dryRun: false` |
 | Bot authors ignored outside the marker | Yes, adapter test | Production has no marker option at all |
-| Join-gate timeout expiry | Not wired | Scheduled job; see known limitations |
+| Temporary ban / temp role expiry | Yes: SQL case, atomic claim, timer service and in-process queue tests; live service check | A live `/mod ban duration` and a real unban/role removal in staging |
+| Join-gate timeout expiry | Not wired | Reuse the same timer with a member expiry; see known limitations |
 
 No document claims a live Discord run for the unproven rows.
 
@@ -207,8 +226,9 @@ No document claims a live Discord run for the unproven rows.
   quarantined member stays until the verification button is clicked or a
   moderator acts. The MCP bot cannot complete the DM flow, so that click is not
   live-proven.
-- Temporary bans and temporary roles are not separate actions yet. The case
-  model is ready for an expiry job; P2's exit demo does not require it.
+- Temporary bans and temporary roles now have a release job. The gateway half
+  (a live unban or role removal) is not claimed; the live probe used a recording
+  port. Join-gate timeout expiry is still not wired to this timer.
 - Case export (JSON/CSV) is not built; the ledger is queryable and P5 owns the
   full export surface.
 - Panic mode is not a command yet. Anti-raid applies the same containment
@@ -240,7 +260,8 @@ No document claims a live Discord run for the unproven rows.
 - Staging run with a token: replay joins/messages/webhook and record receipts.
 - Consider an allow-list for legitimate punycode domains and a per-guild word
   policy; `automod.false-positive-report` is the next review gap.
-- Add the join-gate expiry job and temp-ban/temp-role expiry on the worker.
+- Add join-gate timeout expiry on the same `moderation.expire` timer.
+- Prove a live `/mod ban duration` and `/mod temp-role` in a staging guild.
 - P3: link tickets and levels to the same case/case-event service.
 
 ## Teaching

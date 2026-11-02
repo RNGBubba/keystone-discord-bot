@@ -146,13 +146,14 @@ same interfaces. No module changes when a port changes.
 **Plan record (pass 42, 2026-11-01):** this is the durable per-root source for
 the approved plan. It records **14 built roots**, for **72 planned subcommand
 names** where the plan has a record (59 from the original table, 7 for `/event`,
-6 for `/modmail`). The live registry is **20 roots / 138 subcommands**. Six
+6 for `/modmail`). The live registry is **20 roots / 139 subcommands** after
+pass 45's `/mod temp-role`. Six
 registered roots (`/ping`, `/about`, `/ai`, `/invites`, `/analytics`, `/form`)
-are not in the plan table. 66 of the 138 registered names are beyond the 72
-planned names (38 extra names inside plan roots, 28 in those six roots). The
+are not in the plan table. 67 of the 139 registered names are beyond the 72
+planned names (39 extra names inside plan roots, 28 in those six roots). The
 handoff's **"18 roots / 160 subcommands"** still cannot be recomputed: the plan
 records only 72 names, leaving **88 names unrecorded**, and it never identifies
-its 18 roots. Separately, the 138 registered names are 22 short of the raw 160
+its 18 roots. Separately, the 139 registered names are 21 short of the raw 160
 count. Do not invent the missing names, and do not treat 160 as a target — the
 plan's own non-goals reject feature-count marketing.
 

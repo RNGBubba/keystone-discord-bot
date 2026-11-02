@@ -147,9 +147,17 @@ https://github.com/RNGBubba/keystone-discord-bot
   close stores the transcript and SHA-256 once in a conditional update. Live:
   2 messages archived, duplicate close refused, stats 1 thread / 0 active / 2
   messages, disabled open refused. DM/thread relay is open, not faked.
+- **Timers** in repo, SQL/service live (pass 45): `/mod ban duration` and
+  `/mod temp-role` write `expires_at` and schedule one delayed
+  `moderation.expire` job; `/tools reminder|schedule` use the same bot-side
+  queue. Cases and community records are the durable facts, an atomic claim
+  decides who releases or sends, and startup recovery reschedules or expires.
+  The live probe proves the SQL, queue and service paths; the Discord action was
+  a recording port, so gateway delivery is still unverified. See
+  [[04-Modules/moderation/Status|Moderation status]].
 - **Command tree** in repo (passes 26, 30, 31, 32, 33, 34, 35, 36, 40, 41 and 42): real Discord
   subcommands replaced the flat `action` option across every existing hub — 20
-  roots, 138 subcommands, 158 actions, 4 context menus. `/help` is generated
+  roots, 139 subcommands, 159 actions, 4 context menus. `/help` is generated
   from the live registry; `pnpm commands:catalog` writes [[Command-Catalog]] and
   `pnpm commands:doctor` checks the live shape. A human slash or right-click
   invocation remains the unobserved surface.
@@ -175,8 +183,9 @@ https://github.com/RNGBubba/keystone-discord-bot
   adapter and dispatch and creates a case; this is structural, not a gateway
   `InteractionCreate`. Two live bot process trees were found double-posting and
   stopped, leaving one bot and one reply per command. The `.env` points at
-  localhost Postgres/Redis; pass 44 started the compose services, applied all 13
-  migrations and passed `pnpm probe:live` 9/9, so the SQL window is open. See
+  localhost Postgres/Redis; pass 44 started the compose services and applied the
+  13 migrations then in the ledger, pass 45 added `0014_case_expiry`, and
+  `pnpm probe:live` now passes 12/12, so the SQL window is open. See
   [[06-Operations/Live-Window|Live window]].
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus
@@ -196,7 +205,7 @@ https://github.com/RNGBubba/keystone-discord-bot
   subcommands**; `!event create | edit | rsvp | list | remind | export` ran
   draft → open → 1/2 going → reminder → decline → going, and the exported file
   parsed with the same RSVP row and a matching checksum. Pass 42 added
-  `/modmail`, bringing the ledger to **20 roots / 138 subcommands**; `!modmail setup | open | reply |
+  `/modmail`, bringing the ledger to **20 roots** at pass 42; `!modmail setup | open | reply |
   transcript | close | stats` ran an open thread through a 2-message archive, a
   refused duplicate close and a 1/0/2 queue read. Also
   qwen3:8b via Ollama answered mentions in `#ai-chat`. A dev-only `!` bridge
@@ -220,7 +229,7 @@ https://github.com/RNGBubba/keystone-discord-bot
 - Phase **P4** shipped the AI layer and the ledger-backed economy hardening.
 - Phase **P3** shipped the community suite: leveling, reaction roles, welcome,
   starboard, tickets, giveaways, temp voice, content and seasons.
-- 20 of Discord's 100 global roots used, with 138 subcommands and 4 context
+- 20 of Discord's 100 global roots used, with 139 subcommands and 4 context
   menus (separate 15 + 15 budget); 12 modules registered.
 - The full suite covers the 5,000-row portability round trip and the failure,
   rollback and deletion paths; `pnpm check` also runs the intent, channel and

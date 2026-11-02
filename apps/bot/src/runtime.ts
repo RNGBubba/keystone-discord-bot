@@ -78,6 +78,7 @@ import { createMemoryExportPort, createSqlExportPort } from "./export-port";
 import { createCooldownStore, type CooldownHandle } from "@keystone/cache";
 import { BullJobQueue, InProcessJobQueue } from "@keystone/queue";
 import { createOtlpTelemetry, createTelemetry } from "@keystone/telemetry";
+import { createTimerRuntime } from "./timers";
 
 export type DatabaseMode = "postgres" | "memory";
 export type CacheMode = "redis" | "memory";
@@ -87,6 +88,8 @@ export interface Runtime {
   settings: SettingsService;
   cooldowns: CooldownStore;
   queue: JobQueue;
+  /** Delayed gateway work: expiry, reminders and scheduled messages. */
+  timers: JobQueue;
   health: HealthProbe;
   telemetry: Telemetry;
   moderation: ModerationPort;
@@ -301,6 +304,17 @@ export async function createRuntime(
     });
   }
 
+  const timerRuntime = await createTimerRuntime({
+    redisUrl: env.REDIS_URL,
+    queueName: env.QUEUE_NAME,
+    idempotency,
+    settings,
+    moderation,
+    community,
+    logger: logger.child("timers"),
+    telemetry,
+  });
+
   let queue: JobQueue;
   if (env.REDIS_URL) {
     queue = BullJobQueue.create({
@@ -320,6 +334,7 @@ export async function createRuntime(
     settings,
     cooldowns: cache.store,
     queue,
+    timers: timerRuntime.queue,
     health: new RuntimeHealth(database, cache, registry, env.INTENT_PROFILE),
     telemetry,
     moderation,
@@ -341,6 +356,7 @@ export async function createRuntime(
       queue: env.REDIS_URL ? "bullmq" : "in-process",
     },
     async close() {
+      await timerRuntime.close();
       await queue.close();
       await cache.close();
       await database?.close();

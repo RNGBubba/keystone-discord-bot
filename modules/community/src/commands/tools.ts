@@ -127,7 +127,8 @@ export const tools = defineCommand({
         ctx.userId,
         channelId(ctx, "channel"),
         value,
-        timeFromMinutes(minutes),
+        timeFromMinutes(minutes, ctx.now),
+        ctx.timers ?? ctx.queue,
       );
       await ctx.interaction.reply({
         content: `Reminder set for <t:${Math.floor(new Date(record.dueAt).getTime() / 1000)}:R>.`,
@@ -142,7 +143,13 @@ export const tools = defineCommand({
       const minutes = integer(ctx, "duration");
       const target = channelId(ctx, "channel");
       if (!value || !minutes || !target) throw new UserError("Schedule needs text, a channel and minutes.");
-      await content.scheduleMessage(guildId, target, value, timeFromMinutes(minutes));
+      await content.scheduleMessage(
+        guildId,
+        target,
+        value,
+        timeFromMinutes(minutes, ctx.now),
+        ctx.timers ?? ctx.queue,
+      );
       await ctx.interaction.reply({ content: "Scheduled message saved.", ephemeral: true });
       return;
     }

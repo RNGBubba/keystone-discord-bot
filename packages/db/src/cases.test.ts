@@ -45,6 +45,71 @@ describe("DrizzleCaseStore", () => {
     expect(await store.list("guild-a", { state: "appealed" })).toHaveLength(1);
   });
 
+  it("stores a release time and reads due and pending temporary cases separately", async () => {
+    harness = await createMigratedPglite();
+    const store = new DrizzleCaseStore(harness.db as never);
+    const record = await store.create({
+      guildId: "guild-expiry",
+      caseNumber: 1,
+      actorId: "mod-1",
+      targetId: "user-1",
+      action: "ban",
+      reason: "temporary",
+      expiresAt: "2026-11-02T12:00:00.000Z",
+    });
+    expect(record.expiresAt).toBe("2026-11-02T12:00:00.000Z");
+
+    const future = await store.create({
+      guildId: "guild-expiry",
+      caseNumber: 2,
+      actorId: "mod-1",
+      targetId: "user-2",
+      action: "temp-role",
+      reason: "temporary role",
+      evidence: { roleId: "role-vip" },
+      expiresAt: "2026-11-02T13:00:00.000Z",
+    });
+
+    expect(await store.listDueExpiries("guild-expiry", "2026-11-02T12:30:00.000Z")).toHaveLength(1);
+    expect((await store.listPendingExpiries("guild-expiry", "2026-11-02T12:30:00.000Z"))[0]?.id).toBe(
+      future.id,
+    );
+
+    const cleared = await store.updateExpiry(record.id, null);
+    expect(cleared?.expiresAt).toBeUndefined();
+    expect((await store.listDueExpiries("guild-expiry", "2026-11-02T14:00:00.000Z"))[0]?.id).toBe(
+      future.id,
+    );
+
+    await store.updateState(future.id, "closed");
+    expect(await store.listDueExpiries("guild-expiry", "2026-11-02T14:00:00.000Z")).toHaveLength(0);
+    expect(await store.listPendingExpiries("guild-expiry", "2026-11-02T12:30:00.000Z")).toHaveLength(
+      0,
+    );
+  });
+
+  it("claims one release atomically and refuses the second claim", async () => {
+    harness = await createMigratedPglite();
+    const store = new DrizzleCaseStore(harness.db as never);
+    const record = await store.create({
+      guildId: "guild-claim",
+      caseNumber: 1,
+      actorId: "mod-1",
+      targetId: "user-1",
+      action: "ban",
+      reason: "temporary",
+      expiresAt: "2026-11-02T12:00:00.000Z",
+    });
+
+    const [first, second] = await Promise.all([
+      store.claimExpiry(record.id),
+      store.claimExpiry(record.id),
+    ]);
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+    expect(first?.expiresAt ?? second?.expiresAt).toBeUndefined();
+    expect(await store.claimExpiry(record.id)).toBeUndefined();
+  });
+
   it("does not reuse a case number under concurrent allocation", async () => {
     harness = await createMigratedPglite();
     const store = new DrizzleCaseStore(harness.db as never);

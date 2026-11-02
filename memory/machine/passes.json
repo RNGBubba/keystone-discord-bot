@@ -576,6 +576,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-45",
+      "date": "2026-11-02",
+      "phase": "P7",
+      "summary": "Feature pass: temporary moderation expiry and scheduled/reminder delivery now share one delayed BullMQ queue consumed in the bot process, because the worker has no Discord client and adding a second Discord adapter would be worse. Cases gained `expires_at` (migration 0014) and `claimExpiry`, so two workers cannot release the same ban/role twice; a failed release restores the timestamp, and startup recovery expires overdue cases and reschedules future ones. `/mod ban` accepts a duration and `/mod temp-role` is a real subcommand; both write the case before the Discord action. `/tools reminder|schedule` now enqueue `content.deliver` with a record id; delivery claims the record with one conditional update so the timer and the 60-second sweep cannot both send, restores the claim on failure, and marks `sent` only after Discord accepts. Tests are 457 in 68 files; the live probe is 12/12, adding a delayed timer, a real Postgres case expiry and real reminder/scheduled delivery. Temp-ban/temp-role moved from open to shipped-in-repo; all three timer rows stay liveVerified false because the Discord port was recorded, not sent to a guild.",
+      "journal": "journal/2026-11-02-pass-45.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "457",
+        "budget": "20/100 roots · 139 subcommands · 4 context menus",
+        "live": "12/12",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

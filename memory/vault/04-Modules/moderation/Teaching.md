@@ -7,18 +7,23 @@
 2. `modules/moderation/src/cases.ts` — `CaseService`, the append-only event
    model, and why an appeal is a new event.
 3. `modules/moderation/src/commands/mod.ts` — one hub command, dry-run gate,
-   case-before-action ordering.
-4. `modules/moderation/src/commands/appeal.ts` — a two-subcommand hub; note that
+   case-before-action ordering, and where a temporary action writes `expires_at`.
+4. `modules/moderation/src/temporary.ts` — the release service, the atomic
+   `claimExpiry`, and why a failed release restores the timestamp.
+5. `modules/moderation/src/commands/appeal.ts` — a two-subcommand hub; note that
    `status` reads the event log, not the case state.
-5. `packages/db/src/case-store.ts` + `migrations/0003-case-counters.ts` — the
-   atomic case-number allocation and `listEvents`, the append-only history read.
-6. `modules/moderation/src/commands/verify.ts` + `verification.ts` + `members.ts`
+6. `packages/db/src/case-store.ts` + `migrations/0003-case-counters.ts` — the
+   atomic case-number allocation, `listEvents`, and `claimExpiry`'s conditional
+   update.
+7. `modules/moderation/src/commands/verify.ts` + `verification.ts` + `members.ts`
    — the two-subcommand hub, the one completion path, and the state port.
-7. `packages/db/src/member-store.ts` — the SQL upsert over the existing
+8. `packages/db/src/member-store.ts` — the SQL upsert over the existing
    `members` table, including why the join time is preserved.
-8. `apps/bot/src/moderation-actions.ts` — permission prechecks and the only file
+9. `apps/bot/src/moderation-actions.ts` — permission prechecks and the only file
    that turns a case action into a Discord call.
-9. `apps/bot/src/moderation-events.ts` — the gateway-to-structural-event seam.
+10. `apps/bot/src/timers.ts` — the bot-side delayed consumer and the split
+    between database jobs and gateway jobs.
+11. `apps/bot/src/moderation-events.ts` — the gateway-to-structural-event seam.
 
 ## The idea to take away
 
@@ -36,6 +41,36 @@ can fail; the accountability record cannot disappear with it.
 The third is **event sourcing**. `case_events` is append-only. A reversal is a
 new event and a state transition, never an edit to the original reason. That is
 what makes an appeal defensible later.
+
+## Temporary actions are a claim, not a countdown
+
+A temporary ban has two facts that can disagree: the Discord ban and the case
+row. A timer that simply fires and calls `unban` is not enough. If the bot
+restarts, two consumers start, or the first release fails halfway, the same case
+can be released twice or the case can be closed while the ban is still in force.
+
+The fix is to make the case row the lock. `CaseStore.claimExpiry` is one
+conditional update:
+
+```sql
+UPDATE cases SET expires_at = NULL
+WHERE id = $1 AND expires_at IS NOT NULL
+  AND state NOT IN ('closed', 'reversed')
+RETURNING *;
+```
+
+Only the worker that gets a row back owns the Discord call. A second worker sees
+no row and stops. If `unban` or `removeRole` fails, `TemporaryActionService`
+puts the timestamp back and appends a note, so the next recovery can retry. If
+it succeeds, the `expired` event is appended before the state becomes `closed`.
+That ordering is the same lesson as case-before-action: the record explains the
+state, not the other way round.
+
+This is also why the worker does not send Discord messages. The worker owns SQL
+jobs; the bot owns gateway jobs. They share the same BullMQ driver and the same
+services, but a delayed `moderation.expire` or `content.deliver` is consumed by
+the bot process because that is where the Discord adapter lives. Splitting by
+capability keeps one Discord adapter instead of growing a second REST one.
 
 `/appeal status` is the small exercise that proves it. It does not ask "is the
 state `appealed`?" — a review changes the state to `reviewed`, and that question

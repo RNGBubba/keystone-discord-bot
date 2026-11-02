@@ -129,6 +129,28 @@ export const noopQueue: JobQueue = {
   },
 };
 
+/** A queue that records enqueues. Tests assert what was scheduled, not timing. */
+export class RecordingJobQueue implements JobQueue {
+  readonly enqueued: {
+    name: string;
+    payload: unknown;
+    options?: import("./types").JobOptions;
+  }[] = [];
+
+  async enqueue(
+    name: string,
+    payload: unknown,
+    options?: import("./types").JobOptions,
+  ): Promise<string> {
+    this.enqueued.push({ name, payload, options });
+    return options?.idempotencyKey ?? `job-${this.enqueued.length}`;
+  }
+
+  async close(): Promise<void> {
+    /* no resources */
+  }
+}
+
 export function staticHealth(report?: Partial<HealthReport>): HealthProbe {
   const base: HealthReport = {
     database: { configured: false, reachable: false, migrated: false },
@@ -148,6 +170,7 @@ export interface TestContextOptions {
   logger?: Logger;
   now?: () => number;
   queue?: JobQueue;
+  timers?: JobQueue;
   health?: HealthProbe;
   moderation?: ModerationPort;
   community?: import("./community").CommunityPort;
@@ -184,6 +207,7 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     now: options.now ?? (() => 1_700_000_000_000),
     cooldowns: new InMemoryCooldownStore(),
     queue: options.queue ?? noopQueue,
+    timers: options.timers ?? noopQueue,
     health: options.health ?? staticHealth(),
     moderation: options.moderation,
     community: options.community,

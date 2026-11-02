@@ -38,14 +38,14 @@ reminder bookkeeping and a checksummed JSON export. `/modmail setup | open |
 reply | close | transcript | stats` is the twelfth and last plan root: private
 owner-or-staff threads, a first-staff-reply claim, side-aware unread counters and
 a transcript archived once by a conditional update. The command ledger is
-**20/100 roots** with **138 real subcommands**, **158 actions** and **4 context
+**20/100 roots** with **139 real subcommands**, **159 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**438 tests across 66 files** without a Discord token, database or network.
+**457 tests across 68 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
-bot logged in and Discord reports **20 roots / 138 subcommands / 2 user menus /
-2 message menus**, answered a Qwen3:8b mention in `#ai-chat`, and ran real
+bot logged in and Discord reports **20 roots / 2 user menus / 2 message
+menus**, answered a Qwen3:8b mention in `#ai-chat`, and ran real
 moderation, community, AI, invite, logging, analytics, configuration, music,
 forms, events, modmail and content-filter commands through a development message bridge,
 including
@@ -53,14 +53,28 @@ including
 exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
 human client is still the next live check. Pass 44 opened the live SQL window:
-Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and Redis, all 13
-migrations are applied, and `pnpm probe:live` passed 9/9 checks — settings
+Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and Redis, all 14
+migrations are applied, and `pnpm probe:live` passed 12/12 checks — settings
 survive a pool restart, cooldowns are shared through Redis, a BullMQ job runs
-once with a Postgres receipt, portability imports/rolls back/deletes real rows,
-and `/healthz` reports `database: postgres`. That run also found and fixed a
-real migrator defect: postgres.js rejects the raw `BEGIN` the runner used. See
+once with a Postgres receipt, a delayed timer fires after its delay, a real case
+expires through `TemporaryActionService`, a real reminder/scheduled record
+delivers once, portability imports/rolls back/deletes real rows, and `/healthz`
+reports `database: postgres`. That run also found and fixed a real migrator
+defect: postgres.js rejects the raw `BEGIN` the runner used. See
 [the live window](memory/vault/06-Operations/Live-Window.md) and
 [pass 44](memory/journal/2026-11-02-pass-44.md).
+Pass 45 added the first timer slice: `/mod ban` accepts a duration,
+`/mod temp-role` is a real subcommand, and both write `expires_at` on a case and
+enqueue one delayed `moderation.expire` job. The case is the durable record; an
+atomic `claimExpiry` makes two workers unable to release the same ban or role
+twice, a failed release restores the timestamp, and startup recovery expires
+overdue cases and reschedules future ones. Reminders and scheduled messages now
+enqueue `content.deliver` on the same bot-side queue, where one conditional
+claim decides which of the timer and the sweep sends, and only a successful
+send keeps `sent:true`. The live probe proves the SQL and service paths; the
+Discord action is a recording port, not a gateway, so those rows stay marked
+**live unverified for Discord**. See
+[pass 45](memory/journal/2026-11-02-pass-45.md).
 
 This repo is both the product and the course: every module has a spec, tests, a
 teaching note and a status page. The docs are the source of truth, not a
@@ -526,10 +540,12 @@ See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
 | P7 Export surface | Done | `/export`; six subcommands, file attachments, dry-run import, exact-id delete, live drift; 12.8 KB live bundle parsed and checksum-verified |
 | P8 Music queue | Done | `/music`; eight subcommands over a durable `community_records` queue; SQL row lock holds the cap; live add/queue/remove plus disabled refusal |
 | P8 Music playback | **Open** | `play`, `skip` and `stop` refuse with the exact missing pieces (no voice/Lavalink client, no `LAVALINK_URL`); the refusal is live-proven, streaming is not shipped |
-| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail and the music queue shipped; expiry, real playback and UI/i18n open |
+| P7 Temporary moderation | Done in repo | `/mod ban duration:<minutes>` and `/mod temp-role` write `expires_at`; one delayed `moderation.expire` job, an atomic claim, a failed-release retry and startup recovery. Live SQL/service check; Discord action not live |
+| P7 Scheduled delivery | Done in repo | `/tools reminder` and `/tools schedule` enqueue `content.deliver`; an atomic claim lets exactly one of the timer and the sweep send, and a failed send releases it. Live SQL/service check; Discord delivery not live |
+| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail, temporary moderation and the music queue shipped; panic mode, goodbye, real playback and UI/i18n open |
 
 Live evidence (2026-11-01): `AI Team#5758` connected and Discord reported 20
-global roots with 138 subcommands (including `/analytics`, `/config`, `/event`,
+global roots (including `/analytics`, `/config`, `/event`,
 `/export`, `/form`, `/help`, `/invites`, `/logging`, `/modmail`, `/music`, the
 five `/setup` actions, the two `/appeal` actions and the two `/verify` actions) plus
 **2 user menus and 2 message menus** with no drift, and Qwen3:8b answered a
@@ -610,7 +626,7 @@ brought it to 17 roots / 108 subcommands; pass 34's `/setup` hub brought it to
 subcommands, and pass 36's `/verify` hub brought it to 17 roots / 117
 subcommands. Pass 40's `/form` hub brought it to 18 roots / 125 subcommands,
 pass 41's `/event` hub brought it to 19 roots / 132, and pass 42's `/modmail`
-hub is the current ledger: **20 roots / 138 subcommands**. The
+hub brought the ledger to **20 roots** at pass 42. The
 MCP text reader
 does not render embeds, so the embed fields, top-command list and JSON export
 were covered by [the command test](modules/analytics/src/analytics.test.ts), not
@@ -766,7 +782,7 @@ refused with **already closed**; the archived transcript still read **2 messages
 · archived**; `!modmail stats` read **1 thread / 0 active / 2 messages**. A
 disabled `!modmail setup enabled=false` refused a member open with the exact
 reason, and `enabled=true` restored it. `commands:doctor` read Discord and
-reported **20 roots / 138 subcommands / 2 user + 2 message menus** with no drift.
+reported **20 roots / 2 user + 2 message menus** with no drift.
 The MCP account is a bot and owns its own thread, so a second member, the
 staff-side claim and the foreign-thread refusal are command-tested; the bridge
 posts ordinary messages, so ephemerality and `InteractionCreate` are not claimed

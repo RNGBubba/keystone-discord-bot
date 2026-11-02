@@ -2,18 +2,23 @@ import type { CaseEvent, EmbedPayload, ModerationCase } from "@keystone/kernel";
 
 /** One case rendering used by /mod, security alerts and the review queue. */
 export function caseEmbed(record: ModerationCase, title = `Case #${record.caseNumber}`): EmbedPayload {
+  const fields: NonNullable<EmbedPayload["fields"]> = [
+    { name: "Action", value: record.action, inline: true },
+    { name: "Target", value: record.targetId, inline: true },
+    { name: "State", value: record.state, inline: true },
+    { name: "Actor", value: record.actorId, inline: true },
+    { name: "Rule", value: record.rule ?? "manual", inline: true },
+    { name: "Case", value: `#${record.caseNumber}`, inline: true },
+  ];
+  if (record.expiresAt) {
+    const unix = Math.floor(new Date(record.expiresAt).getTime() / 1_000);
+    fields.push({ name: "Expires", value: `<t:${unix}:R>`, inline: true });
+  }
   return {
     title,
     description: record.reason,
     color: record.state === "open" || record.state === "pending" ? 0xfee75c : 0x5865f2,
-    fields: [
-      { name: "Action", value: record.action, inline: true },
-      { name: "Target", value: record.targetId, inline: true },
-      { name: "State", value: record.state, inline: true },
-      { name: "Actor", value: record.actorId, inline: true },
-      { name: "Rule", value: record.rule ?? "manual", inline: true },
-      { name: "Case", value: `#${record.caseNumber}`, inline: true },
-    ],
+    fields,
     footer: { text: "Case events are append-only. Appeal with /appeal or the button." },
   };
 }

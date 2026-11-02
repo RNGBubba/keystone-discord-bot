@@ -37,6 +37,9 @@ function actions(): { calls: string[]; port: ModerationActions } {
     calls,
     port: {
       ban: ok,
+      unban: ok,
+      addRole: ok,
+      removeRole: ok,
       kick: ok,
       timeout: ok,
       purge: ok,

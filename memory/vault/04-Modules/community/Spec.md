@@ -57,8 +57,8 @@ rows as `/rank view` and does not mutate XP or currency.
 | Thread tickets | Panel, private public thread, claim, close, add, transcript, stats | `TicketService` |
 | Embeds | Validated title/description/fields, 6,000-character cap | `ContentService` |
 | Tags | Data-only, lowercase names, max count, owner recorded | `ContentService` |
-| Reminders | User DM or channel delivery, idempotent `sent` flag | `ContentService` |
-| Scheduled messages | Channel delivery at a due time | `ContentService` |
+| Reminders | User DM or channel delivery through a delayed `content.deliver` job, idempotent `sent` flag | `ContentService` |
+| Scheduled messages | Channel delivery at a due time through the same delayed job | `ContentService` |
 | Polls | 2–5 options, one vote per member, counts | `ContentService` |
 | Feeds | RSS/Atom-style item parser, GUID dedupe, channel delivery | `ContentService` |
 | Stat channels | Member/online/boosters metric record, rate-limited adapter tick | `ContentService` |
@@ -163,7 +163,9 @@ required by moderation; no new privileged intent is added.
 
 - Live Discord sends, gateway events, select interactions, threads, voice, live
   role grants and the scheduler tick are unverified without a token/staging guild.
-- Durable queue delivery for reminders/giveaways/feeds is still in-process.
+- Reminders and scheduled messages use the bot-side durable timer (pass 45);
+  giveaways, delayed autoroles, birthdays, seasons and feeds still run on the
+  60-second process tick.
 - Goodbye messages, YouTube/Twitch-specific feed adapters and MEE6 XP import
   remain open (import is P5).
 - A failed shop role grant has no automatic refund/repair command; the user is

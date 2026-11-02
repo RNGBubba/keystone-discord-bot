@@ -62,6 +62,42 @@ export function createDiscordModerationActions(client: Client): ModerationAction
       }
     },
 
+    async unban(guildId, userId, reason) {
+      const target = await has(guildId, PermissionFlagsBits.BanMembers);
+      if ("ok" in target) return target;
+      try {
+        await target.bans.remove(userId, reason);
+        return { ok: true };
+      } catch (error) {
+        return fromError(error);
+      }
+    },
+
+    async addRole(guildId, userId, roleId, reason) {
+      const target = await has(guildId, PermissionFlagsBits.ManageRoles);
+      if ("ok" in target) return target;
+      try {
+        const member = await target.members.fetch(userId);
+        await member.roles.add(roleId, reason);
+        return { ok: true };
+      } catch (error) {
+        return fromError(error);
+      }
+    },
+
+    async removeRole(guildId, userId, roleId, reason) {
+      const target = await has(guildId, PermissionFlagsBits.ManageRoles);
+      if ("ok" in target) return target;
+      try {
+        const member = await target.members.fetch(userId);
+        if (!member.roles.cache.has(roleId)) return { ok: true };
+        await member.roles.remove(roleId, reason);
+        return { ok: true };
+      } catch (error) {
+        return fromError(error);
+      }
+    },
+
     async kick(guildId, userId, reason) {
       const target = await has(guildId, PermissionFlagsBits.KickMembers);
       if ("ok" in target) return target;

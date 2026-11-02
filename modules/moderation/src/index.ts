@@ -19,6 +19,7 @@ export {
   type ModerationSettings,
 } from "./settings";
 export { caseEmbed, caseListEmbed } from "./format";
+export { TemporaryActionService, type ExpiryOutcome } from "./temporary";
 export {
   NATIVE_AUTOMOD_PREFIX,
   buildNativeAutoModPlan,

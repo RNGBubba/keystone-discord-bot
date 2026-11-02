@@ -6,20 +6,20 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-02",
   "phase": "P7",
-  "lastPass": "journal/2026-11-02-pass-44.md",
-  "nextAction": "pass-45 — evidence levels and pass telemetry",
+  "lastPass": "journal/2026-11-02-pass-45.md",
+  "nextAction": "pass-46 — panic mode and goodbye messages, then the remaining P7 interactions",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-02"
   },
   "metrics": {
     "commands": 20,
-    "subcommands": 138,
-    "actions": 158,
+    "subcommands": 139,
+    "actions": 159,
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 438
+    "tests": 457
   },
   "modules": [
     {

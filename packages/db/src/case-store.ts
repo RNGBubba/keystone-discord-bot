@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, lte, notInArray, sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import type {
   CaseEvent,
@@ -25,6 +25,7 @@ function toCase(row: CaseRow): ModerationCase {
     rule: row.rule ?? undefined,
     state: row.state as ModerationCaseState,
     evidence: row.evidence,
+    expiresAt: row.expiresAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -78,6 +79,7 @@ export class DrizzleCaseStore implements CaseStore {
         rule: input.rule,
         state: input.state ?? "open",
         evidence: input.evidence,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
       })
       .returning();
 
@@ -145,5 +147,71 @@ export class DrizzleCaseStore implements CaseStore {
       .update(cases)
       .set({ state, updatedAt: new Date() })
       .where(eq(cases.id, caseId));
+  }
+
+  async updateExpiry(caseId: string, expiresAt: string | null): Promise<ModerationCase | undefined> {
+    const [row] = await this.db
+      .update(cases)
+      .set({ expiresAt: expiresAt ? new Date(expiresAt) : null, updatedAt: new Date() })
+      .where(eq(cases.id, caseId))
+      .returning();
+    return row ? toCase(row) : undefined;
+  }
+
+  async claimExpiry(caseId: string): Promise<ModerationCase | undefined> {
+    const [row] = await this.db
+      .update(cases)
+      .set({ expiresAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(cases.id, caseId),
+          isNotNull(cases.expiresAt),
+          notInArray(cases.state, ["closed", "reversed"]),
+        ),
+      )
+      .returning();
+    return row ? toCase(row) : undefined;
+  }
+
+  async listDueExpiries(
+    guildId: string,
+    at: string,
+    limit = 100,
+  ): Promise<ModerationCase[]> {
+    const rows = await this.db
+      .select()
+      .from(cases)
+      .where(
+        and(
+          eq(cases.guildId, guildId),
+          isNotNull(cases.expiresAt),
+          lte(cases.expiresAt, new Date(at)),
+          notInArray(cases.state, ["closed", "reversed"]),
+        ),
+      )
+      .orderBy(cases.expiresAt)
+      .limit(Math.min(Math.max(limit, 1), 100));
+    return rows.map(toCase);
+  }
+
+  async listPendingExpiries(
+    guildId: string,
+    after: string,
+    limit = 100,
+  ): Promise<ModerationCase[]> {
+    const rows = await this.db
+      .select()
+      .from(cases)
+      .where(
+        and(
+          eq(cases.guildId, guildId),
+          isNotNull(cases.expiresAt),
+          gt(cases.expiresAt, new Date(after)),
+          notInArray(cases.state, ["closed", "reversed"]),
+        ),
+      )
+      .orderBy(cases.expiresAt)
+      .limit(Math.min(Math.max(limit, 1), 100));
+    return rows.map(toCase);
   }
 }

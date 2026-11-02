@@ -32,6 +32,18 @@ class RecordingModerationActions implements ModerationActions {
     return Promise.resolve({ ok: true });
   }
 
+  unban(): Promise<ModerationActionResult> {
+    return Promise.resolve({ ok: true });
+  }
+
+  addRole(): Promise<ModerationActionResult> {
+    return Promise.resolve({ ok: true });
+  }
+
+  removeRole(): Promise<ModerationActionResult> {
+    return Promise.resolve({ ok: true });
+  }
+
   kick(): Promise<ModerationActionResult> {
     return Promise.resolve({ ok: true });
   }

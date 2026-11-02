@@ -10,7 +10,13 @@ import {
   type ModerationDirectMessage,
   type ModerationNotice,
 } from "@keystone/kernel";
-import { createTestContext, FakeInteraction, noopQueue, staticHealth } from "@keystone/testing";
+import {
+  RecordingJobQueue,
+  createTestContext,
+  FakeInteraction,
+  noopQueue,
+  staticHealth,
+} from "@keystone/testing";
 import { appeal } from "./commands/appeal";
 import { mod } from "./commands/mod";
 import { verify } from "./commands/verify";
@@ -30,6 +36,21 @@ class RecordingActions implements ModerationActions {
 
   ban(guildId: string, userId: string): Promise<ModerationActionResult> {
     this.calls.push(`ban:${guildId}:${userId}`);
+    return this.ok();
+  }
+
+  unban(guildId: string, userId: string): Promise<ModerationActionResult> {
+    this.calls.push(`unban:${guildId}:${userId}`);
+    return this.ok();
+  }
+
+  addRole(_guildId: string, _userId: string, roleId: string): Promise<ModerationActionResult> {
+    this.calls.push(`addRole:${roleId}`);
+    return this.ok();
+  }
+
+  removeRole(_guildId: string, userId: string, roleId: string): Promise<ModerationActionResult> {
+    this.calls.push(`removeRole:${userId}:${roleId}`);
     return this.ok();
   }
 
@@ -95,7 +116,12 @@ class RecordingActions implements ModerationActions {
 
 type OptionValues = Record<string, string | number | boolean | null>;
 
-function buildContext(options: OptionValues, userId = "mod-1") {
+function buildContext(
+  options: OptionValues,
+  userId = "mod-1",
+  timers?: import("@keystone/kernel").JobQueue,
+  permissions: string[] = ["ModerateMembers", "ManageRoles"],
+) {
   const store = new InMemoryCaseStore();
   const cases = new CaseService(store);
   const actions = new RecordingActions();
@@ -104,7 +130,7 @@ function buildContext(options: OptionValues, userId = "mod-1") {
     commandName: "mod",
     guildId: "guild-1",
     userId,
-    permissions: ["ModerateMembers"],
+    permissions,
     options,
     subcommand: typeof options.action === "string" ? options.action : undefined,
   });
@@ -113,6 +139,7 @@ function buildContext(options: OptionValues, userId = "mod-1") {
     moduleId: "moderation",
     settings: { dryRun: false, ...options },
     moderation: { cases, actions, members },
+    timers,
   });
   return { ctx, cases, actions, store, members };
 }
@@ -200,6 +227,71 @@ describe("moderation module", () => {
     expect(actions.notifications[0]?.components?.[0]?.components[0]?.customId).toBe(
       appealCustomId(records[0]!.id),
     );
+  });
+
+  it("records a temporary ban's expiry and schedules exactly one release", async () => {
+    const queue = new RecordingJobQueue();
+    const { ctx, cases } = buildContext(
+      { action: "ban", user: "target-1", reason: "cool off", duration: 30 },
+      "mod-1",
+      queue,
+    );
+
+    await mod.execute(ctx);
+
+    const [record] = await cases.list("guild-1");
+    expect(record?.expiresAt).toBe(new Date(1_700_000_000_000 + 30 * 60_000).toISOString());
+    expect(queue.enqueued).toHaveLength(1);
+    expect(queue.enqueued[0]).toMatchObject({
+      name: "moderation.expire",
+      payload: { caseId: record?.id, guildId: "guild-1" },
+      options: { idempotencyKey: `moderation:expire:${record?.id}` },
+    });
+  });
+
+  it("grants a temporary role, records the role and schedules its removal", async () => {
+    const queue = new RecordingJobQueue();
+    const { ctx, cases, actions } = buildContext(
+      {
+        action: "temp-role",
+        user: "target-1",
+        role: "role-vip",
+        reason: "event winner",
+        duration: 60,
+      },
+      "mod-1",
+      queue,
+    );
+
+    await mod.execute(ctx);
+
+    expect(actions.calls).toContain("addRole:role-vip");
+    const [record] = await cases.list("guild-1");
+    expect(record).toMatchObject({
+      action: "temp-role",
+      targetId: "target-1",
+      evidence: { roleId: "role-vip" },
+    });
+    expect(record?.expiresAt).toBe(new Date(1_700_000_000_000 + 60 * 60_000).toISOString());
+    expect(queue.enqueued).toHaveLength(1);
+  });
+
+  it("refuses a temporary role without ManageRoles, even for a moderator", async () => {
+    const { ctx, cases } = buildContext(
+      {
+        action: "temp-role",
+        user: "target-1",
+        role: "role-admin",
+        reason: "escalation attempt",
+        duration: 60,
+      },
+      "mod-1",
+      undefined,
+      ["ModerateMembers"],
+    );
+
+    await expect(mod.execute(ctx)).rejects.toThrow(/ManageRoles/);
+    expect(await cases.list("guild-1")).toEqual([]);
   });
 
   it("takes no action and writes no case in the default dry-run", async () => {
