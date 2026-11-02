@@ -4,6 +4,7 @@ import {
   type GuildMember,
   type Message,
   type MessageReaction,
+  type PartialGuildMember,
   type PartialMessageReaction,
   type User,
   type VoiceState,
@@ -152,6 +153,21 @@ export function registerCommunityEvents(
     }
   };
 
+  const onMemberLeave = async (
+    member: GuildMember | PartialGuildMember,
+  ): Promise<void> => {
+    try {
+      const current = await config(member.guild.id);
+      await new WelcomeService(port.actions, current, port.store).handleLeave(
+        member.guild.id,
+        member.id,
+        member.guild.name,
+      );
+    } catch (error) {
+      logger.warn("goodbye failed", { error: messageOf(error) });
+    }
+  };
+
   const onVoice = async (oldState: VoiceState, newState: VoiceState): Promise<void> => {
     try {
       const guildId = newState.guild.id;
@@ -172,6 +188,7 @@ export function registerCommunityEvents(
   client.on(Events.MessageReactionAdd, (reaction) => void onReaction(reaction));
   client.on(Events.MessageReactionRemove, (reaction) => void onReaction(reaction));
   client.on(Events.GuildMemberAdd, (member) => void onMember(member));
+  client.on(Events.GuildMemberRemove, (member) => void onMemberLeave(member));
   client.on(Events.VoiceStateUpdate, (oldState, newState) => void onVoice(oldState, newState));
 
   client.on(Events.InteractionCreate, (interaction) => {

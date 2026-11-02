@@ -46,17 +46,28 @@ P2 core shipped in pass 05 (2026-11-01).
   appends an `expired` event, closes the case and notifies the mod log. At
   startup, `TemporaryActionService.recover` expires overdue cases and
   re-enqueues future ones, which is the memory-mode restart path.
+- **Panic mode (pass 46):** `/mod panic state:status|on|off` is an
+  `Administrator`-only switch. `on` asks `ModerationActions.lockdown` to
+  snapshot each text channel's `@everyone` SendMessages overwrite, deny it and
+  return what changed; `PanicService` writes that snapshot to one
+  `community_records` row before replying. `off` passes the same snapshot to
+  `restoreLockdown`, clears the row only when every channel restored, and
+  otherwise keeps the failures so a retry touches only them. A channel that was
+  already denied is left out of the snapshot, so panic cannot unlock it later.
+  The snapshot is SQL and live-probed; the Discord overwrite calls are
+  adapter-tested only.
 - Native AutoMod rules are built and synced only when explicitly enabled.
 - Dry-run is the default and produces alerts/cases without punitive calls.
 
 ## Verified
 
 ```
-pnpm test                                  # 457 tests / 68 files
-pnpm vitest run modules/moderation         # 55 tests (including 7 temporary-expiry tests)
+pnpm test                                  # 471 tests / 71 files
+pnpm vitest run modules/moderation         # 60 tests (including 7 temporary-expiry and 5 panic tests)
 pnpm test -- packages/db/src/cases.test.ts # 4 PGlite case-store tests, including listEvents and atomic expiry claims
+pnpm test -- packages/db/src/panic.test.ts # PGlite panic snapshot scope and clear
 pnpm test -- packages/db/src/member-store.test.ts # PGlite member row + verification upsert
-pnpm budget                                # 20/100 roots · 139 subcommands · 159 actions · 4 context menus, status OK
+pnpm budget                                # 20/100 roots · 141 subcommands · 161 actions · 4 context menus, status OK
 pnpm build                                 # bot, worker, migrate artefacts
 ```
 
@@ -216,6 +227,7 @@ P7 appeal-hub evidence (pass 35):
 | Profanity/zalgo delete action | Profanity yes (live 2026-11-01, message gone, case kept); zalgo no | Send a disposable zalgo fixture in staging with `dryRun: false` |
 | Bot authors ignored outside the marker | Yes, adapter test | Production has no marker option at all |
 | Temporary ban / temp role expiry | Yes: SQL case, atomic claim, timer service and in-process queue tests; live service check | A live `/mod ban duration` and a real unban/role removal in staging |
+| Panic lock / restore | Service and command state transitions tested; the snapshot is live-probed through Postgres | A live `!mod panic state:on/off` with real channel overwrites in staging |
 | Join-gate timeout expiry | Not wired | Reuse the same timer with a member expiry; see known limitations |
 
 No document claims a live Discord run for the unproven rows.
@@ -231,8 +243,9 @@ No document claims a live Discord run for the unproven rows.
   port. Join-gate timeout expiry is still not wired to this timer.
 - Case export (JSON/CSV) is not built; the ledger is queryable and P5 owns the
   full export surface.
-- Panic mode is not a command yet. Anti-raid applies the same containment
-  decisions automatically.
+- Panic mode has no automatic expiry and does not touch threads, voice or
+  channel-specific allow/deny rules beyond `@everyone` SendMessages. Its
+  Discord calls are unobserved; a live `/mod panic` is the missing proof.
 - `/appeal` is guild-only; DM and web appeals need P3/P5 surfaces.
 - Native AutoMod deletes only prefixed rules; a server's own rules are untouched.
 - The link blocklist is host-only: no paths, wildcards, regex, remote reputation,

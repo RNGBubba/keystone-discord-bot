@@ -2,17 +2,21 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelType,
   PermissionFlagsBits,
   type Client,
   type Guild,
 } from "discord.js";
 import type {
   ActionRow,
+  ChannelLock,
+  LockdownResult,
   ModerationActions,
   ModerationActionResult,
   ModerationNotice,
+  RestoreLockdownResult,
 } from "@keystone/kernel";
-import { resolveChannel } from "./channels";
+import { fetchedChannels, resolveChannel } from "./channels";
 
 function failure(detail: string): ModerationActionResult {
   return { ok: false, detail };
@@ -21,6 +25,14 @@ function failure(detail: string): ModerationActionResult {
 function fromError(error: unknown): ModerationActionResult {
   return failure(error instanceof Error ? error.message : String(error));
 }
+
+/** Channels where a member writes a message; threads inherit their parent. */
+const TEXT_CHANNEL_TYPES = new Set<ChannelType>([
+  ChannelType.GuildText,
+  ChannelType.GuildAnnouncement,
+  ChannelType.GuildForum,
+  ChannelType.GuildMedia,
+]);
 
 /**
  * Discord implementation of the moderation action port.
@@ -96,6 +108,94 @@ export function createDiscordModerationActions(client: Client): ModerationAction
       } catch (error) {
         return fromError(error);
       }
+    },
+
+    async lockdown(guildId, reason): Promise<LockdownResult> {
+      const target = await has(guildId, PermissionFlagsBits.ManageChannels);
+      if ("ok" in target) return target;
+      const locks: ChannelLock[] = [];
+      let detail: string | undefined;
+      try {
+        const channels = await fetchedChannels(target);
+        for (const channel of channels) {
+          if (!TEXT_CHANNEL_TYPES.has(channel.type)) continue;
+          if (!("permissionOverwrites" in channel)) continue;
+          try {
+            const everyone = target.roles.everyone;
+            const overwrite = channel.permissionOverwrites.cache.get(everyone.id);
+            // A channel already denied SendMessages stays denied, but is not
+            // part of the snapshot: panic mode must not unlock it later.
+            if (overwrite?.deny.has(PermissionFlagsBits.SendMessages)) continue;
+            const previous: ChannelLock["previous"] = overwrite?.allow.has(
+              PermissionFlagsBits.SendMessages,
+            )
+              ? "allow"
+              : "neutral";
+            await channel.permissionOverwrites.edit(
+              everyone,
+              { SendMessages: false },
+              { reason },
+            );
+            locks.push({
+              channelId: channel.id,
+              existed: Boolean(overwrite),
+              previous,
+            });
+          } catch (error) {
+            detail = error instanceof Error ? error.message : String(error);
+          }
+        }
+      } catch (error) {
+        return fromError(error);
+      }
+      return { ok: detail === undefined, detail, locks };
+    },
+
+    async restoreLockdown(guildId, locks, reason): Promise<RestoreLockdownResult> {
+      const target = await has(guildId, PermissionFlagsBits.ManageChannels);
+      if ("ok" in target) return target;
+      const restored: string[] = [];
+      const failed: string[] = [];
+      let detail: string | undefined;
+      for (const lock of locks) {
+        try {
+          const resolution = await resolveChannel(
+            () => target.channels.fetch(lock.channelId),
+            lock.channelId,
+          );
+          if (resolution.status !== "ok" || !("permissionOverwrites" in resolution.channel)) {
+            failed.push(lock.channelId);
+            detail =
+              resolution.status === "ok"
+                ? "A channel in the panic snapshot no longer supports overwrites."
+                : resolution.reason;
+            continue;
+          }
+          const channel = resolution.channel;
+          const everyone = target.roles.everyone;
+          if (!lock.existed) {
+            await channel.permissionOverwrites.delete(everyone, reason);
+          } else {
+            await channel.permissionOverwrites.edit(
+              everyone,
+              {
+                SendMessages:
+                  lock.previous === "allow"
+                    ? true
+                    : lock.previous === "deny"
+                      ? false
+                      : null,
+              },
+              { reason },
+            );
+          }
+          restored.push(lock.channelId);
+        } catch (error) {
+          failed.push(lock.channelId);
+          detail = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return { ok: failed.length === 0, detail, restored, failed };
     },
 
     async kick(guildId, userId, reason) {

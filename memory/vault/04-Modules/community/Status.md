@@ -19,6 +19,15 @@ and is covered by a test. Select interactions, thread/voice behavior, live role
 grants and the scheduler tick are still unverified. The Postgres guild lock is
 exercised on PGlite, not a Postgres server.
 
+Pass 46 added goodbye messages without a second delivery mechanism. `/tools
+goodbye` writes `goodbye.*` in the same community settings as `welcome.*`;
+`WelcomeService.handleLeave` substitutes `{user}` and `{server}` and sends the
+configured text to one channel. It deliberately has no autorole or DM branch:
+the member is already gone, and a role grant would race Discord's own member
+removal. The event adapter is tested by emitting `GuildMemberRemove`; a real
+member leaving a guild is still unobserved. A Components V2 welcome panel is
+still planned and is not claimed.
+
 P7 added the durable timer for reminders and schedules in pass 45. `/tools
 reminder` and `/tools schedule` still write the same `community_records` rows,
 but now enqueue `content.deliver` with a due-time delay and an idempotency key.
@@ -53,19 +62,19 @@ test rather than a live click.
 ## Verified
 
 ```text
-pnpm check                            exit 0 · 457 tests / 68 files
+pnpm check                            exit 0 · 471 tests / 71 files
   responder.test.ts                   5 tests (auto-responder service)
-  community.test.ts                  14 tests (including timer delivery and a concurrent claim)
+  community.test.ts                  15 tests (including timer delivery, a concurrent claim and goodbye)
   extras.test.ts                      7 tests
-  commands.test.ts                   12 tests (incl. reminder/schedule timer wiring)
+  commands.test.ts                   13 tests (incl. reminder/schedule timer wiring and goodbye settings)
   economy.test.ts                     6 tests
-  apps/bot/src/community-events.test.ts 3 tests (dev marker + responder)
+  apps/bot/src/community-events.test.ts 4 tests (dev marker, responder and member leave)
   apps/bot/src/prefix.test.ts         8 tests (dev bridge)
   context.test.ts                     2 tests (Rank card menu)
   packages/db/src/community.test.ts   6 tests (incl. responder reopen and delivery claim)
   packages/db/src/economy.test.ts     2 tests
-pnpm budget                           20/100 roots · 139 subcommands · 159 actions · 4 context menus, status OK
-pnpm memory:check                     current (pass 33)
+pnpm budget                           20/100 roots · 141 subcommands · 161 actions · 4 context menus, status OK
+pnpm memory:check                     current (pass 46)
 ```
 
 Feature proofs (P3 plus the P4 economy hardening):
@@ -117,8 +126,9 @@ added `/ai` and the economy hardening added no root, so at P4 exit it was
 
 Not green and not claimed: message/gateway behaviour is now partially proven
 (the leaderboard and ticket-stats guard ran live), but selects, threads, voice,
-live role grants and scheduled ticks are still untested here. Goodbye messages,
-YouTube/Twitch-specific adapters and MEE6 import are still open (import is P5);
+live role grants and scheduled ticks were untested at P3 exit. Goodbye shipped
+in P7/pass 46; YouTube/Twitch-specific adapters and MEE6 import are still open
+(import is P5);
 durable queue delivery is in-process. The parity tally marks only verified
 buildable rows and leaves competitor ❔ cells untouched.
 
@@ -186,7 +196,8 @@ No document claims a live Discord run for a row marked “staging”.
 - Temp voice cleans up when the owner leaves and the room is empty; an
   administrative orphan cleanup pass is not built.
 - Birthdays use one guild timezone and support month/day only, not birth years.
-- Goodbye messages and YouTube/Twitch-specific feed adapters are not built.
+- Goodbye is text-only and has no V2 panel; YouTube/Twitch-specific feed
+  adapters are not built.
 - Auto-responder regex is operator-owned and compiled as-is; there is no ReDoS
   sandbox or safe-pattern linter beyond the trigger length cap. The feature is
   admin-only and disabled by default.

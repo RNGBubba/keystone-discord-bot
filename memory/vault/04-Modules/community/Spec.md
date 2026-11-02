@@ -22,9 +22,9 @@ up-sell.
 | --- | --- | --- | --- |
 | `/rank` | subcommands `view`, `leaderboard`, `rewards`, `admin`, `balance`, `daily`, `pay`, `shop`, `buy`, `gamble`, `ledger`, `season`; options `user`, `amount`, `level`, `value`, `item`, `limit`, `days` | guild-only; `ManageGuild` for rewards/admin/season | Reads XP/rank, configures role rewards, administers levels, runs the ledger-backed currency (balance, daily, pay, shop/buy, gamble, ledger), and starts a season (archives, then clears the projection). |
 | `/ticket` | subcommands `panel`, `open`, `claim`, `close`, `add`, `transcript`, `summary`, `stats`; options `subject`, `user`, `channel`, `ticket`, `title` | guild-only; `ManageGuild` for panel/transcript/summary/stats | Posts a panel, opens a private thread, claims/closes it, adds a participant, returns a transcript, calls the AI summary port and reports SLA stats. |
-| `/tools` | subcommands `embed`, `tag`, `reminder`, `schedule`, `giveaway`, `giveaway-end`, `giveaway-reroll`, `poll`, `feed`, `stat`, `welcome`, `roles`, `starboard`, `starboard-override`, `voice`, `birthdays`, `birthday`, `suggestions`, `suggestion`, `suggestion-decide`, `sticky`, `responder`, `responders`, `responder-remove`; options `name`, `value`, `channel`, `target`, `role`, `user`, `duration`, `limit`, `url`, `match` | guild-only; `ManageGuild` for configuration and server-wide sends | One utility root for content, giveaways, feeds, stat channels, reaction-role buttons/selects, birthdays, suggestions, sticky messages, auto-responders and event configuration. |
+| `/tools` | subcommands `embed`, `tag`, `reminder`, `schedule`, `giveaway`, `giveaway-end`, `giveaway-reroll`, `poll`, `feed`, `stat`, `welcome`, `goodbye`, `roles`, `starboard`, `starboard-override`, `voice`, `birthdays`, `birthday`, `suggestions`, `suggestion`, `suggestion-decide`, `sticky`, `responder`, `responders`, `responder-remove`; options `name`, `value`, `channel`, `target`, `role`, `user`, `duration`, `limit`, `url`, `match` | guild-only; `ManageGuild` for configuration and server-wide sends | One utility root for content, giveaways, feeds, stat channels, reaction-role buttons/selects, birthdays, suggestions, sticky messages, auto-responders and event configuration. |
 
-The three roots are part of the current **20 roots / 138 subcommands**. The P3
+The three roots are part of the current **20 roots / 141 subcommands**. The P3
 exit requires fewer than 20 roots; this is well inside it.
 
 ### Context menu
@@ -47,7 +47,7 @@ rows as `/rank view` and does not mutate XP or currency.
 | Leaderboard | Top profiles by XP, guild-scoped | `LevelingService` |
 | Seasonal reset | Admin starts a keyed season; profiles archived to `community_records`, marker written, `levels` cleared; repeated start is a no-op | `SeasonService` |
 | Economy | Daily through the kernel cooldown; atomic transfers and purchases; shop role items; capped opt-in gambling; balances derived from an append-only ledger | `EconomyService` |
-| Welcome / delayed autorole | Welcome text/DM, immediate role or durable delayed-role record applied by the tick | `WelcomeService` |
+| Welcome / goodbye | Welcome text/DM, immediate role or durable delayed-role record applied by the tick; goodbye is text-only on member leave | `WelcomeService` |
 | Reaction roles | Button panel plus multi-select/multi-role select panel; selected set reconciled against the panel | `ReactionRoleService` |
 | Starboard | Global threshold plus per-source-channel threshold and destination overrides | `StarboardService` |
 | Birthdays | Guild timezone, due-day announcement, optional role, once per user per year | `BirthdayService` |
@@ -101,6 +101,7 @@ marker, then delete the projection. Modules never import a table; the module own
 | `economy.gambleMax` | `100` | Per-bet cap |
 | `economy.shop` | `[]` | Role/tag items |
 | `welcome.*` | disabled | Channel, message, role, DM, `roleDelayMinutes` |
+| `goodbye.*` | disabled | Channel and message; no role or DM branch |
 | `starboard.*` | disabled | Channel, threshold, emoji, per-channel `overrides` |
 | `birthdays.*` | disabled | Channel, role, IANA timezone |
 | `suggestions.*` | disabled | Channel, min/max length |
@@ -166,8 +167,9 @@ required by moderation; no new privileged intent is added.
 - Reminders and scheduled messages use the bot-side durable timer (pass 45);
   giveaways, delayed autoroles, birthdays, seasons and feeds still run on the
   60-second process tick.
-- Goodbye messages, YouTube/Twitch-specific feed adapters and MEE6 XP import
-  remain open (import is P5).
+- Goodbye messages are text-only and have no Components V2 panel;
+  YouTube/Twitch-specific feed adapters and MEE6 XP import remain open (import
+  is P5).
 - A failed shop role grant has no automatic refund/repair command; the user is
   told to ask an admin and the ledger entry remains. A review queue is not built.
 - `statChannels.online` is approximated by member count; presence is not an intent.

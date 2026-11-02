@@ -12,13 +12,13 @@ reason, evidence and an appeal path. The default is dry-run.
 
 | Command | Options | Guards | Behaviour |
 | --- | --- | --- | --- |
-| `/mod` | subcommands `ban`, `temp-role`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`, `case`, `note`, `history`, `links`, `filters`, `review`; each declares only the options it needs (`user`, `role`, `reason`, `case`, `duration`, `limit`, `channel`, `dry_run`) | guild-only, `ModerateMembers` | Executes one manual action or reads the case/review queue. `ban` accepts an optional `duration` and `temp-role` requires `user`, `role` and `duration`; both write `expires_at` after the action succeeds. `links` lists link findings, `filters` lists link/profanity/zalgo findings, and `review` closes the loop. Every enforced action opens a case before the external call. |
+| `/mod` | subcommands `ban`, `temp-role`, `panic`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`, `case`, `note`, `history`, `links`, `filters`, `review`; each declares only the options it needs (`user`, `role`, `reason`, `case`, `duration`, `limit`, `channel`, `state`, `dry_run`) | guild-only, `ModerateMembers`; `panic on/off` also requires `Administrator` | Executes one manual action or reads the case/review queue. `ban` accepts an optional `duration` and `temp-role` requires `user`, `role` and `duration`; both write `expires_at` after the action succeeds. `panic` snapshots and restores `@everyone` SendMessages. `links` lists link findings, `filters` lists link/profanity/zalgo findings, and `review` closes the loop. Every enforced action opens a case before the external call. |
 | `/appeal` | subcommands `open` (`case` required, `message`) and `status` (optional `case`) | guild-only, 5 s cooldown | `open` appends an `appealed` event to the caller's own case; never edits history or reverses automatically. `status` reads the append-only appeal events and the current case state, and refuses a case that is not the caller's. |
 | `/verify` | subcommands `start` and `status` | guild-only, 5 s cooldown | `start` requires a persisted quarantine, then checks the join gate, its own state and DM-ability before sending the existing verification button through `ModerationActions.directMessage`; no community port is involved. `status` reads the persisted `members` row. Neither subcommand marks a member verified directly, and a member with no record is refused by name. |
 
-`/mod` is a hub: those fifteen subcommands cost **one** global root. The module
+`/mod` is a hub: those sixteen subcommands cost **one** global root. The module
 spends 3 of Discord's 100 roots (`/mod`, `/appeal`, `/verify`); `/appeal`'s two
-subcommands, `/verify`'s two subcommands and `/mod`'s fifteen cost no extra
+subcommands, `/verify`'s two subcommands and `/mod`'s sixteen cost no extra
 slots.
 
 ### Temporary actions
@@ -32,6 +32,21 @@ the case is not final; the winner performs `unban` or `removeRole`, appends an
 timestamp and records a note, so the case remains visible and retryable. Startup
 recovery reads the same rows: overdue cases expire now, future cases are
 re-enqueued. This is why a lost timer is a delay, not a lost moderation action.
+
+### Panic mode
+
+`/mod panic` is a manual switch, not a time-bounded job. `state:on` calls one
+port method that iterates the guild's text channels, records the existing
+`@everyone` SendMessages overwrite for each channel it changes, and denies it.
+`PanicService` saves that snapshot to one `community_records` row before the
+command replies, so a restart cannot lose the way back. A channel that was
+already denied is deliberately not in the snapshot: restoring panic must not
+unlock a channel an administrator locked on purpose.
+
+`state:off` restores only the recorded overwrites. When some restores fail, the
+row keeps those channel ids and the next `off` retries only them; when all
+succeed the row is cleared. The probe proves the row survives a Postgres
+round-trip. The Discord calls are covered by the adapter test, not a gateway.
 
 ### Context menus
 
@@ -240,5 +255,5 @@ permission **before** the Discord call.
   concurrent allocation.
 - `packages/db/src/member-store.test.ts` — PGlite proves one `members` row, the
   verification upsert, the preserved join time and the cleared quarantine flag.
-- `pnpm budget` — 20/100 roots with all shipped commands (138 subcommands) and
+- `pnpm budget` — 20/100 roots with all shipped commands (141 subcommands) and
   4 context menus on their own 15 + 15 budget.

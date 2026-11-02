@@ -5,10 +5,12 @@ import {
   SettingsService,
   auditBudget,
   dispatchCommand,
+  type LockdownResult,
   type ModerationActions,
   type ModerationActionResult,
   type ModerationDirectMessage,
   type ModerationNotice,
+  type RestoreLockdownResult,
 } from "@keystone/kernel";
 import {
   RecordingJobQueue,
@@ -22,6 +24,7 @@ import { mod } from "./commands/mod";
 import { verify } from "./commands/verify";
 import { CaseService, InMemoryCaseStore, appealCustomId } from "./cases";
 import { InMemoryMemberStore } from "./members";
+import { InMemoryPanicStore } from "./panic";
 import { moderationModule } from "./manifest";
 
 class RecordingActions implements ModerationActions {
@@ -52,6 +55,23 @@ class RecordingActions implements ModerationActions {
   removeRole(_guildId: string, userId: string, roleId: string): Promise<ModerationActionResult> {
     this.calls.push(`removeRole:${userId}:${roleId}`);
     return this.ok();
+  }
+
+  lockdownResult: LockdownResult = { ok: true, locks: [] };
+  restoreResult: RestoreLockdownResult = { ok: true, restored: [], failed: [] };
+
+  lockdown(guildId: string, reason: string): Promise<LockdownResult> {
+    this.calls.push(`lockdown:${guildId}:${reason}`);
+    return Promise.resolve(this.lockdownResult);
+  }
+
+  restoreLockdown(
+    guildId: string,
+    locks: readonly { channelId: string }[],
+    reason: string,
+  ): Promise<RestoreLockdownResult> {
+    this.calls.push(`restore:${guildId}:${locks.length}:${reason}`);
+    return Promise.resolve(this.restoreResult);
   }
 
   kick(): Promise<ModerationActionResult> {
@@ -121,6 +141,7 @@ function buildContext(
   userId = "mod-1",
   timers?: import("@keystone/kernel").JobQueue,
   permissions: string[] = ["ModerateMembers", "ManageRoles"],
+  panic = new InMemoryPanicStore(),
 ) {
   const store = new InMemoryCaseStore();
   const cases = new CaseService(store);
@@ -138,10 +159,10 @@ function buildContext(
     interaction,
     moduleId: "moderation",
     settings: { dryRun: false, ...options },
-    moderation: { cases, actions, members },
+    moderation: { cases, actions, members, panic },
     timers,
   });
-  return { ctx, cases, actions, store, members };
+  return { ctx, cases, actions, store, members, panic };
 }
 
 function verificationStart(options: {
@@ -247,6 +268,54 @@ describe("moderation module", () => {
       payload: { caseId: record?.id, guildId: "guild-1" },
       options: { idempotencyKey: `moderation:expire:${record?.id}` },
     });
+  });
+
+  it("turns panic on through /mod panic and restores the same snapshot off", async () => {
+    const panic = new InMemoryPanicStore();
+    const lock = { channelId: "channel-1", existed: true, previous: "neutral" as const };
+    const on = buildContext(
+      { action: "panic", state: "on", reason: "raid in progress" },
+      "mod-1",
+      undefined,
+      ["ModerateMembers", "Administrator"],
+      panic,
+    );
+    on.actions.lockdownResult = { ok: true, locks: [lock] };
+
+    await mod.execute(on.ctx);
+
+    expect(on.actions.calls).toContain("lockdown:guild-1:raid in progress");
+    expect(await panic.get("guild-1")).toMatchObject({
+      startedBy: "mod-1",
+      reason: "raid in progress",
+      channels: [lock],
+    });
+    expect(on.ctx.interaction.lastReply?.content).toContain("1 channel(s) locked");
+
+    const off = buildContext(
+      { action: "panic", state: "off", reason: "all clear" },
+      "mod-2",
+      undefined,
+      ["ModerateMembers", "Administrator"],
+      panic,
+    );
+    off.actions.restoreResult = { ok: true, restored: ["channel-1"], failed: [] };
+
+    await mod.execute(off.ctx);
+
+    expect(off.actions.calls).toContain("restore:guild-1:1:all clear");
+    expect(await panic.get("guild-1")).toBeUndefined();
+    expect(off.ctx.interaction.lastReply?.content).toContain("1 channel(s) restored");
+  });
+
+  it("reports panic status without Administrator and refuses the switch", async () => {
+    const status = buildContext({ action: "panic", state: "status" });
+    await mod.execute(status.ctx);
+    expect(status.ctx.interaction.lastReply?.content).toContain("Panic mode is **off**");
+
+    const on = buildContext({ action: "panic", state: "on", reason: "raid" });
+    await expect(mod.execute(on.ctx)).rejects.toThrow(/Administrator/);
+    expect(on.actions.calls).toHaveLength(0);
   });
 
   it("grants a temporary role, records the role and schedules its removal", async () => {

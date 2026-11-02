@@ -157,7 +157,7 @@ https://github.com/RNGBubba/keystone-discord-bot
   [[04-Modules/moderation/Status|Moderation status]].
 - **Command tree** in repo (passes 26, 30, 31, 32, 33, 34, 35, 36, 40, 41 and 42): real Discord
   subcommands replaced the flat `action` option across every existing hub — 20
-  roots, 139 subcommands, 159 actions, 4 context menus. `/help` is generated
+  roots, 141 subcommands, 161 actions, 4 context menus. `/help` is generated
   from the live registry; `pnpm commands:catalog` writes [[Command-Catalog]] and
   `pnpm commands:doctor` checks the live shape. A human slash or right-click
   invocation remains the unobserved surface.
@@ -185,7 +185,7 @@ https://github.com/RNGBubba/keystone-discord-bot
   stopped, leaving one bot and one reply per command. The `.env` points at
   localhost Postgres/Redis; pass 44 started the compose services and applied the
   13 migrations then in the ledger, pass 45 added `0014_case_expiry`, and
-  `pnpm probe:live` now passes 12/12, so the SQL window is open. See
+  `pnpm probe:live` now passes 13/13, so the SQL window is open. See
   [[06-Operations/Live-Window|Live window]].
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus
@@ -229,7 +229,7 @@ https://github.com/RNGBubba/keystone-discord-bot
 - Phase **P4** shipped the AI layer and the ledger-backed economy hardening.
 - Phase **P3** shipped the community suite: leveling, reaction roles, welcome,
   starboard, tickets, giveaways, temp voice, content and seasons.
-- 20 of Discord's 100 global roots used, with 139 subcommands and 4 context
+- 20 of Discord's 100 global roots used, with 141 subcommands and 4 context
   menus (separate 15 + 15 budget); 12 modules registered.
 - The full suite covers the 5,000-row portability round trip and the failure,
   rollback and deletion paths; `pnpm check` also runs the intent, channel and

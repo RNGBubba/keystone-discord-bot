@@ -81,6 +81,35 @@ the `appealed` type. The live proof is deliberately two commands apart:
 beside `reviewed`. If you later add a second kind of review, keep the event read
 as the source of truth and treat the state as a cache of the latest transition.
 
+## Panic mode is a snapshot, not a blanket deny
+
+The tempting panic implementation is one loop that sets every channel to denied
+and one loop that sets them back to allowed. That is reversible only if every
+channel started allowed. If an administrator had already locked one, turning
+panic off would quietly unlock it.
+
+So the port returns a snapshot of what it actually changed:
+
+```text
+channel id · did an overwrite exist? · was SendMessages allow, deny or neutral?
+```
+
+A channel already denied is skipped and never enters the snapshot. Turning panic
+off restores only the recorded channels: it deletes an overwrite that did not
+exist, writes `allow`/`neutral` back when it did, and reports every channel that
+failed. `PanicService` persists that snapshot **before** the command replies,
+because a process restart between Discord and the reply must not lose the way
+back. It keeps failed channels in the row, so a second `off` is a retry rather
+than a guess.
+
+Two smaller rules fall out of the same idea. `state:status` is readable by any
+moderator and never changes a channel; `state:on/off` requires `Administrator`,
+because locking every channel is a server-wide action, not a member action.
+And panic has no automatic expiry: a timer would add a second recovery path for
+the snapshot without making the switch more reliable. If a time-bounded lockdown
+is wanted later, it should ride the same timer queue and the same snapshot, not
+a new mechanism.
+
 ## The link filter, as a worked example
 
 A detector should be a pure function before it is an event handler.

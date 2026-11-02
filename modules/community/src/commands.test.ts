@@ -76,6 +76,17 @@ describe("community commands", () => {
     });
   });
 
+  it("saves goodbye settings through the same module settings port", async () => {
+    const { ctx } = context(
+      { action: "goodbye", channel: "farewell", value: "Bye {user}" },
+      ["ManageGuild"],
+    );
+    await tools.execute(ctx);
+    expect(await ctx.settings.get("guild-a")).toMatchObject({
+      goodbye: { enabled: true, channelId: "farewell", message: "Bye {user}" },
+    });
+  });
+
   it("queues reminders and scheduled messages on the timer queue", async () => {
     const timers = new RecordingJobQueue();
     const reminder = context({ action: "reminder", value: "drink water", duration: 10 });

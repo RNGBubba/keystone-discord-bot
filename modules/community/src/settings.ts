@@ -50,6 +50,13 @@ export const communitySettingsSchema = z.object({
       roleDelayMinutes: z.number().int().min(0).max(1_440).default(0),
     })
     .default({}),
+  goodbye: z
+    .object({
+      enabled: z.boolean().default(false),
+      channelId: z.string().min(1).optional(),
+      message: z.string().min(1).max(1_500).default("Goodbye {user} from {server}."),
+    })
+    .default({}),
   starboard: z
     .object({
       channelId: z.string().min(1).optional(),

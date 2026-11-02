@@ -55,6 +55,7 @@ export const tools = defineCommand({
     { name: "feed", description: "Subscribe a channel to an RSS feed.", options: opts("url", "channel") },
     { name: "stat", description: "Create a member, online or booster stat channel.", options: opts("channel", "value") },
     { name: "welcome", description: "Configure the welcome message and autorole.", options: opts("value", "channel", "role", "limit") },
+    { name: "goodbye", description: "Configure the goodbye message for departing members.", options: opts("value", "channel") },
     { name: "roles", description: "Post a reaction-role or select-role panel.", options: opts("channel", "value", "role", "name", "limit") },
     { name: "starboard", description: "Configure the starboard channel and threshold.", options: opts("channel", "limit") },
     { name: "starboard-override", description: "Set a per-channel starboard threshold or turn it off.", options: opts("channel", "target", "value", "limit") },
@@ -237,6 +238,18 @@ export const tools = defineCommand({
         },
       });
       await ctx.interaction.reply({ content: "Welcome message enabled.", ephemeral: true });
+      return;
+    }
+
+    if (selected === "goodbye") {
+      requirePermission(ctx, "ManageGuild");
+      const message = text(ctx, "value");
+      const target = channelId(ctx, "channel");
+      if (!message || !target) throw new UserError("Goodbye needs a message and channel.");
+      await ctx.settings.update(guildId, {
+        goodbye: { enabled: true, channelId: target, message },
+      });
+      await ctx.interaction.reply({ content: "Goodbye message enabled.", ephemeral: true });
       return;
     }
 

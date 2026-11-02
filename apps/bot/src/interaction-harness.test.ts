@@ -44,6 +44,14 @@ class RecordingModerationActions implements ModerationActions {
     return Promise.resolve({ ok: true });
   }
 
+  lockdown() {
+    return Promise.resolve({ ok: true, locks: [] });
+  }
+
+  restoreLockdown() {
+    return Promise.resolve({ ok: true, restored: [], failed: [] });
+  }
+
   kick(): Promise<ModerationActionResult> {
     return Promise.resolve({ ok: true });
   }

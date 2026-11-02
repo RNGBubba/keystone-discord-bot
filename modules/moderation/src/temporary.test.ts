@@ -60,6 +60,14 @@ class RecordingActions implements ModerationActions {
     this.calls.push(`remove-role:${guildId}:${userId}:${roleId}`);
     return Promise.resolve({ ok: true });
   }
+
+  lockdown() {
+    return Promise.resolve({ ok: true, locks: [] });
+  }
+
+  restoreLockdown() {
+    return Promise.resolve({ ok: true, restored: [], failed: [] });
+  }
   async notify(guildId: string, _channelId: string | null | undefined, notice: ModerationNotice) {
     this.calls.push(`notify:${guildId}`);
     this.notices.push(notice);

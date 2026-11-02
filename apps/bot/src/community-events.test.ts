@@ -27,7 +27,7 @@ function message(input: MessageFixture = {}) {
   };
 }
 
-async function setup() {
+async function setup(overrides: Record<string, unknown> = { responders: { enabled: true } }) {
   const store = new InMemoryCommunityStore();
   await store.putRecord("dev-guild", "responder", "dev-hello", {
     id: "dev-hello",
@@ -39,7 +39,7 @@ async function setup() {
   });
   const sendMessage = vi.fn().mockResolvedValue({ ok: true, id: "sent-1" });
   const settings = {
-    get: async () => communitySettingsSchema.parse({ responders: { enabled: true } }),
+    get: async () => communitySettingsSchema.parse(overrides),
   } as never;
   const client = new FakeClient();
   const stop = registerCommunityEvents(
@@ -91,6 +91,22 @@ describe("community event adapter", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(sendMessage).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("sends the configured goodbye when the member-leave event fires", async () => {
+    const { sendMessage, client, stop } = await setup({
+      goodbye: { enabled: true, channelId: "farewell", message: "Bye {user} from {server}" },
+    });
+    client.emit(Events.GuildMemberRemove, {
+      id: "leaver-1",
+      guild: { id: "dev-guild", name: "Keystone" },
+    });
+
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(sendMessage).toHaveBeenCalledWith("dev-guild", "farewell", {
+      content: "Bye <@leaver-1> from Keystone",
+    });
     stop();
   });
 

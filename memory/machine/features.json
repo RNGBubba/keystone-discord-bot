@@ -575,13 +575,16 @@
             "wick-security": "✅"
           },
           "phase": "P7",
-          "status": "open",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "One command, logged",
+          "note": "`/mod panic state:on` snapshots each text channel's @everyone SendMessages overwrite, denies SendMessages and persists the snapshot before replying; `state:off` restores exactly those channels and keeps only failures for a retry. Administrator is required. The Discord calls are adapter-tested; the live probe proves only that the snapshot survives Postgres.",
           "evidence": [
-            "modules/moderation/src/security.test.ts"
+            "modules/moderation/src/panic.test.ts",
+            "modules/moderation/src/mod.test.ts",
+            "packages/db/src/panic.test.ts",
+            "apps/bot/src/moderation-actions.ts",
+            "apps/bot/src/moderation-actions.test.ts"
           ],
-          "openReason": "Named as open in the moderation status; P7 parity completion owns it.",
           "liveVerified": false
         },
         {
@@ -918,13 +921,14 @@
             "wick-security": "❔"
           },
           "phase": "P7",
-          "status": "open",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Text welcome today; goodbye and a V2 panel are open.",
+          "note": "Text welcome with placeholder substitution, an immediate or delayed autorole and an optional DM; a member leave sends the configured goodbye text to one channel with no role or DM branch. `/tools welcome | goodbye`. A richer panel is still planned (no packages/ui).",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/community.test.ts",
+            "modules/community/src/commands.test.ts",
+            "apps/bot/src/community-events.test.ts"
           ],
-          "openReason": "Welcome ships; goodbye messages are named as open in the P3 status.",
           "liveVerified": false
         },
         {

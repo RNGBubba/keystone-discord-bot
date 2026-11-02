@@ -20,6 +20,7 @@ import {
   createCaseStore,
   createCommunityStore,
   createIdempotencyStore,
+  createPanicStore,
   createPortabilityStore,
   createPostgresDatabase,
   createSettingsRepository,
@@ -322,6 +323,42 @@ async function main(): Promise<void> {
     status: "pass",
     detail:
       "a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event",
+    features: [],
+  });
+
+  // --- Panic snapshot against a real row ------------------------------------
+  // This proves the durable way back, not the Discord lockdown itself: the
+  // probe has no gateway, so `lockdown`/`restoreLockdown` are covered by the
+  // adapter and service tests, not claimed here.
+  const panicStore = createPanicStore(database);
+  const panicSnapshot = {
+    active: true as const,
+    startedAt: new Date().toISOString(),
+    startedBy: "live-probe",
+    reason: "live-probe panic",
+    channels: [{ channelId: "live-probe-channel", existed: true, previous: "neutral" as const }],
+  };
+  await panicStore.save(GUILD, panicSnapshot);
+  const readPanic = await panicStore.get(GUILD);
+  // jsonb reorders object keys, so compare the values that matter rather than
+  // their serialized order.
+  assert(
+    readPanic?.active === true &&
+      readPanic.startedBy === panicSnapshot.startedBy &&
+      readPanic.reason === panicSnapshot.reason &&
+      readPanic.channels.length === 1 &&
+      readPanic.channels[0]?.channelId === panicSnapshot.channels[0]!.channelId &&
+      readPanic.channels[0]?.existed === true &&
+      readPanic.channels[0]?.previous === "neutral",
+    "panic snapshot did not round-trip through Postgres",
+  );
+  await panicStore.clear(GUILD);
+  assert((await panicStore.get(GUILD)) === undefined, "cleared panic snapshot is still stored");
+  record({
+    id: "panic-snapshot-persistence",
+    status: "pass",
+    detail:
+      "a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only",
     features: [],
   });
 

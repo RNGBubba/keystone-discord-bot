@@ -171,6 +171,34 @@ describe("P3 community", () => {
     expect(actions.dms[0]?.userId).toBe(user);
   });
 
+  it("sends goodbye text with the same placeholders and nothing else", async () => {
+    const actions = new RecordingCommunityActions();
+    const service = new WelcomeService(
+      actions,
+      settings({
+        goodbye: {
+          enabled: true,
+          channelId: "farewell-channel",
+          message: "Goodbye {user}; {server} will miss you.",
+        },
+      }),
+    );
+
+    expect(await service.handleLeave(guild, user, "Keystone Test")).toEqual({ sent: true });
+    expect(actions.sent[0]?.channelId).toBe("farewell-channel");
+    expect(actions.sent[0]?.message.content).toBe(
+      "Goodbye <@user-a>; Keystone Test will miss you.",
+    );
+    // A departed member cannot receive a DM and a role grant would race the
+    // gateway's own member removal, so goodbye has neither branch.
+    expect(actions.dms).toHaveLength(0);
+    expect(actions.roleCalls).toHaveLength(0);
+
+    const disabled = new WelcomeService(actions, settings({}));
+    expect(await disabled.handleLeave(guild, user)).toEqual({ sent: false });
+    expect(actions.sent).toHaveLength(1);
+  });
+
   it("posts a button panel and toggles the role on the button path", async () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();

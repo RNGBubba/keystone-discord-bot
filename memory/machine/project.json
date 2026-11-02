@@ -6,20 +6,20 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-02",
   "phase": "P7",
-  "lastPass": "journal/2026-11-02-pass-45.md",
-  "nextAction": "pass-46 — panic mode and goodbye messages, then the remaining P7 interactions",
+  "lastPass": "journal/2026-11-02-pass-46.md",
+  "nextAction": "pass-47 — the remaining P7 interaction gaps and a human gateway proof; the dashboard, Lavalink and i18n phases stay closed",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-02"
   },
   "metrics": {
     "commands": 20,
-    "subcommands": 139,
-    "actions": 159,
+    "subcommands": 141,
+    "actions": 161,
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 457
+    "tests": 471
   },
   "modules": [
     {

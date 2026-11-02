@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-46",
+    date: "2026-11-02",
+    summary:
+      "Panic mode snapshots and restores every changed @everyone overwrite, and goodbye messages reuse the welcome settings without a role or DM branch.",
+    journal: "memory/journal/2026-11-02-pass-46.md",
+  },
+  {
     pass: "pass-45",
     date: "2026-11-02",
     summary:

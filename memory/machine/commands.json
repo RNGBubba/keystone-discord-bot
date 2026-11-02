@@ -3,8 +3,8 @@
   "updatedAt": "2026-11-02",
   "source": "packages/kernel ModuleRegistry catalog()",
   "roots": 20,
-  "subcommands": 139,
-  "actions": 159,
+  "subcommands": 141,
+  "actions": 161,
   "contextMenus": 4,
   "userContextMenus": 2,
   "messageContextMenus": 2,
@@ -212,6 +212,15 @@
             "role",
             "reason",
             "duration",
+            "dry_run"
+          ]
+        },
+        {
+          "name": "panic",
+          "description": "Lock down every text channel, or restore the last snapshot.",
+          "options": [
+            "state",
+            "reason",
             "dry_run"
           ]
         },
@@ -615,6 +624,14 @@
             "channel",
             "role",
             "limit"
+          ]
+        },
+        {
+          "name": "goodbye",
+          "description": "Configure the goodbye message for departing members.",
+          "options": [
+            "value",
+            "channel"
           ]
         },
         {

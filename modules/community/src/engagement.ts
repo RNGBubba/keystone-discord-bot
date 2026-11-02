@@ -82,6 +82,27 @@ export class WelcomeService {
     return { sent, roleAdded, dmSent };
   }
 
+  /**
+   * Send the goodbye message when a member leaves. It shares the welcome
+   * placeholder rules but has no autorole or DM branch: the member is already
+   * gone, and a role grant would race Discord's own member removal.
+   */
+  async handleLeave(
+    guildId: string,
+    userId: string,
+    serverName = "this server",
+  ): Promise<{ sent: boolean }> {
+    const config = this.settings.goodbye;
+    if (!config.enabled || !config.channelId) return { sent: false };
+
+    const text = config.message
+      .replaceAll("{user}", `<@${userId}>`)
+      .replaceAll("{server}", serverName)
+      .slice(0, 1_500);
+    const result = await this.actions.sendMessage(guildId, config.channelId, { content: text });
+    return { sent: result.ok };
+  }
+
   /** Process delayed autoroles; repeated ticks cannot apply the same record twice. */
   async applyDueAutoroles(guildId: string): Promise<number> {
     if (!this.store) return 0;

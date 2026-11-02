@@ -54,7 +54,7 @@ checked. See [[Master-Plan]] for the research program.
 | Anti-raid (join burst) | ❌ | ❌ | ❌ | ❌ | ✅ | P2 | Age + avatar heuristics |
 | Quarantine role | ❌ | ❌ | ❌ | ❌ | ✅ | P2 | Reversible by design |
 | Join gate / verification | ❌ | ❔ | ❔ | ❌ | ✅ | P2 | Enforced hold writes a quarantined `members` row; `/verify start` requires it, `/verify status` reads it; timeout expiry still open |
-| Panic mode | ❌ | ❌ | ❌ | ❌ | ✅ | P2 | One command, logged |
+| Panic mode | ❌ | ❌ | ❌ | ❌ | ✅ | P2 | `/mod panic state:on/off`: snapshot, persist, restore; Administrator |
 | Heat scoring | ❌ | ❌ | ❌ | ❌ | ✅ | P2 | Decays, so no permanent trip |
 | Backup / restore | ❌ | ❔ | ❔ | ❌ | 💰 | P5 | Structure + optional messages |
 | Shared case file with mod | ❌ | ❌ | ❌ | ❌ | ❔ | P2 | **Our edge:** one record |
@@ -86,7 +86,7 @@ checked. See [[Master-Plan]] for the research program.
 
 | Feature | MEE6 | Dyno | Carl | Ticket Tool | Wick / Security | Phase | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Welcome / goodbye | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | Text welcome today; goodbye and a V2 panel are open |
+| Welcome / goodbye | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | Text welcome and goodbye ship; a V2 panel is planned |
 | Autorole | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | With join delay |
 | Reaction roles | 💰 (40) | ❌ | ✅ (250) | ❌ | ❔ | P3 | Buttons and selects too |
 | Starboard | ✅ | ✅ | ✅ | ❌ | ❌ | P3 | Per-channel thresholds |
@@ -147,7 +147,7 @@ checked. See [[Master-Plan]] for the research program.
 | Feature | MEE6 | Dyno | Carl | Ticket Tool | Wick / Security | Phase | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Web dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | P6 | Node/render first; field widgets and fleet open |
-| Real subcommand surface | ✅ | ✅ | ✅ | ✅ | ✅ | P7 | 20 roots / 139 subcommands; `/help` generated; shipped pass 26; synthetic nested-slash harness pass 27 (gateway still human); `/music` pass 32; `/setup` hub pass 34; `/appeal` hub pass 35; `/verify` hub pass 36; `/form` pass 40; `/event` pass 41; `/modmail` pass 42; pass 45 added `/mod temp-role`. The Master-Plan records 72 planned names across 14 built roots; all recorded names are registered, and the handoff's 18 / 160 still has 88 unrecorded names and no named 18th root |
+| Real subcommand surface | ✅ | ✅ | ✅ | ✅ | ✅ | P7 | 20 roots / 141 subcommands; `/help` generated; shipped pass 26; synthetic nested-slash harness pass 27 (gateway still human); `/music` pass 32; `/setup` hub pass 34; `/appeal` hub pass 35; `/verify` hub pass 36; `/form` pass 40; `/event` pass 41; `/modmail` pass 42; pass 45 added `/mod temp-role`; pass 46 added `/mod panic` and `/tools goodbye`. The Master-Plan records 72 planned names across 14 built roots; all recorded names are registered, and the handoff's 18 / 160 still has 88 unrecorded names and no named 18th root |
 | Context menus | ❔ | ❔ | ❔ | ❔ | ❔ | P7 | 4 menus (Report message, Case history, Rank card, Explain with AI) registered live on the separate 15 + 15 budget; invocation is human-only because the MCP cannot right-click. Competitor presence not verified for every row |
 | In-bot configuration | ❔ | ❔ | ❔ | ❔ | ❔ | P7 | `/config` (list, get, set, export) over every module's own schema; shipped pass 30; live-proven. Competitor in-Discord config not verified (all surveyed bots also ship a web dashboard) |
 | First-run setup hub | ❔ | ❔ | ❔ | ❔ | ❔ | P7 | `/setup status | module | verify | import | reset`; real settings/health/export seams, settings-only reset; live pass 34 |

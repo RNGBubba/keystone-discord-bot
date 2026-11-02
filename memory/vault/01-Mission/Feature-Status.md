@@ -5,7 +5,7 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**128 features** across 17 domains: **102 in repo**, **14 open**, **8 planned**. Live behaviour is marked separately; a green
+**128 features** across 17 domains: **104 in repo**, **12 open**, **8 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
@@ -14,10 +14,10 @@ box means the code and its tests exist, not that a live guild has run it.
 | --- | ---: | ---: | ---: | ---: |
 | Moderation | 13 | 12 | 1 | 0 |
 | Automod | 10 | 9 | 0 | 1 |
-| Security | 9 | 8 | 1 | 0 |
+| Security | 9 | 9 | 0 | 0 |
 | Leveling | 7 | 7 | 0 | 0 |
 | Economy | 6 | 5 | 0 | 0 |
-| Community | 12 | 10 | 2 | 0 |
+| Community | 12 | 11 | 1 | 0 |
 | Tickets | 7 | 6 | 1 | 0 |
 | Content | 7 | 6 | 0 | 0 |
 | Music | 4 | 1 | 1 | 0 |
@@ -72,7 +72,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Anti-raid (join burst) | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Quarantine role | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Join gate / verification | P2 | ✅ in repo | `apps/bot/src/moderation-buttons.test.ts`, `modules/moderation/src/security.test.ts`, `modules/moderation/src/verification.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/member-store.test.ts` · live unverified |
-| Panic mode | P7 | ◐ open | Named as open in the moderation status; P7 parity completion owns it. · `modules/moderation/src/security.test.ts` |
+| Panic mode | P7 | ✅ in repo | `modules/moderation/src/panic.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/panic.test.ts`, `apps/bot/src/moderation-actions.ts`, `apps/bot/src/moderation-actions.test.ts` · live unverified |
 | Heat scoring | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Backup / restore | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |
 | Shared case file with mod | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
@@ -104,7 +104,7 @@ box means the code and its tests exist, not that a live guild has run it.
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Welcome / goodbye | P7 | ◐ open | Welcome ships; goodbye messages are named as open in the P3 status. · `modules/community/src/extras.test.ts` |
+| Welcome / goodbye | P7 | ✅ in repo | `modules/community/src/community.test.ts`, `modules/community/src/commands.test.ts`, `apps/bot/src/community-events.test.ts` · live unverified |
 | Autorole | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Reaction roles | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Starboard | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |

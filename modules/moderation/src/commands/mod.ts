@@ -10,15 +10,18 @@ import {
   type ModerationActionResult,
   type ModerationCase,
   type ModerationPort,
+  type PanicStore,
 } from "@keystone/kernel";
 import { caseEmbed, caseListEmbed } from "../format";
 import { appealButton } from "../cases";
+import { PanicService } from "../panic";
 import { TemporaryActionService } from "../temporary";
 import { moderationSettingsSchema, type ModerationSettings } from "../settings";
 
 const ACTIONS = [
   "ban",
   "temp-role",
+  "panic",
   "kick",
   "timeout",
   "warn",
@@ -50,6 +53,17 @@ const OPTIONS = {
   limit: { type: "integer", name: "limit", description: "Purge count, 1-100 (default 10)" },
   channel: { type: "channel", name: "channel", description: "Channel for purge, lock or slowmode" },
   role: { type: "role", name: "role", description: "Role for a temporary role grant" },
+  state: {
+    type: "string",
+    name: "state",
+    description: "Panic mode switch",
+    required: true,
+    choices: [
+      { name: "status", value: "status" },
+      { name: "on", value: "on" },
+      { name: "off", value: "off" },
+    ],
+  },
   dry_run: { type: "boolean", name: "dry_run", description: "Preview only; never overrides a safe default" },
 } satisfies Record<string, CommandOption>;
 
@@ -74,6 +88,12 @@ function requireModeration(ctx: CommandContext): ModerationPort {
     throw new UserError("Moderation is not configured. Run /setup to check the database.");
   }
   return ctx.moderation;
+}
+
+function requirePanic(ctx: CommandContext): PanicStore {
+  const panic = requireModeration(ctx).panic;
+  if (!panic) throw new UserError("Panic storage is not configured. Run /setup to check the database.");
+  return panic;
 }
 
 function requireTarget(ctx: CommandContext): string {
@@ -178,6 +198,7 @@ export const mod = defineCommand({
   subcommands: [
     { name: "ban", description: "Ban a member; add duration for a temporary ban.", options: opts("user", "reason", "duration", "dry_run") },
     { name: "temp-role", description: "Grant a role for a number of minutes, then remove it.", options: opts("user", "role", "reason", "duration", "dry_run") },
+    { name: "panic", description: "Lock down every text channel, or restore the last snapshot.", options: opts("state", "reason", "dry_run") },
     { name: "kick", description: "Kick a member with a case and reason.", options: opts("user", "reason", "dry_run") },
     { name: "timeout", description: "Time out a member for a number of minutes.", options: opts("user", "reason", "duration", "dry_run") },
     { name: "warn", description: "Record a warning on a member's case history.", options: opts("user", "reason") },
@@ -205,6 +226,31 @@ export const mod = defineCommand({
     // rank, so this subcommand also requires ManageRoles from the caller.
     if (action === "temp-role" && !ctx.interaction.permissions.includes("ManageRoles")) {
       throw new UserError("Temporary roles require the ManageRoles permission.");
+    }
+
+    if (action === "panic") {
+      const switchValue = optionText(ctx, "state");
+      if (!switchValue || !["status", "on", "off"].includes(switchValue)) {
+        throw new UserError("Panic mode needs `state`: status, on or off.");
+      }
+      if (switchValue === "status") {
+        const current = await new PanicService(
+          requirePanic(ctx),
+          ports.actions,
+          settings,
+          ctx.now,
+        ).status(guildId);
+        await ctx.interaction.reply({
+          content: current
+            ? `Panic mode is **active** — started by <@${current.startedBy}> <t:${Math.floor(new Date(current.startedAt).getTime() / 1000)}:R>, ${current.channels.length} channel(s) locked.`
+            : "Panic mode is **off**.",
+          ephemeral: true,
+        });
+        return;
+      }
+      if (!ctx.interaction.permissions.includes("Administrator")) {
+        throw new UserError("Panic mode requires the Administrator permission.");
+      }
     }
 
     // Read-only paths first: they cannot create a case by accident.
@@ -298,6 +344,54 @@ export const mod = defineCommand({
       const preview = describeAction(ctx, action);
       await ctx.interaction.reply({
         content: `Dry run — ${preview}. No case or action was created. Set \`dryRun: false\` in moderation settings (or pass \`dry_run: false\`) to enforce.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (action === "panic") {
+      const switchValue = optionText(ctx, "state");
+      if (switchValue !== "on" && switchValue !== "off") {
+        throw new UserError("Panic mode needs `state`: on or off.");
+      }
+      const reason = requireReason(ctx);
+      const service = new PanicService(requirePanic(ctx), ports.actions, settings, ctx.now);
+      if (switchValue === "on") {
+        const result = await service.start(guildId, ctx.userId, reason);
+        if (result.status === "already-active") {
+          await ctx.interaction.reply({
+            content: "Panic mode is already active. Use `state:off` to restore the snapshot.",
+            ephemeral: true,
+          });
+          return;
+        }
+        if (result.status === "failed") {
+          await ctx.interaction.reply({
+            content: `Panic mode could not start: ${result.detail}`,
+            ephemeral: true,
+          });
+          return;
+        }
+        await ctx.interaction.reply({
+          content:
+            result.status === "partial"
+              ? `Panic mode partially enabled: ${result.locked} channel(s) locked. ${result.detail}`
+              : `Panic mode enabled: ${result.locked} channel(s) locked.`,
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const result = await service.end(guildId, reason);
+      if (result.status === "not-active") {
+        await ctx.interaction.reply({ content: "Panic mode is already off.", ephemeral: true });
+        return;
+      }
+      await ctx.interaction.reply({
+        content:
+          result.status === "partial"
+            ? `Panic mode partially disabled: ${result.restored} restored, ${result.failed} failed. Run \`state:off\` again to retry. ${result.detail}`
+            : `Panic mode disabled: ${result.restored} channel(s) restored.`,
         ephemeral: true,
       });
       return;
@@ -423,6 +517,10 @@ function describeAction(ctx: CommandContext, action: ModAction): string {
     return `would grant ${optionText(ctx, "role") ?? "a role"} to ${target} for ${optionInteger(ctx, "duration") ?? 10} minutes`;
   if (action === "ban" && optionInteger(ctx, "duration") !== undefined)
     return `would temporarily ban ${target} for ${optionInteger(ctx, "duration")} minutes`;
+  if (action === "panic")
+    return optionText(ctx, "state") === "on"
+      ? "would deny SendMessages for @everyone in every text channel"
+      : "would restore every channel in the panic snapshot";
   return `would ${action} ${target}`;
 }
 

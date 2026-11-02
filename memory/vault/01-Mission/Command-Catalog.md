@@ -5,7 +5,7 @@
 > Generated from the live `ModuleRegistry`. This is the list Discord receives.
 > Run `pnpm commands:catalog` after changing a command definition.
 
-**20 roots · 139 subcommands · 159 total actions · 4 context menus · 20/100 global roots used.**
+**20 roots · 141 subcommands · 161 total actions · 4 context menus · 20/100 global roots used.**
 
 A root is one of Discord's 100 global chat-input commands. Subcommands live
 inside that root and do not spend another slot. Type `/` in Discord, choose a
@@ -20,12 +20,12 @@ and appear under right-click → Apps.
 | `/setup` | `setup` | 5 |
 | `/config` | `setup` | 4 |
 | `/export` | `setup` | 6 |
-| `/mod` | `moderation` | 15 |
+| `/mod` | `moderation` | 16 |
 | `/appeal` | `moderation` | 2 |
 | `/verify` | `moderation` | 2 |
 | `/rank` | `community` | 12 |
 | `/ticket` | `community` | 8 |
-| `/tools` | `community` | 24 |
+| `/tools` | `community` | 25 |
 | `/ai` | `ai` | 11 |
 | `/invites` | `invites` | 3 |
 | `/logging` | `logging` | 7 |
@@ -103,6 +103,7 @@ Moderate members, inspect cases and review the queue.
 | --- | --- | --- |
 | `/mod ban` | Ban a member; add duration for a temporary ban. | `user`, `reason`, `duration`, `dry_run` |
 | `/mod temp-role` | Grant a role for a number of minutes, then remove it. | `user`, `role`, `reason`, `duration`, `dry_run` |
+| `/mod panic` | Lock down every text channel, or restore the last snapshot. | `state`, `reason`, `dry_run` |
 | `/mod kick` | Kick a member with a case and reason. | `user`, `reason`, `dry_run` |
 | `/mod timeout` | Time out a member for a number of minutes. | `user`, `reason`, `duration`, `dry_run` |
 | `/mod warn` | Record a warning on a member's case history. | `user`, `reason` |
@@ -186,6 +187,7 @@ Community utilities: birthdays, suggestions, content, roles, giveaways, feeds an
 | `/tools feed` | Subscribe a channel to an RSS feed. | `url`, `channel` |
 | `/tools stat` | Create a member, online or booster stat channel. | `channel`, `value` |
 | `/tools welcome` | Configure the welcome message and autorole. | `value`, `channel`, `role`, `limit` |
+| `/tools goodbye` | Configure the goodbye message for departing members. | `value`, `channel` |
 | `/tools roles` | Post a reaction-role or select-role panel. | `channel`, `value`, `role`, `name`, `limit` |
 | `/tools starboard` | Configure the starboard channel and threshold. | `channel`, `limit` |
 | `/tools starboard-override` | Set a per-channel starboard threshold or turn it off. | `channel`, `target`, `value`, `limit` |

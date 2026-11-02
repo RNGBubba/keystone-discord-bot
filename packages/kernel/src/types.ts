@@ -482,6 +482,44 @@ export interface ModerationActionResult {
   readonly detail?: string;
 }
 
+/**
+ * One channel's @everyone SendMessages state before panic mode changed it.
+ *
+ * Panic only touches that one flag, so the snapshot records only that flag.
+ * `existed` distinguishes "neutral" from "no overwrite at all"; restoring an
+ * absent overwrite deletes it instead of writing an empty one.
+ */
+export interface ChannelLock {
+  readonly channelId: string;
+  readonly existed: boolean;
+  readonly previous: "allow" | "deny" | "neutral";
+}
+
+export interface LockdownResult extends ModerationActionResult {
+  /** Channels actually changed, even when another channel failed. */
+  readonly locks?: readonly ChannelLock[];
+}
+
+export interface RestoreLockdownResult extends ModerationActionResult {
+  readonly restored?: readonly string[];
+  readonly failed?: readonly string[];
+}
+
+/** One durable panic snapshot per guild; absent means panic mode is off. */
+export interface PanicState {
+  readonly active: true;
+  readonly startedAt: string;
+  readonly startedBy: string;
+  readonly reason: string;
+  readonly channels: readonly ChannelLock[];
+}
+
+export interface PanicStore {
+  get(guildId: string): Promise<PanicState | undefined>;
+  save(guildId: string, state: PanicState): Promise<void>;
+  clear(guildId: string): Promise<void>;
+}
+
 export interface ModerationNotice {
   readonly embeds: EmbedPayload[];
   readonly components?: ActionRow[];
@@ -529,6 +567,14 @@ export interface ModerationActions {
     roleId: string,
     reason: string,
   ): Promise<ModerationActionResult>;
+  /** Deny SendMessages for @everyone in every text channel and return a snapshot. */
+  lockdown(guildId: string, reason: string): Promise<LockdownResult>;
+  /** Restore exactly the overwrites captured by `lockdown`. */
+  restoreLockdown(
+    guildId: string,
+    locks: readonly ChannelLock[],
+    reason: string,
+  ): Promise<RestoreLockdownResult>;
   notify(guildId: string, channelId: string | null | undefined, notice: ModerationNotice): Promise<void>;
   /**
    * DM one member, e.g. the join-gate verification button. `ok: false` carries
@@ -541,6 +587,8 @@ export interface ModerationPort {
   readonly cases: CaseServicePort;
   readonly actions: ModerationActions;
   readonly members: MemberStore;
+  /** Present when the composition root wired the panic snapshot store. */
+  readonly panic?: PanicStore;
 }
 
 /** The case operations commands, security rules and appeals share. */

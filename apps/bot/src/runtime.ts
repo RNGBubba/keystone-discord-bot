@@ -33,6 +33,7 @@ import {
   type MemberStore,
   type CommunityStore,
   type InviteStore,
+  type PanicStore,
 } from "@keystone/kernel";
 import type { Env } from "@keystone/config";
 import {
@@ -51,6 +52,7 @@ import {
   createFormStore,
   createEventStore,
   createModmailStore,
+  createPanicStore,
   createSettingsRepository,
   probeDatabase,
   type PostgresHandle,
@@ -59,6 +61,7 @@ import {
   CaseService,
   InMemoryCaseStore,
   InMemoryMemberStore,
+  InMemoryPanicStore,
   SecurityCoordinator,
   SecurityEngine,
 } from "@keystone/module-moderation";
@@ -211,7 +214,15 @@ export async function createRuntime(
   const memberStore: MemberStore = database
     ? createMemberStore(database)
     : new InMemoryMemberStore();
-  const moderation: ModerationPort = { cases, actions: moderationActions, members: memberStore };
+  const panicStore: PanicStore = database
+    ? createPanicStore(database)
+    : new InMemoryPanicStore();
+  const moderation: ModerationPort = {
+    cases,
+    actions: moderationActions,
+    members: memberStore,
+    panic: panicStore,
+  };
   const communityStore: CommunityStore = database
     ? createCommunityStore(database)
     : new InMemoryCommunityStore();

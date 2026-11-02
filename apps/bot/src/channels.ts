@@ -41,6 +41,22 @@ export function cachedChannels(guild: {
   return [...guild.channels.cache.values()];
 }
 
+/**
+ * Fetch the channels the bot can act on, without trusting the cache.
+ *
+ * A bulk fetch is the only sensible way to enumerate for panic mode, but an
+ * obfuscated channel is data the bot cannot safely edit. Skipping it here keeps
+ * the placeholder name and missing access out of every caller.
+ */
+export async function fetchedChannels<T extends ChannelLike>(guild: {
+  readonly channels: { fetch(): Promise<ReadonlyMap<string, T | null>> };
+}): Promise<T[]> {
+  const channels = await guild.channels.fetch();
+  return [...channels.values()].filter(
+    (channel): channel is T => channel !== null && !isObfuscated(channel),
+  );
+}
+
 export type ChannelResolution<T extends ChannelLike> =
   | { status: "ok"; channel: T }
   | { status: "hidden"; reason: string }

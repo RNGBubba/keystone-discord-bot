@@ -40,6 +40,8 @@ function actions(): { calls: string[]; port: ModerationActions } {
       unban: ok,
       addRole: ok,
       removeRole: ok,
+      lockdown: ok,
+      restoreLockdown: ok,
       kick: ok,
       timeout: ok,
       purge: ok,

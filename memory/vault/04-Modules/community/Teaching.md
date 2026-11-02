@@ -127,6 +127,19 @@ the recorded owner and an empty room are both required.
 **Inject the clock.** Birthdays and seasons take `now` as a constructor function.
 Tests move the clock instead of sleeping, and a duplicate tick is provably inert.
 
+## Goodbye is welcome with the second half removed
+
+Join and leave look symmetrical, so the first instinct is one method with an
+`if (left)` branch. The branches are not equivalent: a departing member cannot
+receive a DM, and granting them a role races the gateway's own member removal.
+Only two things survive: the placeholder substitution and one channel send.
+
+`handleLeave` therefore uses the same settings parser, the same `{user}` and
+`{server}` replacements and the same 1,500-character cap, but it has no role or
+DM code to disable. The adapter subscribes to `GuildMemberRemove` beside
+`GuildMemberAdd`; the service does the work. If goodbye later grows a V2 panel,
+that should be the same builder welcome uses, not a second presentation path.
+
 ## A “card” without an image
 
 The plan called this menu **Rank card**, because that is what MEE6 ships. A real

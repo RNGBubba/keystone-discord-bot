@@ -38,9 +38,9 @@ reminder bookkeeping and a checksummed JSON export. `/modmail setup | open |
 reply | close | transcript | stats` is the twelfth and last plan root: private
 owner-or-staff threads, a first-staff-reply claim, side-aware unread counters and
 a transcript archived once by a conditional update. The command ledger is
-**20/100 roots** with **139 real subcommands**, **159 actions** and **4 context
+**20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**457 tests across 68 files** without a Discord token, database or network.
+**471 tests across 71 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -63,6 +63,15 @@ reports `database: postgres`. That run also found and fixed a real migrator
 defect: postgres.js rejects the raw `BEGIN` the runner used. See
 [the live window](memory/vault/06-Operations/Live-Window.md) and
 [pass 44](memory/journal/2026-11-02-pass-44.md).
+Pass 46 completed the lifecycle block: `/mod panic state:status|on|off` snapshots
+and persists every changed `@everyone` overwrite before replying, restores only
+those channels, and keeps failed restores for a retry; it requires
+`Administrator` and has no timer. `/tools goodbye` writes the same community
+settings, and `WelcomeService.handleLeave` sends the configured text with no
+role or DM branch. The live probe is 13/13, adding the panic snapshot's
+Postgres round-trip; the Discord lockdown and `GuildMemberRemove` calls are
+adapter-tested, not gateway-proven. See
+[pass 46](memory/journal/2026-11-02-pass-46.md).
 Pass 45 added the first timer slice: `/mod ban` accepts a duration,
 `/mod temp-role` is a real subcommand, and both write `expires_at` on a case and
 enqueue one delayed `moderation.expire` job. The case is the durable record; an
@@ -542,7 +551,7 @@ See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
 | P8 Music playback | **Open** | `play`, `skip` and `stop` refuse with the exact missing pieces (no voice/Lavalink client, no `LAVALINK_URL`); the refusal is live-proven, streaming is not shipped |
 | P7 Temporary moderation | Done in repo | `/mod ban duration:<minutes>` and `/mod temp-role` write `expires_at`; one delayed `moderation.expire` job, an atomic claim, a failed-release retry and startup recovery. Live SQL/service check; Discord action not live |
 | P7 Scheduled delivery | Done in repo | `/tools reminder` and `/tools schedule` enqueue `content.deliver`; an atomic claim lets exactly one of the timer and the sweep send, and a failed send releases it. Live SQL/service check; Discord delivery not live |
-| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail, temporary moderation and the music queue shipped; panic mode, goodbye, real playback and UI/i18n open |
+| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail, temporary moderation, panic mode and goodbye shipped; real playback and UI/i18n open |
 
 Live evidence (2026-11-01): `AI Team#5758` connected and Discord reported 20
 global roots (including `/analytics`, `/config`, `/event`,
@@ -652,7 +661,7 @@ real bridge. A marked link message created case #1; `!rank daily` created one
 100-coin ledger row; `!export guild` uploaded a **12.8 KB** bundle whose reply
 reported **49 settings · 1 case · 1 case event · 1 ledger row · 1 record**; the
 file was downloaded from Discord and parsed with the same verifier, which
-confirmed checksum `5cde59ae…` and those counts. `!export user user=1493685079468146808`
+confirmed checksum `5cde59ae…` and those counts. `!export user user=1493685079471147108`
 uploaded a 2 KB member file. A stale
 `logging.channelId` made `!export drift` report **1 missing**; restoring the real
 channel made it **0 missing**. A wrong-id `!export delete` anda memory-mode `!export rollback` were refused with named reasons. `!export import` was not run

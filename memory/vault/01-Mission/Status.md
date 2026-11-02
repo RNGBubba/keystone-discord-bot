@@ -2,6 +2,21 @@
 
 ## Now
 
+**Pass 46 finished the P7 lifecycle block** (2026-11-02): panic mode and
+goodbye messages. `/mod panic state:status|on|off` is one Administrator-only
+switch. `on` snapshots every text channel's `@everyone` SendMessages overwrite
+before denying it, persists the snapshot before replying, and `off` restores
+exactly those channels; a failed restore keeps only the failures, so a second
+`off` retries them instead of guessing. `/tools goodbye` writes the existing
+community settings and `WelcomeService.handleLeave` sends the same placeholder
+text as welcome to one channel, with no role or DM branch because the member is
+already gone. There is no second scheduler: neither feature is time-bounded.
+`pnpm probe:live` is **13/13**, adding a panic snapshot that is written, read
+back and cleared on Postgres. The Discord lockdown calls and the member-leave
+event are covered by adapter and command tests, not a gateway, so both rows
+stay **live unverified for Discord**. Tests are **471 / 71 files**. See [pass
+46](../../journal/2026-11-02-pass-46.md).
+
 **Pass 45 added the first P7 timer slice** (2026-11-02): temporary moderation
 and scheduled delivery now share one delayed queue. `/mod ban` accepts a
 `duration`, `/mod temp-role` is a real subcommand, and both write `expires_at`

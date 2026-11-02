@@ -63,6 +63,14 @@ class RecordingActions implements ModerationActions {
   removeRole(): Promise<ModerationActionResult> {
     return Promise.resolve({ ok: true });
   }
+
+  lockdown() {
+    return Promise.resolve({ ok: true, locks: [] });
+  }
+
+  restoreLockdown() {
+    return Promise.resolve({ ok: true, restored: [], failed: [] });
+  }
   async notify(): Promise<void> {
     /* delivery is asserted by the module service tests */
   }

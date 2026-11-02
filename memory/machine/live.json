@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-02",
   "date": "2026-11-02",
-  "generatedAt": "2026-11-02T21:52:37.073Z",
+  "generatedAt": "2026-11-02T22:28:36.489Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -39,7 +39,7 @@
     {
       "id": "redis-shared-cooldown",
       "status": "pass",
-      "detail": "two clients: first allowed, second refused with 1999ms remaining",
+      "detail": "two clients: first allowed, second refused with 1998ms remaining",
       "features": []
     },
     {
@@ -51,13 +51,19 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1093ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1091ms and wrote a completed receipt",
       "features": []
     },
     {
       "id": "temporary-moderation-expiry",
       "status": "pass",
       "detail": "a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event",
+      "features": []
+    },
+    {
+      "id": "panic-snapshot-persistence",
+      "status": "pass",
+      "detail": "a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only",
       "features": []
     },
     {
@@ -77,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum c8396b784971… matched after import f59bafd6",
+      "detail": "bundle checksum 6b6b3d9106a8… matched after import ae345b7b",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
