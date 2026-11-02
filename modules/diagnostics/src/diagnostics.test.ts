@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ModuleRegistry, auditBudget } from "@keystone/kernel";
 import { FakeInteraction, createTestContext } from "@keystone/testing";
+import { CHANGELOG } from "./changelog";
 import { about } from "./commands/about";
 import { help } from "./commands/help";
 import { ping } from "./commands/ping";
@@ -90,6 +91,17 @@ describe("/help", () => {
     const interaction = new FakeInteraction({ commandName: "help", subcommand: "commands" });
     const ctx = createTestContext({ interaction, moduleId: "diagnostics" });
     await expect(help.execute(ctx)).rejects.toThrow(/catalog is not wired/i);
+  });
+
+  it("reports the newest changelog entry instead of a hard-coded pass", async () => {
+    const interaction = new FakeInteraction({ commandName: "help", subcommand: "changelog" });
+    const ctx = createTestContext({ interaction, moduleId: "diagnostics" });
+
+    await help.execute(ctx);
+
+    const embed = interaction.lastReply?.embeds?.[0];
+    expect(embed?.description).toContain(CHANGELOG[0]?.pass);
+    expect(embed?.footer?.text).toBe(CHANGELOG[0]?.journal);
   });
 });
 

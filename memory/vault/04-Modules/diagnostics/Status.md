@@ -13,6 +13,9 @@ P0 complete; `/help` added in pass 26.
 - Since the context menus landed (pass 33), `/help` filters them out of the
   text catalog — they are not slash roots — and adds one sentence pointing at
   right-click → Apps. The generated catalog keeps a separate menu table.
+- Pass 43 made `changelog` read `../changelog.ts` instead of a hard-coded pass
+  26. `audit:claims` fails when the first entry is not the latest pass in
+  `memory/machine/passes.json`, so the command cannot silently go stale again.
 - Eight tests, no token required.
 
 ## Verified
@@ -24,8 +27,9 @@ pnpm budget            # 3/100 roots for this module, status OK
 
 ## Known limitations
 
-- Settings are in memory, so they reset on restart. This is P0 by design; P1
-  swaps the repository, not the module.
+- Settings flow through `ctx.settings`, so the deployment's repository decides
+  where they live. Postgres is used when `DATABASE_URL` is set; the process-local
+  repository is only the P0/P1 fallback and resets on restart.
 - `/ping` reports process uptime, not gateway latency. Gateway ping needs a
   websocket handle the kernel deliberately does not expose yet.
 - `detailed` is declared but unused. It exists to prove that adding a setting is

@@ -40,7 +40,7 @@ The newest journal entry is the best short history of the current work. Read its
   must not import discord.js, Drizzle, BullMQ, Redis or a module. Discord
   interactions and side effects belong in `apps/bot` adapters or a port
   implementation.
-- **The command budget is a gate.** Twelve global roots are used; the limit is
+- **The command budget is a gate.** 20 global roots are used; the limit is
   100. Run `pnpm budget` before adding a root. Prefer a real subcommand under an
   existing root; a subcommand costs no global slot.
 - **Tests are token-free.** No test may require a live guild, a database server,
@@ -67,7 +67,7 @@ packages/queue        BullMQ + in-process driver
 packages/telemetry    OTLP wrapper, off by default
 packages/config       Zod-validated environment
 packages/testing      fixtures for module authors
-modules/              diagnostics, setup, moderation, community, ai, invites, logging, analytics, music
+modules/              diagnostics, setup, moderation, community, ai, invites, logging, analytics, music, forms, events, modmail
 memory/machine/       machine truth
 memory/vault/         Obsidian vault (human half)
 memory/journal/       one entry per pass
@@ -84,7 +84,8 @@ below. There is no central command switch to edit.
 pnpm typecheck          # tsc --noEmit, no secrets
 pnpm test               # the full token-free suite
 pnpm budget             # command-root ledger; must stay below 100
-pnpm check              # the full gate: typecheck, tests, budget, audits, memory
+pnpm audit:claims       # documented counts, paths and pointers vs the code
+pnpm check              # the full gate: typecheck, tests, budget, claims, audits, memory
 pnpm memory:render      # regenerate vault pages from machine truth
 pnpm memory:check       # validate machine files, generated pages and wikilinks
 pnpm web:start           # dashboard/API at http://localhost:3000
@@ -119,7 +120,7 @@ read-only shape check, and `pnpm commands:resync` is the deliberate first-time o
 payload-change cycle. Do not clear on every boot: a clear followed by a
 rate-limited register leaves the app with no commands.
 
-## Current state (2026-11-01)
+## Current state (2026-11-02)
 
 - P0–P5 complete in-repo. P6 auth and settings-write foundation is in repo:
   OAuth2/PKCE, opaque Postgres sessions, per-guild BigInt authz, dashboard/API
@@ -230,16 +231,20 @@ rate-limited register leaves the app with no commands.
   feeds a nested `/mod ban` payload through the real `asInteractionLike` adapter,
   registry and dispatch; it is not a gateway `InteractionCreate` and does not
   replace a human slash check.
-- The rest of P7 (expiry jobs, UI/i18n) is open;
+- The rest of P7 (expiry jobs, Components V2 UI/i18n) is open;
   analytics, in-bot config, `/export`, `/music`, forms, events, modmail, the
   `/setup`, `/appeal` and `/verify` hubs and the context menus are shipped.
+- Pass 43 is a truth pass: `pnpm audit:claims` checks documented root,
+  subcommand, action, module and test counts, module paths, the `/help
+  changelog` pointer and Components V2 claims against the code. `memory:check`
+  checks the module layout, the Status `Now` pass pointer and the lesson map.
 - P7 guild analytics is in repo as the eighth module: `/analytics overview |
   members | messages | commands | tickets | export` reads the audit ledger,
   cases, invite joins, tickets and the append-only `command_usage` table. Every
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 138 subcommands, 4 context menus, 435
+- 12 modules, 20 global command roots, 138 subcommands, 4 context menus, 436
   tests in 65 files.
 - Live: AI Team#5758 connected; 20 roots / 138 subcommands and 2 user / 2 message
   menus registered; one bot
@@ -274,12 +279,12 @@ rate-limited register leaves the app with no commands.
   a third after the window did. The web process booted in memory mode and
   answered real HTTP requests; the write path was exercised over real local HTTP
   with a fake OAuth port. Live Discord OAuth is open.
-- Environment: `.env` sets localhost Postgres/Redis, but neither service nor
-  Docker is installed here; the pass-40 TCP probe still got `ECONNREFUSED` on
-  both localhost:5432 and localhost:6379, and booting without overrides fails at
-  `REDIS_URL is set but Redis is unreachable`. The live window is memory mode
-  until those services run. Local Ollama is up; a cold first `!ai chat` timed
-  out at 30s and a warm retry succeeded.
+- Environment: `.env` sets localhost Postgres/Redis. Docker Desktop **29.9.2
+  is installed and running**; the compose Postgres/Redis containers are not
+  started, so localhost:5432 and localhost:6379 still answer `ECONNREFUSED` and
+  the pass-43 live window remains memory mode. `docker compose up -d postgres
+  redis` opens the SQL window; pass 44 proves it. Local Ollama is up; a cold
+  first `!ai chat` timed out at 30s and a warm retry succeeded.
 - Open: human slash run, a live member join for invite attribution and audit
   logging, a human author through the content filters, live zalgo `delete`
   mode, forms modal input and forms in the guild export bundle, live

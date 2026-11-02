@@ -175,8 +175,8 @@ P7 appeal-hub evidence (pass 35):
   in-memory read.
 - Live in `#ai-chat`: case #1 read `#1 · warn · appealed · 1 appeal`, then
   `#1 · warn · reviewed · 1 appeal` after `!mod review`; a case against the bot
-  was refused as `Case #2 is not one of your cases.`; `commands:doctor` read
-  17 roots / 115 subcommands with no drift.
+  was refused as `Case #2 is not one of your cases.`; at pass 35
+  `commands:doctor` read 17 roots / 115 subcommands with no drift.
 
 ## Proven vs still needs a live gateway
 

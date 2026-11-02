@@ -7,7 +7,8 @@ pass 09 (2026-11-01). Balances are sums over the append-only `economy_ledger`;
 transfers, purchases and gambles use the Discord interaction id as their
 idempotency key; money mutations serialize per guild; and insufficient funds,
 self-pay, bot targets, caps and a claimed daily are explicit refusals. `/rank`,
-`/ticket` and `/tools` still own the command surface; the ledger is 10/100.
+`/ticket` and `/tools` still own the command surface. At pass 09 the ledger was
+10/100; it is 20/100 now.
 
 Live verification on 2026-11-01 (pass 15): AI Team#5758 answered `!rank
 leaderboard` with the real XP-leaderboard embed and `!mod history` with the case
@@ -99,8 +100,8 @@ Feature proofs (P3 plus the P4 economy hardening):
 **Green for every P3 item named for this pass.** The seven follow-ups all exist,
 are reachable by admins through `/tools` or `/rank season`, and are tested with
 duplicate/negative/safety cases. At P3 exit the command ledger was **9/100**; P4
-adds `/ai` and the economy hardening adds no root, so it is now 10/100. No
-feature is paid.
+added `/ai` and the economy hardening added no root, so at P4 exit it was
+**10/100**. It is **20/100** now. No feature is paid.
 
 Not green and not claimed: message/gateway behaviour is now partially proven
 (the leaderboard and ticket-stats guard ran live), but selects, threads, voice,
@@ -115,8 +116,9 @@ buildable rows and leaves competitor ❔ cells untouched.
 to the economy — balance/currency, daily, transfers, shop/buy, gambling and the
 audit ledger — is reachable from `/rank` and backed by `economy_ledger`. The
 surfaces replace **MEE6**'s paid currency bundle and **Carl-bot**'s
-currency/gambling; **Dyno** has no server economy. No new root was added, the
-ledger is **10/100**, and no feature is paid.
+currency/gambling; **Dyno** has no server economy. No new root was added; when
+this section was written the ledger was **10/100**, and it is **20/100** now.
+No feature is paid.
 
 Not green and not claimed:
 

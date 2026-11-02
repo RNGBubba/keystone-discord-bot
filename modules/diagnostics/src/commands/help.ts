@@ -5,6 +5,7 @@ import {
   type CommandContext,
   type EmbedField,
 } from "@keystone/kernel";
+import { CHANGELOG, VERSION } from "../changelog";
 
 function catalog(ctx: CommandContext): readonly CommandCatalogEntry[] {
   if (ctx.catalog.length === 0) {
@@ -81,8 +82,11 @@ export const help = defineCommand({
     { name: "changelog", description: "Show the current version and the latest pass." },
   ],
   async execute(ctx: CommandContext): Promise<void> {
-    const entries = catalog(ctx);
     const selected = ctx.commandPath[0] ?? "browse";
+    // `privacy` and `changelog` describe the bot, not the registry, so they must
+    // answer even in a process where no catalog was injected.
+    const needsCatalog = selected === "browse" || selected === "commands" || selected === "search";
+    const entries = needsCatalog ? catalog(ctx) : [];
     const moduleFilter = String(ctx.interaction.options.module ?? "").toLowerCase();
     const visible = moduleFilter
       ? entries.filter((entry) => entry.moduleId === moduleFilter)
@@ -190,12 +194,13 @@ export const help = defineCommand({
           {
             title: "Keystone changelog",
             description: [
-              "**0.1.0** — command tree migration: hubs now expose real Discord subcommands.",
-              "`/help` is generated from the registry, so the catalog cannot drift from Discord.",
-              "Moderation, community, AI, tickets and invite tracking keep their existing behaviour.",
+              `**${VERSION}** · latest: ${CHANGELOG[0]?.pass ?? "unknown"}`,
+              ...CHANGELOG.slice(0, 3).map(
+                (entry) => `**${entry.pass}** (${entry.date}) — ${entry.summary}`,
+              ),
             ].join("\n"),
             color: 0x5865f2,
-            footer: { text: "memory/journal/2026-11-01-pass-26.md" },
+            footer: { text: CHANGELOG[0]?.journal ?? "memory/journal" },
           },
         ],
       });

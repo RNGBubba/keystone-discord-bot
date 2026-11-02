@@ -4,15 +4,18 @@
   "tagline": "An open-source, teach-by-default all-in-one Discord bot.",
   "mission": "vault/01-Mission/Mission.md",
   "northStar": "vault/01-Mission/North-Star.md",
-  "updatedAt": "2026-11-01",
+  "updatedAt": "2026-11-02",
   "phase": "P7",
-  "lastPass": "journal/2026-11-01-pass-42.md",
+  "lastPass": "journal/2026-11-02-pass-43.md",
+  "nextAction": "pass-44 — live substrate: start compose Postgres/Redis, migrate, and prove the SQL path",
   "metrics": {
     "commands": 20,
     "subcommands": 138,
+    "actions": 158,
+    "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 435
+    "tests": 436
   },
   "modules": [
     {

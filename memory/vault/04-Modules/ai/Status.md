@@ -6,8 +6,8 @@ P4 is complete in-repo as of passes 08–09 (2026-11-01). The AI module ships th
 provider abstraction, exact-vector server RAG, ticket deflection, mention-only
 persona chat, moderation explanations, thread summaries, hard per-guild caps and
 the off-by-default kill switch. The same phase hardened the community economy;
-AI behavior is unchanged. `/ai` is the only new root; the ledger is 10/100 and
-all five modules are registered.
+AI behavior is unchanged. `/ai` is the only new root. At pass 09 the ledger was
+10/100 and five modules were registered; it is 20/100 and 12 modules now.
 
 Live verification on 2026-11-01: the bot logged in as **AI Team#5758**, registered
 all 10 commands with Discord, and answered mentions in `#ai-chat` with

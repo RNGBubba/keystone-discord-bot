@@ -61,6 +61,10 @@ function isUrl(value) {
   }
 }
 
+function passNumber(pass) {
+  return Number((String(pass.id ?? "").match(/[0-9]+$/) || [0])[0]);
+}
+
 async function listMarkdown(dir) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -167,7 +171,6 @@ async function checkPasses() {
     }
   }
 
-  const passNumber = (pass) => Number((String(pass.id).match(/[0-9]+$/) || [0])[0]);
   const latest = [...(passes.passes ?? [])].sort((a, b) => passNumber(a) - passNumber(b)).at(-1);
   const project = JSON.parse(await readText(projectPath));
   check(
@@ -175,6 +178,23 @@ async function checkPasses() {
     !latest || project.phase === latest.phase,
     `project.phase is ${project.phase} but the latest pass is ${latest?.phase}`,
   );
+  check(
+    "project.lastPass points at the latest pass",
+    !latest || project.lastPass === latest.journal,
+    `project.lastPass is ${project.lastPass} but the latest pass journal is ${latest?.journal}`,
+  );
+
+  const statusPath = path.join(vaultDir, "01-Mission/Status.md");
+  if (existsSync(statusPath)) {
+    const status = await readText(statusPath);
+    const now = status.split("## Now")[1] ?? "";
+    const nowPass = now.match(/pass[- ](\d+)/i);
+    check(
+      "Status.md Now names the latest pass",
+      Boolean(latest && nowPass && Number(nowPass[1]) === passNumber(latest)),
+      `Status.md Now says ${nowPass?.[0] ?? "<no pass>"} but the latest pass is ${latest?.id ?? "<none>"}`,
+    );
+  }
 
   console.log(`memory: ${passes.passes?.length ?? 0} passes checked`);
 }
@@ -220,6 +240,69 @@ async function checkGenerated() {
   }
 
   console.log(`memory: ${pages.size} generated pages checked`);
+}
+
+async function checkCurriculum() {
+  const learningDir = path.join(vaultDir, "05-Learning");
+  const curriculumPath = path.join(learningDir, "Curriculum.md");
+  if (!existsSync(curriculumPath)) return;
+
+  const files = (await readdir(learningDir))
+    .filter((file) => /^\d{2}-.+\.md$/.test(file))
+    .map((file) => file.replace(/\.md$/, ""));
+  const text = await readText(curriculumPath);
+  const linked = [...text.matchAll(/\[\[(\d{2}-[a-z][a-z0-9-]*)\]\]/g)].map((match) => match[1].trim());
+
+  for (const file of files) {
+    check(
+      `Curriculum links written lesson ${file}`,
+      linked.includes(file),
+      `05-Learning/${file}.md exists but Curriculum.md does not link it`,
+    );
+  }
+  for (const link of linked) {
+    check(
+      `Curriculum lesson ${link} exists`,
+      files.includes(link),
+      `Curriculum.md links ${link} but 05-Learning/${link}.md does not exist`,
+    );
+  }
+
+  console.log(`memory: ${files.length} lesson file(s), ${linked.length} linked lesson(s) checked`);
+}
+
+async function checkLocalLinks() {
+  const files = await listMarkdown(vaultDir);
+  const rootDocs = [path.join(root, "README.md"), path.join(root, "AGENTS.md")].filter((file) => existsSync(file));
+  let count = 0;
+
+  for (const file of [...files, ...rootDocs]) {
+    const text = await readText(file);
+    for (const match of text.matchAll(/\]\(([^)]+)\)/g)) {
+      let target = match[1].trim();
+      if (
+        !target ||
+        target.startsWith("#") ||
+        target.startsWith("http:") ||
+        target.startsWith("https:") ||
+        target.startsWith("mailto:") ||
+        target.startsWith("<")
+      ) {
+        continue;
+      }
+      target = target.split("#")[0];
+      if (!target) continue;
+      count += 1;
+      const resolved = path.resolve(path.dirname(file), target);
+      check(
+        `${rel(file)} local link ${target}`,
+        existsSync(resolved),
+        `${rel(file)} has a broken local link: ${target}`,
+      );
+    }
+  }
+
+  console.log(`memory: ${count} local markdown links checked`);
 }
 
 async function checkVaultLinks() {
@@ -368,6 +451,35 @@ async function main() {
     );
   }
 
+  const agentsPath = path.join(root, "AGENTS.md");
+  if (existsSync(agentsPath)) {
+    const agents = await readText(agentsPath);
+    const layout = agents.match(/^modules\/\s+(.+)$/m);
+    const listedModules = layout ? layout[1].split(",").map((name) => name.trim()).filter(Boolean) : [];
+
+    for (const dir of codeDirs) {
+      check(
+        `AGENTS.md layout lists modules/${dir}`,
+        listedModules.includes(dir),
+        `AGENTS.md layout omits modules/${dir}`,
+      );
+    }
+    for (const name of listedModules) {
+      check(
+        `AGENTS.md layout module ${name} exists`,
+        codeDirs.includes(name),
+        `AGENTS.md layout lists modules/${name}, which does not exist`,
+      );
+    }
+
+    const stateDate = agents.match(/^## Current state \((\d{4}-\d{2}-\d{2})\)/m);
+    check(
+      "AGENTS.md current-state date matches project.updatedAt",
+      stateDate?.[1] === project.updatedAt,
+      `AGENTS.md says ${stateDate?.[1] ?? "<no date>"} but project.updatedAt is ${project.updatedAt}`,
+    );
+  }
+
   // --- ADRs ----------------------------------------------------------------
   const adrDir = path.join(memoryDir, "vault/03-Architecture/ADR");
   const adrFiles = existsSync(adrDir) ? (await readdir(adrDir)).filter((f) => f.endsWith(".md")) : [];
@@ -393,6 +505,8 @@ async function main() {
   await checkPasses();
   await checkDecisions();
   await checkGenerated();
+  await checkCurriculum();
+  await checkLocalLinks();
   await checkVaultLinks();
 
   // --- command budget consistency -----------------------------------------

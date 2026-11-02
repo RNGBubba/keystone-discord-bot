@@ -27,9 +27,10 @@
     "build": "tsup",
     "db:migrate": "tsx scripts/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --reporter=default --reporter=json --outputFile=memory/machine/test-report.json",
     "test:watch": "vitest",
     "budget": "tsx scripts/budget.ts",
+    "audit:claims": "tsx scripts/audit-claims.ts",
     "memory:render": "node memory/tools/render-memory.mjs",
     "memory:render:check": "node memory/tools/render-memory.mjs --check",
     "memory:check": "node memory/tools/memory-check.mjs",
@@ -42,7 +43,7 @@
     "commands:doctor": "tsx scripts/commands-doctor.ts",
     "benchmark:ai": "tsx scripts/benchmark-ai.ts",
     "pass:end": "node memory/tools/pass-end.mjs",
-    "check": "pnpm typecheck && pnpm test && pnpm budget && pnpm audit:intents && pnpm audit:channels && pnpm memory:check"
+    "check": "pnpm typecheck && pnpm test && pnpm budget && pnpm audit:claims && pnpm audit:intents && pnpm audit:channels && pnpm memory:check"
   },
   "dependencies": {
     "dotenv": "^16.4.0"

@@ -120,8 +120,9 @@ case that arrived through the case observer rather than the message adapter.
   observed across a full interval.
 - Delivery failure, a deleted channel and a refused setup are unit-tested; only
   successful delivery and the moderation hook were exercised live.
-- No Postgres server is installed here, so the live window is memory mode. The
-  SQL store is proven on PGlite only.
+- Docker Desktop is installed and running here, but its compose Postgres/Redis
+  containers are not started, so the live window is memory mode. The SQL store
+  is proven on PGlite only; pass 44 opens the SQL window.
 - `message_delete` records the message author as actor because Discord's gateway
   event does not name the moderator who deleted it. The audit-log API is not
   read. This is honest evidence, not a claim about who pressed delete.

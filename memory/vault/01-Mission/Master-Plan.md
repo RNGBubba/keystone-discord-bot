@@ -90,14 +90,14 @@ Every claim carries **source, date and confidence**. Unverified cells are marked
 
 | Gap | Method | Needed by | Status |
 | --- | --- | --- | --- |
-| App verification threshold | Portal test with a real app | P7 | Open |
-| Per-webhook rate limits | Probe response headers, record values | P1 | Open |
-| Components V2 text budgets | Live client experiment, one panel per shape | P1 | Open |
-| Competitor import APIs and ToS | Read each vendor's terms and API docs | P5 | Open |
-| discord.js v15 GA date | Watch the release milestone monthly | P8 | Open |
-| MEE6 / Ticket Tool pricing | Read official pricing pages directly | P7 | Open |
-| pgvector at fleet scale | Benchmark 1M vectors, measure p95 recall latency | P4 | Partial — local exact 1M×32; pgvector ANN 1M×1536 open |
-| Channel obfuscation behaviour | Test `CHANNEL_OBFUSCATED` before 2026-11-16 | P1 | Open |
+| App verification threshold | Portal test with a real app | P9 listing | Open |
+| Per-webhook rate limits | Probe response headers, record values | P6 | Open |
+| Components V2 text budgets | Live client experiment, one panel per shape | P7 | Open |
+| Competitor import APIs and ToS | Read each vendor's terms and API docs | P9 refresh | Open; P5 shipped the file importers |
+| discord.js v15 GA date | Watch the release milestone monthly | P10 | Open; no v15 exists as of 2026-11-02 |
+| MEE6 / Ticket Tool pricing | Read official pricing pages directly | P9 refresh | Open |
+| pgvector at fleet scale | Benchmark 1M vectors, measure p95 recall latency | P7/P8 gate | Partial — local exact 1M×32; pgvector ANN 1M×1536 open |
+| Channel obfuscation behaviour | Test `CHANNEL_OBFUSCATED` before 2026-11-16 | now | Open |
 
 Monthly research refresh: re-check the two or three claims the current phase
 depends on, and update the date. A claim older than two quarters is a rumour.
@@ -279,13 +279,13 @@ first because every later module writes to the same settings table.
 
 ## Quality gates
 
-- `pnpm check` in CI: typecheck, tests, command budget, memory links.
+- `pnpm check` in CI: typecheck, tests, command budget, claim audit, memory links.
 - A dry-run test for every automod rule: given the fixture, no action is taken.
 - Export → wipe → import round-trip must produce an identical config hash.
 - Permission precheck before every destructive API call.
 - 403 circuit breaker: stop on a spike long before 10,000 invalid requests/10 min.
 - Idempotency key on every job that sends a message or moves currency.
-- Component budgeter throws above 40 slots in development.
+- A Components V2 budgeter (planned; no `packages/ui` yet) throws above 40 slots in development.
 - p95 interaction ack < 1 s; handler < 250 ms excluding IO.
 - Per-guild AI cap, enforced server-side, never in the prompt.
 - No test may require a token, a live guild or the network.

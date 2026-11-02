@@ -167,12 +167,17 @@ https://github.com/RNGBubba/keystone-discord-bot
   `pnpm commands:resync` cycle.
 - **No paid dependencies:** the project uses public GitHub, Discord, local
   Postgres/Redis/Ollama and free in-process test engines only.
+- **Truth pass (pass 43):** `pnpm audit:claims` checks documented counts,
+  module paths, the `/help changelog` pointer and Components V2 claims against
+  the code; `memory:check` checks the module layout, the Status `Now` pointer
+  and the lesson map. The stale root/module/Docker notes are corrected.
 - **Slash harness (pass 27):** a nested `/mod ban` payload crosses the real
   adapter and dispatch and creates a case; this is structural, not a gateway
   `InteractionCreate`. Two live bot process trees were found double-posting and
-  stopped, leaving one bot and one reply per command. The updated `.env` points
-  at localhost Postgres/Redis, but neither service is installed here, so the live
-  window remains memory mode.
+  stopped, leaving one bot and one reply per command. The `.env` points at
+  localhost Postgres/Redis; Docker Desktop 29.9.2 is installed and running, but
+  the compose containers are not started, so the current live window is still
+  memory mode. Pass 44 opens the SQL window.
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus
   (then fetched Discord's shape to prove it); pass 34 split `/setup` into five
@@ -187,11 +192,11 @@ https://github.com/RNGBubba/keystone-discord-bot
   adapter. Pass 40 added `/form`, bringing the live ledger to 18 roots / 125
   subcommands; `!form create | edit | panel | submit | review | export` ran the
   whole flow, and the exported file parsed with the same pending → accepted
-  rows. Pass 41 added `/event`, bringing it to **20 roots / 138 subcommands**;
-  `!event create | edit | rsvp | list | remind | export` ran draft → open → 1/2
-  going → reminder → decline → going, and the exported file parsed with the same
-  RSVP row and a matching checksum. Pass 42 added `/modmail`, bringing the
-  ledger to **20 roots / 138 subcommands**; `!modmail setup | open | reply |
+  rows. Pass 41 added `/event`, bringing the ledger to **19 roots / 132
+  subcommands**; `!event create | edit | rsvp | list | remind | export` ran
+  draft → open → 1/2 going → reminder → decline → going, and the exported file
+  parsed with the same RSVP row and a matching checksum. Pass 42 added
+  `/modmail`, bringing the ledger to **20 roots / 138 subcommands**; `!modmail setup | open | reply |
   transcript | close | stats` ran an open thread through a 2-message archive, a
   refused duplicate close and a 1/0/2 queue read. Also
   qwen3:8b via Ollama answered mentions in `#ai-chat`. A dev-only `!` bridge

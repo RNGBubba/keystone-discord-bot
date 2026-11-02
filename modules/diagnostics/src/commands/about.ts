@@ -1,6 +1,5 @@
 import { defineCommand, requireGuild } from "@keystone/kernel";
-
-const VERSION = "0.1.0";
+import { VERSION } from "../changelog";
 
 export const about = defineCommand({
   name: "about",

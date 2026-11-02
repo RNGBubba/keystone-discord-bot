@@ -230,8 +230,9 @@ update, with DM/thread relay deferred and named. The ledger is now **20 roots /
 planned names across 14 built roots. Every recorded plan name is registered. The
 rest of this phase is open.
 
-- `packages/ui`: Components V2 budgeter (40 components, ~4,000 text), primitives,
-  defer-then-edit, modal Label/FileUpload/Radio/Checkbox.
+- `packages/ui` (planned; it does not exist yet): Components V2 budgeter (40
+  components, ~4,000 text), primitives, defer-then-edit, modal
+  Label/FileUpload/Radio/Checkbox.
 - New domains: role persistence; plus goodbye messages, YouTube/Twitch/RSS
   feeds, temp ban/role expiry, join-gate expiry, panic mode, case export and
   `command_usage` retention. Invites, the link, profanity and zalgo filters,

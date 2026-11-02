@@ -2,6 +2,21 @@
 
 ## Now
 
+**Pass 43 is a truth pass** (2026-11-02): no product behaviour changed except
+`/help changelog`, which now reads the pass ledger instead of hard-coding pass
+26. The pass audited the vault and machine files against the code. `AGENTS.md`
+now names 20 roots and all 12 modules; the stale Components V2 notes are marked
+planned because no `packages/ui` or V2 code exists; old ledgers in this page are
+qualified as historical instead of presented as current; and the Docker notes
+now match this machine (Docker Desktop 29.9.2 installed and running, compose
+Postgres/Redis not started, so the live window is still memory mode).
+`pnpm audit:claims` is now part of `pnpm check`: it checks documented root,
+subcommand, action, module and test counts, module paths, the `/help changelog`
+pointer and Components V2 claims. `memory:check` now also checks the module
+layout, the Status `Now` pass pointer and the Curriculum lesson map.
+
+The pass-42 modmail record below is retained as history.
+
 **P7 modmail is in repo and live-proven for its command surface** (pass 42,
 2026-11-01): `/modmail setup | open | reply | close | transcript | stats` is the
 twelfth module and the last root named by the approved plan. `modmail_threads`
@@ -201,8 +216,9 @@ rose 0 → 3 → 4 as bridge commands completed; the current invocation is recor
 after its reply. At pass 29 Discord reported **14 roots / 90 subcommands / 104
 actions**; pass 30 added `/config`, pass 31 added `/export` and pass 32 added
 `/music`, pass 35 split `/appeal` into two, pass 36 split `/verify` into two and
-pass 40 added `/form` with eight, so the current ledger is
-**18 / 125 / 143**.
+pass 40 added `/form` with eight, so at pass 40 the ledger was
+**18 / 125 / 143**; passes 41 and 42 brought the current ledger to
+**20 / 138 / 158**.
 The MCP text reader does not render embeds, so the live transcript proves the
 summary text while the embed fields and JSON export are covered by a command
 test. See [[04-Modules/analytics/Spec|Analytics spec]] and
@@ -307,18 +323,17 @@ connection — a human `InteractionCreate` remains unobserved. The pass also fou
 and stopped two live bot process trees that were double-posting replies; one
 instance now answers each command once.
 
-**Live environment check (re-probed pass 34):** `.env` still sets
-`DATABASE_URL` and `REDIS_URL` to localhost:5432/6379, but this machine has no
-Docker, no Postgres/Redis service and no listener on either port. TCP probes on
-2026-11-01 and again in pass 34 returned `ECONNREFUSED` for both
-`DATABASE_URL: localhost:5432` and `REDIS_URL: localhost:6379`. Booting without overrides
-reaches `settings: postgres` and then fails loudly with `REDIS_URL is set but
-Redis is unreachable: Reached the max retries per request limit (which is 2).`
-The live window therefore remains the explicitly logged memory mode
-(`DATABASE_URL= REDIS_URL=`), and the fallback is not retired. Local
-Ollama is up (`qwen3:8b`, `qwen3-embedding:0.6b`); the first `!ai chat` after
-boot hit the provider's 30-second cold-start timeout, and a warm retry returned
-`keystone`.
+**Live environment check (re-probed pass 43):** `.env` still sets
+`DATABASE_URL` and `REDIS_URL` to localhost:5432/6379. Docker Desktop **29.9.2
+is installed and running**; `docker ps` shows the MCP container but no
+Postgres/Redis container, and no listener is bound to 5432 or 6379. TCP probes
+still return `ECONNREFUSED` for both, and booting without overrides fails loudly
+with `REDIS_URL is set but Redis is unreachable`. The live window therefore
+remains the explicitly logged memory mode (`DATABASE_URL= REDIS_URL=`) until
+pass 44 runs `docker compose up -d postgres redis` and proves the SQL path. The
+fallback is not retired. Local Ollama is up (`qwen3:8b`,
+`qwen3-embedding:0.6b`); the first `!ai chat` after boot hit the provider's
+30-second cold-start timeout, and a warm retry returned `keystone`.
 
 **P6 authorization and settings-write foundation is in repo** (passes 17–18;
 server boundaries in pass 22, 2026-11-01): Discord OAuth2 code + PKCE, sealed
@@ -399,13 +414,13 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 435 tests / 65 files · budget 20/100 roots (138 subcommands · 158 actions · 4 context menus) · memory current
+pnpm check        exit 0 · typecheck 0 · 436 tests / 65 files · budget 20/100 roots (138 subcommands · 158 actions · 4 context menus) · claims current · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live env blocker 2026-11-01 · DATABASE_URL localhost:5432 → ECONNREFUSED (4ms) · REDIS_URL localhost:6379 → ECONNREFUSED (1ms) · Docker/service absent
+live env blocker 2026-11-02 · Docker Desktop 29.9.2 running · compose Postgres/Redis not started · localhost:5432 and localhost:6379 still ECONNREFUSED · memory mode until pass 44
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -425,7 +440,7 @@ read that file.
 | --- | --- | --- | --- |
 | 1 | The four menus exist with the right types | `context-menus.test.ts` asserts `contextMenuNames()` and type-keyed lookup; `commands:doctor` reads Discord and prints `2 user menus · 2 message menus` | Unit + **live Discord API** |
 | 2 | A menu cannot declare options or subcommands | `context-menus.test.ts` registration throws on both | Unit |
-| 3 | Menus have their own budget, not the 100 roots | `context-menus.test.ts` audits 1 root + 2 menus and 16 user menus; `pnpm budget` prints 18 roots, 4 menus | Unit + budget |
+| 3 | Menus have their own budget, not the 100 roots | `context-menus.test.ts` audits 1 root + 2 menus and 16 user menus; `pnpm budget` prints the current ledger (20 roots, 4 menus at pass 43) | Unit + budget |
 | 4 | The adapter exposes a user target and a message target | `adapt.test.ts` maps `targetId` for a user menu and `targetId`/`targetUserId`/`targetContent` for a message menu | Unit |
 | 5 | Report message opens a real case with the message id | `context.test.ts` reads the case row back (`messageId: "message-1"`, `channelId: "channel-a"`, excerpt) | In-memory store |
 | 6 | Case history reads the same rows behind `ModerateMembers` | `context.test.ts` seeds a `warn` case and reads it through the menu; the manifest declares `requirePermissions("ModerateMembers")`, and the shared dispatch tests prove permission guards run before `execute` | Unit + dispatch |
@@ -460,7 +475,7 @@ read that file.
 | 3 | Status is member-scoped | `mod.test.ts`: another member's case throws `not one of your cases`; live `case=2` against the bot returned exactly that refusal | Unit + **live bridge** |
 | 4 | No appeal event means no invented appeal | `mod.test.ts`: a member with no appeals gets `No appeal events are on record`; the embed path renders `Appeals on record: 0` for a case that was never appealed | Unit |
 | 5 | The SQL history is append-only and ordered | `packages/db/src/cases.test.ts`: `DrizzleCaseStore.listEvents` returns the appended `appealed` event | **PGlite** |
-| 6 | One root, two subcommands, budget intact | `mod.test.ts` registry shape; `pnpm budget`: 17/100 roots, 117 subcommands | Registry + budget |
+| 6 | One root, two subcommands, budget intact | `mod.test.ts` registry shape; `pnpm budget` at pass 35: 17/100 roots, 117 subcommands | Registry + budget |
 | 7 | The live counts match Discord | `commands:doctor` read **17 roots / 117 subcommands / 4 context menus** with no drift | **Live Discord REST read** |
 | 8 | The embed fields were read live | **Not performed** — the MCP text reader cannot render embeds; the plain-text summary was read back and the fields are covered by `mod.test.ts` | Not claimed |
 
@@ -475,7 +490,7 @@ read that file.
 | 5 | `status` reads persisted state, not roles | `mod.test.ts`: quarantined, verified, no-record and disabled-gate rows each render their own state and next step, with the `members table` footer | In-memory rows |
 | 6 | The SQL adapter is a real upsert | `member-store.test.ts`: one `members` row, `markQuarantined` clears a previous verification, verification clears `quarantined`, `joined_at` is preserved | **PGlite** |
 | 7 | Completion transitions only a quarantined row | `verification.test.ts`: no record, non-quarantined, verified and disabled gate are refused; a quarantined row is written only after `unquarantine` succeeds | In-memory member store + recorder |
-| 8 | One root, two subcommands, budget intact | `mod.test.ts` registry shape; `pnpm budget`: 17/100 roots, 117 subcommands | Registry + budget |
+| 8 | One root, two subcommands, budget intact | `mod.test.ts` registry shape; `pnpm budget` at pass 36: 17/100 roots, 117 subcommands | Registry + budget |
 | 9 | The live counts match Discord | `commands:doctor` read **17 roots / 117 subcommands / 4 context menus** with no drift | **Live Discord REST read** |
 | 10 | A member joined and completed verification live | **Not performed** — the MCP account is a bot; it cannot make a member join, receive the DM or click the button. The join write, completion and SQL row are test-covered. | Not claimed |
 
@@ -489,7 +504,7 @@ read that file.
 | 4 | Status is available while disabled | `music.test.ts`: disabled `status` names the enabling command; live 0/25 `playback UNAVAILABLE` reply before enabling | Unit + **live bridge** |
 | 5 | A disabled module refuses mutations without writing | `music.test.ts`: disabled `add` throws; live `add` after disabling returned the refusal | Unit + **live bridge** |
 | 6 | Queue mutations are permission-gated | `music.test.ts`: `remove`/`clear` without `ManageGuild` are blocked; live `remove` ran under the MCP member who holds `ManageGuild` | Dispatch + **live bridge** |
-| 7 | One root, eight subcommands, budget intact | `music.test.ts` registry shape; `pnpm budget`: 17/100 roots, 113 subcommands | Registry + budget |
+| 7 | One root, eight subcommands, budget intact | `music.test.ts` registry shape; `pnpm budget` at pass 32: 17/100 roots, 113 subcommands | Registry + budget |
 | 8 | The live counts match the queue | Live two adds → **2/25**, one remove → **1/25**, and the disabled add wrote nothing | **Live gateway** |
 | 9 | Audio was played | **Not performed and not claimed** — the playback adapter is unavailable by design; `play`, `skip` and `stop` refused | Not claimed |
 | 10 | The SQL queue was exercised live | **Not performed** — local Postgres still returns `ECONNREFUSED`; PGlite covers the SQL adapter | Not claimed |
@@ -507,7 +522,7 @@ read that file.
 | 7 | Drift is read-only and uses live facts | `export.test.ts` passes gateway facts; `export-port.test.ts` finds stored `404` without changing it; live 1 missing → 0 missing | Unit + **live gateway** |
 | 8 | Attachment input cannot SSRF | `export-discord.test.ts`: a non-Discord URL throws before `fetch`; only HTTPS Discord CDN hosts pass; content-length over 25 MB throws | Unit |
 | 9 | Memory mode does not pretend | Memory adapter exports live rows but throws `needs DATABASE_URL` for import/delete/rollback; live memory rollback returned that exact message | Unit + **live bridge** |
-| 10 | One root, six subcommands, budget intact | `export.test.ts` registry shape; `pnpm budget`: 16/100 roots, 100 subcommands | Registry + budget |
+| 10 | One root, six subcommands, budget intact | `export.test.ts` registry shape; `pnpm budget` at pass 31: 16/100 roots, 100 subcommands | Registry + budget |
 | 11 | The real surface runs once | Live 2026-11-01: `!export guild`, `!export user`, three `!export drift`, a refused delete and a refused rollback each produced one message; boot re-registered 16 roots | **Live gateway + Discord API** |
 | 12 | Slash `InteractionCreate` and a live SQL import/delete | **Not performed** — the bridge is message-based and Postgres is unreachable; command/PGlite tests cover them | Not claimed |
 
@@ -522,7 +537,7 @@ read that file.
 | 5 | Snowflake ids are not rounded | `config.test.ts` asserts the exact 19-digit string survives | Unit |
 | 6 | Non-admin is rejected before any write | `config.test.ts`: `blocked`, repository empty | Dispatch |
 | 7 | Unknown modules fail with the valid ids | `config.test.ts`: `Unknown module` plus `fixture`/`setup` list | Unit |
-| 8 | One root, four subcommands, budget intact | `config.test.ts` and `pnpm budget`: 15/100 roots, 94 subcommands | Registry + budget |
+| 8 | One root, four subcommands, budget intact | `config.test.ts` and `pnpm budget` at pass 30: 15/100 roots, 94 subcommands | Registry + budget |
 | 9 | The real surface runs once | Live 2026-11-01: seven `!config` bridge messages each produced exactly one reply (one was a deliberate bad-syntax check); `commands:doctor` reports 15 roots / 94 subcommands | **Live gateway + Discord API** |
 | 10 | List/export embeds were read live | **Not performed** — the MCP text reader does not render embeds; the command test covers their structure | Not claimed |
 
@@ -538,7 +553,7 @@ read that file.
 | 6 | Current state is not disguised as a window count | `AnalyticsTicketStats` and the captions; test asserts open/closed current, opened/closed window | Unit |
 | 7 | Admin-only and guild-only | `analytics.test.ts`: non-admin `blocked`, store not called; live bridge ran under the MCP member with `ManageGuild` | Dispatch + **live bridge** |
 | 8 | A disabled module refuses instead of returning zeros | `analytics.test.ts`: disabled returns `error` and no snapshot | Unit |
-| 9 | One root, no extra slot | `/analytics` with six subcommands; budget is now **15/100** after `/config` | Static registry |
+| 9 | One root, no extra slot | `/analytics` with six subcommands; the budget was **15/100** after `/config` at pass 30 | Static registry |
 | 10 | The real surface runs | Live 2026-11-01: three `/analytics` views replied once each in `#ai-chat`; `commands:doctor` now reports 15 roots / 94 subcommands | **Live gateway + Discord API** |
 | 11 | Embed fields and JSON export were read live | **Not performed** — the MCP text reader does not render embeds; command test covers the parseable export | Not claimed |
 

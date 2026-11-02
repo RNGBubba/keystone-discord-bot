@@ -65,7 +65,7 @@ checked. See [[Master-Plan]] for the research program.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | XP and levels | 💰 | 💰 | 💰 | ❌ | ❌ | P3 | Free, always |
 | Role rewards | 3 free, then 💰 | 💰 | 💰 | ❌ | ❌ | P3 | Per-level, stackable |
-| Rank card | ✅ | 💰 | 💰 | ❌ | ❌ | P3 | Components V2, 40-slot budget |
+| Rank card | ✅ | 💰 | 💰 | ❌ | ❌ | P3 | Embed today; a V2 image card is planned (no `packages/ui` yet) |
 | Leaderboard | ✅ | 💰 | 💰 | ❌ | ❌ | P3 | Paginated, cached |
 | XP multipliers | 💰 | 💰 | 💰 | ❌ | ❌ | P3 | Role/channel/event |
 | Import from MEE6 | ❌ | ❌ | ❌ | ❌ | ❌ | P5 | **Our edge** |
@@ -86,7 +86,7 @@ checked. See [[Master-Plan]] for the research program.
 
 | Feature | MEE6 | Dyno | Carl | Ticket Tool | Wick / Security | Phase | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Welcome / goodbye | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | Text or V2 panel |
+| Welcome / goodbye | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | Text welcome today; goodbye and a V2 panel are open |
 | Autorole | ✅ | ✅ | ✅ | ❌ | ❔ | P3 | With join delay |
 | Reaction roles | 💰 (40) | ❌ | ✅ (250) | ❌ | ❔ | P3 | Buttons and selects too |
 | Starboard | ✅ | ✅ | ✅ | ❌ | ❌ | P3 | Per-channel thresholds |
@@ -102,7 +102,7 @@ checked. See [[Master-Plan]] for the research program.
 
 | Feature | MEE6 | Dyno | Carl | Ticket Tool | Wick / Security | Phase | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Panels | ❌ | ✅ (1) | ❔ | ✅ | ❌ | P3 | Components V2 |
+| Panels | ❌ | ✅ (1) | ❔ | ✅ | ❌ | P3 | Thread/embed panels today; V2 layout is planned (no `packages/ui` yet) |
 | Thread-based tickets | ❌ | 💰 | ❔ | ✅ | ❌ | P3 | Avoids the 50-channel cap |
 | Claiming | ❌ | 💰 | ❔ | ✅ | ❌ | P3 | With SLA clock |
 | Transcripts | ❌ | 💰 | ❔ | ✅ (30 d free) | ❌ | P3 | Never auto-expire |

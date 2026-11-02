@@ -116,9 +116,10 @@ Components V2 allows **40 components per message, total**, and the flag is
 irreversible once set. A panel with a container, three text displays, two
 separators and four action rows has already spent ten slots.
 
-`packages/ui` (P1) will expose `layout()` that counts slots as it builds and
-throws in development when a panel exceeds 40. Until then, the rule is: a panel
-is one container, at most four action rows, and no nested sections for decoration.
+A `packages/ui` package (planned for P7; it does not exist yet) will expose
+`layout()` that counts slots as it builds and throws in development when a panel
+exceeds 40. Until then, the rule is: a panel is one container, at most four
+action rows, and no nested sections for decoration.
 
 ## Anti-patterns with receipts
 

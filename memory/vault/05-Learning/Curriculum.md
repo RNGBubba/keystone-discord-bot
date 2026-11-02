@@ -10,6 +10,10 @@ more than one file, or you have and it became unmaintainable.
 
 ## Lessons
 
+This is the original 8-lesson map from P3; P9 expands it to 14. A linked lesson
+is written; an unlinked row is planned. `pnpm memory:check` keeps the links and
+the lesson files in step, so a row cannot claim a lesson that does not exist.
+
 | # | Lesson | Code | You will learn |
 | --- | --- | --- | --- |
 | 1 | [[01-the-module-contract]] | `modules/diagnostics`, `packages/kernel` | Why folders beat switches; how dispatch works |
@@ -17,9 +21,9 @@ more than one file, or you have and it became unmaintainable.
 | 3 | Settings that cannot corrupt | `settings.ts`, Zod schemas | Schema-first config, defaults, migration thinking |
 | 4 | Tests without a token | `packages/testing` | Structural typing, fakes, why purity pays |
 | 5 | Cases and evidence (P2) | `modules/moderation` | Event sourcing a moderation trail |
-| 6 | Components V2 panels (P3) | `packages/ui` | The 40-slot budget, defer-then-edit |
+| 6 | Components V2 panels (planned, P7) | `packages/ui` (planned) | The 40-slot budget, defer-then-edit |
 | 7 | Jobs and idempotency (P4) | `apps/worker` | At-least-once delivery, retry, backoff |
-| 8 | Sharding and the 2,500 wall (P8) | `apps/bot` | Sessions, buckets, shard 0 hot spots |
+| 8 | Sharding and the 2,500 wall (P10) | `apps/bot` | Sessions, buckets, shard 0 hot spots |
 
 ## Each lesson has the same shape
 

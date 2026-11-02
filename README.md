@@ -40,8 +40,10 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **138 real subcommands**, **158 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**435 tests across 65 files** without a Discord token, database or network.
-Live on 2026-11-01: the
+**436 tests across 65 files** without a Discord token, database or network.
+Pass 43 audited the documented counts, paths and capability claims against the
+code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
+root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
 bot logged in and Discord reports **20 roots / 138 subcommands / 2 user menus /
 2 message menus**, answered a Qwen3:8b mention in `#ai-chat`, and ran real
 moderation, community, AI, invite, logging, analytics, configuration, music,
@@ -50,9 +52,11 @@ including
 `/help`’s generated catalog. The dashboard was booted in memory mode and
 exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
-human client is still the next live check. The configured local Postgres/Redis
-endpoints are not reachable on this machine (no Docker or service), so the live
-window remains memory mode; see [pass 30](memory/journal/2026-11-01-pass-30.md).
+human client is still the next live check. Docker Desktop 29.9.2 is installed
+and running here, but the compose Postgres/Redis containers are not started, so
+the local endpoints still answer `ECONNREFUSED` and the current live window is
+memory mode; the SQL window opens with `docker compose up -d postgres redis` in
+pass 44. See [pass 43](memory/journal/2026-11-02-pass-43.md).
 
 This repo is both the product and the course: every module has a spec, tests, a
 teaching note and a status page. The docs are the source of truth, not a
@@ -484,7 +488,8 @@ Everything below is free. No feature is moved behind a paywall.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail` and the four context menus are done; the
-  rest is parity completion (role persistence), Components V2 UI and i18n.
+  rest is parity completion (role persistence), the planned Components V2 UI
+  and i18n.
 - **P8:** `/music` queue control ships disabled by default; bring-your-own
   Lavalink playback is the open piece (no bundled streamer).
 - **P9:** docs site, 14-lesson curriculum, release workflow, self-host kit.

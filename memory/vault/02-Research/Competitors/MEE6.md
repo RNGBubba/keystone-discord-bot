@@ -39,7 +39,7 @@ Music was removed in 2023 after the YouTube crackdown.
 ## What we take
 
 - The onboarding clarity: our `/setup` must be as obvious.
-- The level card as a design bar, but rendered from Components V2 with a budget.
+- The level card as a design bar; our planned card is a generated image plus a V2 panel, both inside the 40-slot budget once `packages/ui` exists.
 
 ## What we do differently
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-01",
+  "updatedAt": "2026-11-02",
   "source": "memory/vault/01-Mission/Parity-Matrix.md",
   "domains": [
     {
@@ -695,7 +695,7 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Components V2, 40-slot budget",
+          "note": "Embed today; a V2 image card is planned (no `packages/ui` yet).",
           "evidence": [
             "modules/community/src/community.test.ts"
           ],
@@ -913,7 +913,7 @@
           "phase": "P7",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Text or V2 panel",
+          "note": "Text welcome today; goodbye and a V2 panel are open.",
           "evidence": [
             "modules/community/src/extras.test.ts"
           ],
@@ -1149,7 +1149,7 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Components V2",
+          "note": "Thread/embed panels today; V2 layout is planned (no `packages/ui` yet).",
           "evidence": [
             "modules/community/src/commands.test.ts"
           ],

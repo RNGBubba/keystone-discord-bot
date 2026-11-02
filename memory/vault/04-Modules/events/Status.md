@@ -7,8 +7,9 @@ eleventh module and the first of the two roots the pass-40 inventory found
 unbuilt.
 
 - `/event create | edit | delete | list | rsvp | remind | export` is registered
-  through the shared catalog. The ledger is **20 roots / 138 subcommands / 151
-  actions / 4 context menus**.
+  through the shared catalog. At pass 41 the ledger was **19 roots / 132
+  subcommands / 151 actions / 4 context menus**; it is **20 roots / 138
+  subcommands / 158 actions / 4 context menus** now.
 - The lifecycle is draft → open → closed. `rsvp` is refused outside `open`;
   `remind` is refused on a draft or closed event; existing RSVPs stay readable.
 - `EventStore` is one port. Postgres uses `DrizzleEventStore`; local mode uses
