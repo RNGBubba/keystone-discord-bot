@@ -561,6 +561,21 @@
         "claims": "added to the gate",
         "memory": "current"
       }
+    },
+    {
+      "id": "pass-44",
+      "date": "2026-11-02",
+      "phase": "P7",
+      "summary": "Live substrate, not a feature pass. `docker compose up -d --wait postgres redis` started Postgres 16.15 and Redis; `pnpm db:migrate` applied all 13 migrations. The first live run exposed a real defect: `migrate()` sent raw `BEGIN` through postgres.js, which rejects pooled transaction control with `UNSAFE_TRANSACTION`. `SqlRunner` now requires a driver `transaction` primitive; the Postgres runner uses `client.begin`, the PGlite runner wraps BEGIN/COMMIT/ROLLBACK, and two PGlite regressions prove a failed migration leaves neither its table nor its ledger row and a successful one commits both. New `pnpm probe:live` (not in `pnpm check`, which must pass without a database) exercised nine paths and wrote `memory/machine/live.json`: 13 migrations, a settings row surviving a pool close/reopen, a Redis cooldown shared by two clients, two BullMQ enqueues producing one handler call and a completed Postgres receipt, portability dry-run/import-checksum/rollback/deletion-receipt, and `/healthz` returning `database: postgres`. Five rows flipped to live-verified with `liveEvidence` check ids (`portability.restore-and-config-hash`, `portability.dry-run-import-diff`, `portability.rollback-window`, `portability.deletion-receipt`, `security.backup-restore`); `operations.in-bot-config` now also cites the restart check. `memory:check` validates `live.json` and every `liveEvidence` reference; `memory:render` generates `06-Operations/Live-Window.md`; `audit:claims` checks the documented Docker version and live-service claims against the report. Still not live: human slash/right-click, Discord OAuth, a persistent production worker, gateway member events, music playback and analytics reads over Postgres. Tests 438 / 66 files.",
+      "journal": "journal/2026-11-02-pass-44.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "438",
+        "budget": "20/100 roots · 138 subcommands · 4 context menus",
+        "live": "9/9",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

@@ -50,6 +50,7 @@ export async function renderAll() {
   const research = await readJson("machine/research.json");
   const passes = await readJson("machine/passes.json");
   const decisions = await readJson("machine/decisions.json");
+  const live = await readJson("machine/live.json");
 
   const total = features.domains.reduce((sum, domain) => sum + domain.features.length, 0);
   const shipped = features.domains.reduce(
@@ -173,11 +174,47 @@ export async function renderAll() {
     "",
   ].join("\n");
 
+  const livePage = [
+    HEADER,
+    "",
+    "# Live window",
+    "",
+    "> Machine truth: [`live.json`](../../machine/live.json). This page is generated.",
+    "> A passing local suite does not prove a service; this page records the last",
+    "> `pnpm probe:live` run against the configured Postgres and Redis.",
+    "",
+    `Last probe: **${cell(live.date)}** (\`${cell(live.id)}\`), generated ${cell(live.generatedAt)}.`,
+    "",
+    "| Service | Result |",
+    "| --- | --- |",
+    `| Docker | ${live.docker?.running ? `server ${cell(live.docker.version)}` : "not reachable"} |`,
+    `| Postgres | ${live.services?.postgres?.reachable ? `${cell(live.services.postgres.version)} · ${live.services.postgres.migrations?.applied ?? "?"} migrations · ${live.services.postgres.migrations?.pending ?? "?"} pending` : "not reachable"} |`,
+    `| Redis | ${live.services?.redis?.reachable ? "reachable" : "not reachable"} |`,
+    "",
+    "## Checks",
+    "",
+    "| Check | Status | Evidence | Features |",
+    "| --- | --- | --- | --- |",
+    ...live.checks.map(
+      (check) =>
+        `| ${cell(check.id)} | ${cell(check.status)} | ${cell(check.detail)} | ${cell((check.features ?? []).join(", "))} |`,
+    ),
+    "",
+    "## Rules",
+    "",
+    "- This probe is not part of `pnpm check`; the gate must pass without a database.",
+    "- A feature may set `liveVerified: true` only when its row names a passing",
+    "  `liveEvidence` check from this report.",
+    "- Re-run `pnpm probe:live` after changing a SQL, Redis, queue or web path.",
+    "",
+  ].join("\n");
+
   return new Map([
     ["vault/01-Mission/Feature-Status.md", featurePage],
     ["vault/02-Research/Claims.md", claimPage],
     ["vault/99-Meta/Decision-Index.md", decisionPage],
     ["vault/05-Learning/Pass-Ledger.md", passPage],
+    ["vault/06-Operations/Live-Window.md", livePage],
   ]);
 }
 

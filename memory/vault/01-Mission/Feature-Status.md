@@ -74,7 +74,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Join gate / verification | P2 | ✅ in repo | `apps/bot/src/moderation-buttons.test.ts`, `modules/moderation/src/security.test.ts`, `modules/moderation/src/verification.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/member-store.test.ts` · live unverified |
 | Panic mode | P7 | ◐ open | Named as open in the moderation status; P7 parity completion owns it. · `modules/moderation/src/security.test.ts` |
 | Heat scoring | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
-| Backup / restore | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live unverified |
+| Backup / restore | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |
 | Shared case file with mod | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 
 ## Leveling
@@ -184,10 +184,10 @@ box means the code and its tests exist, not that a live guild has run it.
 | --- | --- | --- | --- |
 | Full export bundle | P5 | ✅ in repo | `packages/importer/src/importer.test.ts`, `packages/db/src/portability.test.ts`, `modules/setup/src/export.test.ts`, `apps/bot/src/export-port.test.ts` · live verified |
 | In-Discord export surface | P7 | ✅ in repo | `modules/setup/src/export.test.ts`, `apps/bot/src/export-port.test.ts`, `apps/bot/src/export-discord.test.ts`, `packages/kernel/src/export.ts` · live verified |
-| Restore and config hash | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live unverified |
-| Dry-run import diff | P5 | ✅ in repo | `packages/importer/src/importer.test.ts` · live unverified |
-| Rollback window | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live unverified |
-| Deletion receipt | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live unverified |
+| Restore and config hash | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |
+| Dry-run import diff | P5 | ✅ in repo | `packages/importer/src/importer.test.ts` · live verified |
+| Rollback window | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |
+| Deletion receipt | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |
 | MEE6 level import | P5 | ✅ in repo | `packages/importer/src/importer.test.ts` · live unverified |
 | Generic JSON/CSV import | P5 | ✅ in repo | `packages/importer/src/importer.test.ts` · live unverified |
 | ProBot JSON transcript import | P5 | ✅ in repo | `packages/importer/src/importer.test.ts` · live unverified |

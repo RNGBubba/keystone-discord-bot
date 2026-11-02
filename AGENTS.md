@@ -244,8 +244,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 138 subcommands, 4 context menus, 436
-  tests in 65 files.
+- 12 modules, 20 global command roots, 138 subcommands, 4 context menus, 438
+  tests in 66 files.
 - Live: AI Team#5758 connected; 20 roots / 138 subcommands and 2 user / 2 message
   menus registered; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in
@@ -279,17 +279,18 @@ rate-limited register leaves the app with no commands.
   a third after the window did. The web process booted in memory mode and
   answered real HTTP requests; the write path was exercised over real local HTTP
   with a fake OAuth port. Live Discord OAuth is open.
-- Environment: `.env` sets localhost Postgres/Redis. Docker Desktop **29.9.2
-  is installed and running**; the compose Postgres/Redis containers are not
-  started, so localhost:5432 and localhost:6379 still answer `ECONNREFUSED` and
-  the pass-43 live window remains memory mode. `docker compose up -d postgres
-  redis` opens the SQL window; pass 44 proves it. Local Ollama is up; a cold
-  first `!ai chat` timed out at 30s and a warm retry succeeded.
+- Environment: Docker Desktop **29.9.2** runs the repo's compose Postgres
+  **16.15** and Redis; all 13 migrations are applied, and `pnpm probe:live`
+  passed 9/9 SQL/Redis/queue/web checks on 2026-11-02. `.env` points at
+  localhost. The machine evidence is `memory/machine/live.json`; run
+  `pnpm probe:live` after touching a SQL, Redis, queue or web path. Memory mode
+  is still a supported fallback, not the configured one. Local Ollama is up; a
+  cold first `!ai chat` timed out at 30s and a warm retry succeeded.
 - Open: human slash run, a live member join for invite attribution and audit
   logging, a human author through the content filters, live zalgo `delete`
   mode, forms modal input and forms in the guild export bundle, live
-  Postgres/role/select/voice/scheduler paths, pgvector ANN benchmark, MEE6 live
-  fetch, P6 field widgets/fleet/tokens and the rest of P7.
+  role/select/voice/scheduler paths, pgvector ANN benchmark, MEE6 live fetch, P6
+  field widgets/fleet/tokens and the rest of P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

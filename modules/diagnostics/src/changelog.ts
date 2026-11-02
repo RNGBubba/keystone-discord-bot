@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-44",
+    date: "2026-11-02",
+    summary:
+      "Live substrate: compose Postgres/Redis, 13 migrations, a transaction-safe migrator and 9/9 SQL, Redis, queue and web checks.",
+    journal: "memory/journal/2026-11-02-pass-44.md",
+  },
+  {
     pass: "pass-43",
     date: "2026-11-02",
     summary:

@@ -613,10 +613,14 @@
           "phase": "P5",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Full bundle restore, pre-import backup and 24-hour rollback; messages are not included.",
-          "liveVerified": false,
+          "note": "Full bundle restore, pre-import backup and 24-hour rollback; messages are not included. Live 2026-11-02 on Postgres: a checksum-verified import and its rollback.",
+          "liveVerified": true,
           "evidence": [
             "packages/db/src/portability.test.ts"
+          ],
+          "liveEvidence": [
+            "portability-import-verify",
+            "portability-rollback"
           ]
         },
         {
@@ -1680,13 +1684,16 @@
           "phase": "P7",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "`/config list | get | set | export` reads and writes every registered module's per-guild settings through SettingsService and the owning Zod schema. One root and four subcommands, no second settings store. Live: set `moderation.automod.links` alert -> delete -> alert, and `bogus` was rejected by the schema without a write.",
+          "note": "`/config list | get | set | export` reads and writes every registered module's per-guild settings through SettingsService and the owning Zod schema. One root and four subcommands, no second settings store. Live: set `moderation.automod.links` alert -> delete -> alert, and `bogus` was rejected by the schema without a write. Pass 44 wrote through the SQL repository, closed the pool, reopened it and read the value back.",
           "evidence": [
             "modules/setup/src/config.test.ts",
             "modules/setup/src/commands/config.ts",
             "packages/kernel/src/config.ts"
           ],
-          "liveVerified": true
+          "liveVerified": true,
+          "liveEvidence": [
+            "postgres-settings-restart"
+          ]
         },
         {
           "id": "operations.web-dashboard",
@@ -1875,10 +1882,13 @@
           "phase": "P5",
           "status": "shipped-in-repo",
           "source": "memory/vault/02-Research/Import-Formats.md",
-          "note": "Transactional replace, rebased guild id and a post-import checksum; 5,000-level round trip tested.",
-          "liveVerified": false,
+          "note": "Transactional replace, rebased guild id and a post-import checksum; 5,000-level round trip tested. Live 2026-11-02: a real bundle imported into Postgres and the post-import checksum verified.",
+          "liveVerified": true,
           "evidence": [
             "packages/db/src/portability.test.ts"
+          ],
+          "liveEvidence": [
+            "portability-import-verify"
           ]
         },
         {
@@ -1888,10 +1898,13 @@
           "phase": "P5",
           "status": "shipped-in-repo",
           "source": "memory/vault/02-Research/Import-Formats.md",
-          "note": "Dry run reports setting-level added/changed/removed and record counts without writing.",
-          "liveVerified": false,
+          "note": "Dry run reports setting-level added/changed/removed and record counts without writing. Live 2026-11-02: the preview reported one added setting and wrote no row.",
+          "liveVerified": true,
           "evidence": [
             "packages/importer/src/importer.test.ts"
+          ],
+          "liveEvidence": [
+            "portability-dry-run"
           ]
         },
         {
@@ -1901,10 +1914,13 @@
           "phase": "P5",
           "status": "shipped-in-repo",
           "source": "memory/vault/02-Research/Import-Formats.md",
-          "note": "Applied imports restore their pre-import backup inside 24 hours. `/export rollback import_id:` exposes it in Discord; the SQL adapter is tested on PGlite, while memory mode refuses it by name.",
-          "liveVerified": false,
+          "note": "Applied imports restore their pre-import backup inside 24 hours. `/export rollback import_id:` exposes it in Discord; the SQL adapter ran on Postgres in pass 44, while memory mode still refuses it by name.",
+          "liveVerified": true,
           "evidence": [
             "packages/db/src/portability.test.ts"
+          ],
+          "liveEvidence": [
+            "portability-rollback"
           ]
         },
         {
@@ -1914,10 +1930,13 @@
           "phase": "P5",
           "status": "shipped-in-repo",
           "source": "memory/vault/02-Research/Import-Formats.md",
-          "note": "Guild deletion removes backups and retains counts plus a content hash only. `/export delete confirm:<guild-id>` exposes it to an admin; memory mode refuses it because it has no transaction or backup policy.",
-          "liveVerified": false,
+          "note": "Guild deletion removes backups and retains counts plus a content hash only. `/export delete confirm:<guild-id>` exposes it to an admin; live 2026-11-02 on Postgres kept a receipt with one setting and removed the guild row.",
+          "liveVerified": true,
           "evidence": [
             "packages/db/src/portability.test.ts"
+          ],
+          "liveEvidence": [
+            "portability-deletion-receipt"
           ]
         },
         {

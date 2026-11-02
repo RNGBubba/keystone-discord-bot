@@ -36,8 +36,10 @@ P1 exit evidence for `/setup`:
 - Ready, missing-database, pending-migration and disabled-module states are
   asserted; the module enabled state comes from its own settings.
 - A repository spy that throws on `set`/`clear` proves the command never writes.
-- Proven with fixtures and a fake health probe. A live Postgres/Redis run is
-  still outstanding and is named in [[01-Mission/Status|project status]].
+- Proven at P1 exit with fixtures and a fake health probe; a live Postgres/Redis
+  run was then outstanding. Pass 44 opened that window: Postgres 16.15, Redis,
+  13/13 migrations and `pnpm probe:live` 9/9, including a settings row that
+  survived a pool close/reopen. See [[06-Operations/Live-Window|Live window]].
 
 Pass 30 evidence for `/config`:
 
@@ -124,5 +126,6 @@ it lacks for the rest.
 - P6: link the dashboard's setup page to the same health probe.
 - P7: `/help` can render the same manifest data as documentation.
 - Portability: store the current bundle as an import candidate so a large file
-  can be restored without a fresh upload; add a live Postgres import/delete run
-  once those services exist.
+  can be restored without a fresh upload. The SQL service path is live-proven;
+  the remaining live check is `/export import` and `/export delete` through a
+  human Discord client.

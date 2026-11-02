@@ -40,7 +40,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **138 real subcommands**, **158 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**436 tests across 65 files** without a Discord token, database or network.
+**438 tests across 66 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -52,11 +52,15 @@ including
 `/help`’s generated catalog. The dashboard was booted in memory mode and
 exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
-human client is still the next live check. Docker Desktop 29.9.2 is installed
-and running here, but the compose Postgres/Redis containers are not started, so
-the local endpoints still answer `ECONNREFUSED` and the current live window is
-memory mode; the SQL window opens with `docker compose up -d postgres redis` in
-pass 44. See [pass 43](memory/journal/2026-11-02-pass-43.md).
+human client is still the next live check. Pass 44 opened the live SQL window:
+Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and Redis, all 13
+migrations are applied, and `pnpm probe:live` passed 9/9 checks — settings
+survive a pool restart, cooldowns are shared through Redis, a BullMQ job runs
+once with a Postgres receipt, portability imports/rolls back/deletes real rows,
+and `/healthz` reports `database: postgres`. That run also found and fixed a
+real migrator defect: postgres.js rejects the raw `BEGIN` the runner used. See
+[the live window](memory/vault/06-Operations/Live-Window.md) and
+[pass 44](memory/journal/2026-11-02-pass-44.md).
 
 This repo is both the product and the course: every module has a spec, tests, a
 teaching note and a status page. The docs are the source of truth, not a

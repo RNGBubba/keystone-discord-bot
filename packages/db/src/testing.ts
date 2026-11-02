@@ -33,6 +33,28 @@ export async function createPgliteDatabase(dataDir?: string): Promise<PgliteHarn
         const result = await client.query(statement);
         return result.rows as T[];
       },
+      async transaction<T>(work: (tx: SqlRunner) => Promise<T>): Promise<T> {
+        await client.exec("BEGIN");
+        const tx: SqlRunner = {
+          async exec(statement: string): Promise<void> {
+            await client.exec(statement);
+          },
+          async query<U = Record<string, unknown>>(statement: string): Promise<U[]> {
+            const result = await client.query(statement);
+            return result.rows as U[];
+          },
+          // Already inside a transaction; a nested block joins it.
+          transaction: (inner) => inner(tx),
+        };
+        try {
+          const value = await work(tx);
+          await client.exec("COMMIT");
+          return value;
+        } catch (error) {
+          await client.exec("ROLLBACK").catch(() => undefined);
+          throw error;
+        }
+      },
     },
     async close(): Promise<void> {
       await client.close();

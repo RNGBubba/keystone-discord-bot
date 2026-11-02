@@ -77,8 +77,10 @@ subcommands`; after pass 30's `/config` it reports 15 roots / 94 subcommands.
   render embeds, so the embed fields, top-command list and JSON export were
   covered by the command test, not read back live. A human slash run is still
   unobserved.
-- The live window used memory mode because the configured local Postgres/Redis
-  are unreachable on this machine; the SQL store is proven on PGlite only.
+- The pass-29 live window used memory mode. Pass 44 opened Postgres 16.15 and
+  Redis, but no analytics rows have been produced through the SQL store yet; its
+  queries are still proven on PGlite and by migration, not by a live analytics
+  read.
 - The live rows were produced by the MCP bot under the development marker and by
   bridge commands, not by a human author or a real member join. Member analytics
   therefore proves the aggregation, not a live `GuildMemberAdd`.

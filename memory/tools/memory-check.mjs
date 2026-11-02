@@ -81,6 +81,10 @@ async function checkFeatures() {
   check("features updatedAt is a date", isDate(features.updatedAt), "features.json updatedAt must be YYYY-MM-DD");
   check("features has domains", Array.isArray(features.domains) && features.domains.length > 0, "features.json has no domains");
 
+  const livePath = memoryPath("machine/live.json");
+  const live = existsSync(livePath) ? JSON.parse(await readText(livePath)) : undefined;
+  const liveChecks = new Map((live?.checks ?? []).map((entry) => [entry.id, entry]));
+
   const ids = new Set();
   const domainIds = new Set();
   let count = 0;
@@ -102,6 +106,32 @@ async function checkFeatures() {
       check(`${label} has a source`, typeof feature.source === "string" && existsSync(path.join(root, feature.source)), `${label} source is missing: ${feature.source}`);
       check(`${label} liveVerified is boolean`, typeof feature.liveVerified === "boolean", `${label} must set liveVerified true or false`);
 
+      if (feature.liveEvidence !== undefined) {
+        check(
+          `${label} liveEvidence is an array`,
+          Array.isArray(feature.liveEvidence),
+          `${label} liveEvidence must be an array of check ids`,
+        );
+        check(
+          `${label} liveEvidence requires liveVerified`,
+          feature.liveVerified === true,
+          `${label} names live evidence but liveVerified is not true`,
+        );
+        for (const checkId of feature.liveEvidence ?? []) {
+          const liveCheck = liveChecks.get(checkId);
+          check(
+            `${label} liveEvidence ${checkId} passed`,
+            liveCheck?.status === "pass",
+            `${label} names live check ${checkId}, which is missing or not passing in machine/live.json`,
+          );
+          check(
+            `${label} liveEvidence ${checkId} names this feature`,
+            Array.isArray(liveCheck?.features) && liveCheck.features.includes(feature.id),
+            `${label} names live check ${checkId}, but that check does not list ${feature.id} in features`,
+          );
+        }
+      }
+
       if (feature.status === "shipped-in-repo") {
         check(`${label} has evidence`, Array.isArray(feature.evidence) && feature.evidence.length > 0, `${label} is shipped but has no evidence path`);
         for (const evidence of feature.evidence ?? []) {
@@ -118,6 +148,57 @@ async function checkFeatures() {
   }
 
   console.log(`memory: ${count} feature rows checked`);
+}
+
+async function checkLive() {
+  const live = await readJson("machine/live.json");
+  const project = await readJson("machine/project.json");
+  const features = await readJson("machine/features.json");
+  const liveFeatureIds = new Set(
+    features.domains
+      .flatMap((domain) => domain.features)
+      .filter((feature) => feature.liveVerified === true)
+      .map((feature) => feature.id),
+  );
+  check(
+    "project.live points at the current report",
+    project.live?.report === "machine/live.json" && project.live?.id === live.id,
+    `project.live is ${project.live?.id ?? "<none>"}; live.json is ${live.id}`,
+  );
+  check("live schemaVersion is 1", live.schemaVersion === 1, "live.json schemaVersion must be 1");
+  check("live date is a date", isDate(live.date), "live.json date must be YYYY-MM-DD");
+  check("live id names the date", live.id === `live-${live.date}`, `live.json id ${live.id} does not match live-${live.date}`);
+  check("live docker is recorded", typeof live.docker === "object", "live.json has no docker block");
+  check(
+    "live postgres is reachable",
+    live.services?.postgres?.reachable === true,
+    "live.json does not record a reachable Postgres",
+  );
+  check(
+    "live postgres is migrated",
+    live.services?.postgres?.migrations?.pending === 0 && live.services.postgres.migrations.upToDate === true,
+    "live.json records pending migrations",
+  );
+  check("live redis is reachable", live.services?.redis?.reachable === true, "live.json does not record a reachable Redis");
+  check("live has checks", Array.isArray(live.checks) && live.checks.length > 0, "live.json has no checks");
+
+  const ids = new Set();
+  for (const entry of live.checks ?? []) {
+    check(`live check ${entry.id ?? "<unnamed>"} id`, Boolean(entry.id) && !ids.has(entry.id), `live check id is missing or duplicated: ${entry.id}`);
+    ids.add(entry.id);
+    check(`live check ${entry.id} passed`, entry.status === "pass", `live check ${entry.id} is ${entry.status}`);
+    check(`live check ${entry.id} has detail`, typeof entry.detail === "string" && entry.detail.length > 0, `live check ${entry.id} has no detail`);
+    check(`live check ${entry.id} has features`, Array.isArray(entry.features), `live check ${entry.id} features must be an array`);
+    for (const featureId of entry.features ?? []) {
+      check(
+        `live check ${entry.id} feature ${featureId} is live-verified`,
+        liveFeatureIds.has(featureId),
+        `live check ${entry.id} names ${featureId}, which is not liveVerified in features.json`,
+      );
+    }
+  }
+
+  console.log(`memory: ${live.checks?.length ?? 0} live checks checked`);
 }
 
 async function checkResearch() {
@@ -501,6 +582,7 @@ async function main() {
 
   // --- machine memory ------------------------------------------------------
   await checkFeatures();
+  await checkLive();
   await checkResearch();
   await checkPasses();
   await checkDecisions();

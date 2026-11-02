@@ -2,14 +2,27 @@
 
 ## Now
 
-**Pass 43 is a truth pass** (2026-11-02): no product behaviour changed except
+**Pass 44 opened the live SQL window** (2026-11-02): `docker compose up -d
+--wait postgres redis` started Postgres 16.15 and Redis, `pnpm db:migrate`
+applied all 13 migrations, and `pnpm probe:live` passed **9/9** checks (pool
+restart settings, shared Redis cooldown, BullMQ idempotency with a Postgres
+receipt, portability dry-run/import/rollback/deletion, `/healthz` with
+`database: postgres`). The first live run exposed a real migrator defect: postgres.js
+rejects the raw `BEGIN` the runner sent across a pooled connection. `SqlRunner`
+now exposes a driver transaction primitive with a PGlite rollback regression
+test. The last machine report is [[06-Operations/Live-Window|Live window]] and
+the full story is [pass 44](../../journal/2026-11-02-pass-44.md). This is bring-up and
+proof, not a feature pass; no parity row was flipped without a check in
+`live.json`.
+
+**Pass 43 was a truth pass** (2026-11-02): no product behaviour changed except
 `/help changelog`, which now reads the pass ledger instead of hard-coding pass
 26. The pass audited the vault and machine files against the code. `AGENTS.md`
 now names 20 roots and all 12 modules; the stale Components V2 notes are marked
 planned because no `packages/ui` or V2 code exists; old ledgers in this page are
 qualified as historical instead of presented as current; and the Docker notes
-now match this machine (Docker Desktop 29.9.2 installed and running, compose
-Postgres/Redis not started, so the live window is still memory mode).
+matched this machine at pass 43 (Docker Desktop 29.9.2 running, services down);
+pass 44 then started them and passed the live probe.
 `pnpm audit:claims` is now part of `pnpm check`: it checks documented root,
 subcommand, action, module and test counts, module paths, the `/help changelog`
 pointer and Components V2 claims. `memory:check` now also checks the module
@@ -323,15 +336,21 @@ connection — a human `InteractionCreate` remains unobserved. The pass also fou
 and stopped two live bot process trees that were double-posting replies; one
 instance now answers each command once.
 
-**Live environment check (re-probed pass 43):** `.env` still sets
-`DATABASE_URL` and `REDIS_URL` to localhost:5432/6379. Docker Desktop **29.9.2
-is installed and running**; `docker ps` shows the MCP container but no
-Postgres/Redis container, and no listener is bound to 5432 or 6379. TCP probes
-still return `ECONNREFUSED` for both, and booting without overrides fails loudly
-with `REDIS_URL is set but Redis is unreachable`. The live window therefore
-remains the explicitly logged memory mode (`DATABASE_URL= REDIS_URL=`) until
-pass 44 runs `docker compose up -d postgres redis` and proves the SQL path. The
-fallback is not retired. Local Ollama is up (`qwen3:8b`,
+**Live SQL window (pass 44, 2026-11-02):** Docker Desktop **29.9.2 is installed
+and running**; `docker compose up -d --wait postgres redis` started Postgres
+**16.15** and Redis, and `pnpm db:migrate` applied all **13 migrations** through
+the project's own runner. A real defect surfaced only here: the runner issued a
+raw `BEGIN` through postgres.js, which refuses pooled transaction control, so
+`pnpm db:migrate` failed with `UNSAFE_TRANSACTION`. `SqlRunner` now exposes a
+driver transaction primitive; the Postgres and PGlite runners implement it, and
+a regression test proves a failed migration rolls back completely. `pnpm
+probe:live` then passed **9/9** checks: migrations, a settings row surviving a
+pool close/reopen, a cooldown shared across two Redis clients, two enqueues
+producing one BullMQ execution and a completed Postgres receipt, dry-run /
+import / rollback / deletion through the SQL portability store, and `/healthz`
+returning `database: postgres`. The last machine report is
+[[06-Operations/Live-Window|Live window]]; the fallback memory mode still exists
+but is no longer the configured path. Local Ollama is up (`qwen3:8b`,
 `qwen3-embedding:0.6b`); the first `!ai chat` after boot hit the provider's
 30-second cold-start timeout, and a warm retry returned `keystone`.
 
@@ -404,8 +423,10 @@ tested. On ready the bot fetches Discord's command set and only clears and
 re-registers when the **name or option tree** drifts; otherwise it logs that the
 set is current. `pnpm commands:doctor` is the read-only shape check and
 `pnpm commands:resync` is the explicit clear → register → verify cycle. Slash
-interaction handling from a human client is still unproven; obscured channels,
-live role grants, live Postgres and a MEE6 pull remain unverified. The P6 auth
+interaction handling from a human client is still unproven; at that pass,
+obscured channels, live role grants, live Postgres and a MEE6 pull were
+unverified. Pass 44 has since opened the live Postgres/Redis window (below). The
+P6 auth
 foundation is documented above. The baseline, P4.5, P5 and P6 foundation are
 published at
 https://github.com/RNGBubba/keystone-discord-bot under AGPL-3.0-or-later; the
@@ -414,13 +435,13 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 436 tests / 65 files · budget 20/100 roots (138 subcommands · 158 actions · 4 context menus) · claims current · memory current
+pnpm check        exit 0 · typecheck 0 · 438 tests / 66 files · budget 20/100 roots (138 subcommands · 158 actions · 4 context menus) · claims current · live 9/9 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live env blocker 2026-11-02 · Docker Desktop 29.9.2 running · compose Postgres/Redis not started · localhost:5432 and localhost:6379 still ECONNREFUSED · memory mode until pass 44
+live substrate  2026-11-02 · Docker 29.9.2 · Postgres 16.15 with 13/13 migrations · Redis reachable · pnpm probe:live 9/9 · /healthz database=postgres · migration runner transaction defect fixed
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -507,7 +528,7 @@ read that file.
 | 7 | One root, eight subcommands, budget intact | `music.test.ts` registry shape; `pnpm budget` at pass 32: 17/100 roots, 113 subcommands | Registry + budget |
 | 8 | The live counts match the queue | Live two adds → **2/25**, one remove → **1/25**, and the disabled add wrote nothing | **Live gateway** |
 | 9 | Audio was played | **Not performed and not claimed** — the playback adapter is unavailable by design; `play`, `skip` and `stop` refused | Not claimed |
-| 10 | The SQL queue was exercised live | **Not performed** — local Postgres still returns `ECONNREFUSED`; PGlite covers the SQL adapter | Not claimed |
+| 10 | The SQL queue was exercised live | **Not performed at pass 32** — Postgres was unreachable then; PGlite covers the SQL adapter. Pass 44 later ran BullMQ and Postgres receipts live. | Not claimed at pass 32 |
 
 ## P7 export acceptance evidence
 
@@ -632,8 +653,10 @@ read that file.
 | 11 | A write is guild-scoped and two-checked | `web.test.ts`: cross-guild, non-admin and bot-absent writes are `403`; no session is `401` | Real HTTP + fake OAuth |
 
 This table proves the foundation and the narrow write path, not the exit demo.
-Live OAuth, a live Postgres-backed session, field widgets, fleet actions and
-scoped API tokens remain open.
+Live OAuth, field widgets, fleet actions and scoped API tokens remain open. A
+live Postgres-backed session is now possible — pass 44 applied the session table
+and `/healthz` runs with `database: postgres` — but an authenticated OAuth
+session has still not crossed a real Discord login.
 
 ## P5 acceptance evidence
 
@@ -647,8 +670,18 @@ scoped API tokens remain open.
 | 6 | File importers are honest about source limits | `importer.test.ts`: MEE6 `players[]`, bad ids, duplicates, quoted CSV, level-derived XP, transcript HTML/JSON | Pure fixtures |
 | 7 | Merge is narrow and named | `importer.test.ts`: settings upsert, keep-higher and add-on-top; service adds the limitation warning | Pure functions |
 | 8 | Drift is report-only | `portability.test.ts`: missing channel, refused permission, missing AutoMod rule, `readOnly: true` | Snapshot + supplied live facts |
-| 9 | Operators have a safe surface | `scripts/portability.ts`: dry-run, `--yes`, `0600` export, receipts; [[Portability-Runbook]] | CLI smoke (usage); live Postgres not run |
+| 9 | Operators have a safe surface | `scripts/portability.ts`: dry-run, `--yes`, `0600` export, receipts; [[Portability-Runbook]] | CLI smoke (usage) + pass-44 Postgres service round trip |
 | 10 | The decision is recorded | [[ADR-0015-portability-bundles-and-receipts]], [[Portability]], [[Migration-Guides]] | Vault check |
+
+**P5 live window (pass 44, 2026-11-02):** `pnpm probe:live` ran the same
+`PortabilityService` and SQL store against Postgres 16.15. A source guild with
+one setting exported a checksummed bundle; a dry run to a destination guild
+reported `1 added / 0 changed / 0 removed` and wrote nothing; the applied
+import returned `verified: true`; rollback restored the pre-import backup and
+left zero settings; deletion kept a receipt with one setting and removed the
+guild row. The PGlite rows above remain the 5,000-level and failure-transaction
+evidence; the live rows prove the same service against a real server. `/export
+import` and `/export delete` through a human Discord client are still open.
 
 ## P4.5 acceptance evidence
 

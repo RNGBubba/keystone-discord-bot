@@ -178,6 +178,39 @@ for (const claim of readmeClaims) {
       : `README.md says ${found.map((match) => match[1]).join(", ")} ${claim.label}; code has ${claim.expected}`,
   );
 }
+// --- live environment claims, measured by `pnpm probe:live` ---------------
+interface LiveReport {
+  docker: { version: string | null; running: boolean };
+  services: { postgres: { reachable: boolean }; redis: { reachable: boolean } };
+}
+const live = await readJson<LiveReport>("memory/machine/live.json");
+for (const file of ["README.md", "AGENTS.md", "memory/vault/01-Mission/Status.md"]) {
+  const text = await read(file);
+  const claim = text.match(/Docker Desktop \*{0,2}(\d+\.\d+\.\d+)/);
+  check(
+    `${file} Docker version matches the live probe`,
+    Boolean(live.docker.running && claim && claim[1] === live.docker.version),
+    claim
+      ? `${file} says Docker ${claim[1]}; the live probe recorded ${live.docker.version ?? "none"}`
+      : `${file} does not name the Docker Desktop version recorded by the live probe`,
+  );
+  check(
+    `${file} does not call running compose services stopped`,
+    !/compose[^.\n]*(not started|is not running)|Docker Desktop[^.\n]*(not installed|is absent)/i.test(text),
+    `${file} still says the compose services are stopped or Docker is absent; machine/live.json records them running`,
+  );
+  check(
+    `${file} names both live services`,
+    Boolean(
+      live.services.postgres.reachable &&
+        live.services.redis.reachable &&
+        /Postgres/i.test(text) &&
+        /Redis/i.test(text),
+    ),
+    `${file} does not mention both Postgres and Redis while the live probe records them reachable`,
+  );
+}
+
 const readmeTests = readme.match(/\*\*(\d+) tests across (\d+) files\*\*/);
 check(
   "README.md current test claim",

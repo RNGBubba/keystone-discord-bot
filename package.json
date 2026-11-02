@@ -36,6 +36,7 @@
     "memory:check": "node memory/tools/memory-check.mjs",
     "audit:intents": "tsx scripts/audit-intents.ts",
     "audit:channels": "tsx scripts/audit-channels.ts",
+    "probe:live": "tsx scripts/live-probe.ts",
     "portability": "tsx scripts/portability.ts",
     "commands:sync": "tsx scripts/commands.ts",
     "commands:resync": "tsx scripts/commands.ts --clear",

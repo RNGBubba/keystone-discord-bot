@@ -175,9 +175,9 @@ https://github.com/RNGBubba/keystone-discord-bot
   adapter and dispatch and creates a case; this is structural, not a gateway
   `InteractionCreate`. Two live bot process trees were found double-posting and
   stopped, leaving one bot and one reply per command. The `.env` points at
-  localhost Postgres/Redis; Docker Desktop 29.9.2 is installed and running, but
-  the compose containers are not started, so the current live window is still
-  memory mode. Pass 44 opens the SQL window.
+  localhost Postgres/Redis; pass 44 started the compose services, applied all 13
+  migrations and passed `pnpm probe:live` 9/9, so the SQL window is open. See
+  [[06-Operations/Live-Window|Live window]].
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus
   (then fetched Discord's shape to prove it); pass 34 split `/setup` into five

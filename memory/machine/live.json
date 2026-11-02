@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "live-2026-11-02",
+  "date": "2026-11-02",
+  "generatedAt": "2026-11-02T20:26:46.251Z",
+  "docker": {
+    "version": "29.9.2",
+    "running": true
+  },
+  "services": {
+    "postgres": {
+      "reachable": true,
+      "version": "16.15",
+      "migrations": {
+        "applied": 13,
+        "pending": 0,
+        "upToDate": true
+      }
+    },
+    "redis": {
+      "reachable": true
+    }
+  },
+  "checks": [
+    {
+      "id": "postgres-migrations",
+      "status": "pass",
+      "detail": "13 migrations applied, 0 pending on Postgres 16.15",
+      "features": []
+    },
+    {
+      "id": "postgres-settings-restart",
+      "status": "pass",
+      "detail": "one settings row written, pool closed and reopened, same value read back",
+      "features": [
+        "operations.in-bot-config"
+      ]
+    },
+    {
+      "id": "redis-shared-cooldown",
+      "status": "pass",
+      "detail": "two clients: first allowed, second refused with 1999ms remaining",
+      "features": []
+    },
+    {
+      "id": "bullmq-job-idempotency",
+      "status": "pass",
+      "detail": "two enqueues with one idempotency key produced one handler call and a completed Postgres receipt",
+      "features": []
+    },
+    {
+      "id": "portability-dry-run",
+      "status": "pass",
+      "detail": "dry run reported 1 added / 0 changed / 0 removed setting(s)",
+      "features": [
+        "portability.dry-run-import-diff"
+      ]
+    },
+    {
+      "id": "portability-import-verify",
+      "status": "pass",
+      "detail": "bundle checksum 7e21fee691d8… matched after import b609da13",
+      "features": [
+        "portability.restore-and-config-hash",
+        "security.backup-restore"
+      ]
+    },
+    {
+      "id": "portability-rollback",
+      "status": "pass",
+      "detail": "the applied import restored its pre-import backup; the destination has no settings rows",
+      "features": [
+        "portability.rollback-window",
+        "security.backup-restore"
+      ]
+    },
+    {
+      "id": "portability-deletion-receipt",
+      "status": "pass",
+      "detail": "deletion receipt retained 1 setting(s) and the guild row is gone",
+      "features": [
+        "portability.deletion-receipt"
+      ]
+    },
+    {
+      "id": "web-health-postgres",
+      "status": "pass",
+      "detail": "/healthz returned 200 with database=postgres on an ephemeral port",
+      "features": []
+    }
+  ]
+}

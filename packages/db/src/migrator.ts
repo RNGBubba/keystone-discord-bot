@@ -20,6 +20,15 @@ import { sql as migration0013, version as version0013 } from "./migrations/0013-
 export interface SqlRunner {
   exec(sql: string): Promise<void>;
   query<T = Record<string, unknown>>(sql: string): Promise<T[]>;
+  /**
+   * Run `work` in one real transaction.
+   *
+   * `exec("BEGIN")` is not portable: postgres.js pools connections and rejects
+   * raw transaction control with `UNSAFE_TRANSACTION`, because the following
+   * statement may land on a different connection. Each driver exposes its own
+   * transaction primitive; the migrator uses this instead.
+   */
+  transaction<T>(work: (tx: SqlRunner) => Promise<T>): Promise<T>;
 }
 
 export interface Migration {
@@ -87,15 +96,14 @@ export async function migrate(
       continue;
     }
 
-    await runner.exec("BEGIN");
     try {
-      await runner.exec(migration.sql);
-      await runner.exec(
-        `INSERT INTO ${LEDGER} (version) VALUES ('${escape(migration.version)}')`,
-      );
-      await runner.exec("COMMIT");
+      await runner.transaction(async (tx) => {
+        await tx.exec(migration.sql);
+        await tx.exec(
+          `INSERT INTO ${LEDGER} (version) VALUES ('${escape(migration.version)}')`,
+        );
+      });
     } catch (error) {
-      await runner.exec("ROLLBACK");
       throw new Error(
         `Migration ${migration.version} failed and was rolled back: ${
           error instanceof Error ? error.message : String(error)

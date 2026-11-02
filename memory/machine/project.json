@@ -6,8 +6,12 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-02",
   "phase": "P7",
-  "lastPass": "journal/2026-11-02-pass-43.md",
-  "nextAction": "pass-44 — live substrate: start compose Postgres/Redis, migrate, and prove the SQL path",
+  "lastPass": "journal/2026-11-02-pass-44.md",
+  "nextAction": "pass-45 — evidence levels and pass telemetry",
+  "live": {
+    "report": "machine/live.json",
+    "id": "live-2026-11-02"
+  },
   "metrics": {
     "commands": 20,
     "subcommands": 138,
@@ -15,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 436
+    "tests": 438
   },
   "modules": [
     {
