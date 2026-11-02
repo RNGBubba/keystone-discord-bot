@@ -3,8 +3,8 @@
 ## Reporting
 
 Do not open a public issue for a vulnerability. Use GitHub's private
-vulnerability reporting on the repository, or the security contact published in
-`SECURITY.md` at the repo root once the remote exists.
+vulnerability reporting on the repository, as [SECURITY.md](../../../SECURITY.md)
+describes.
 
 We aim to acknowledge within 72 hours and to ship a fix or mitigation within 14
 days for anything that can ban, leak or escalate.
@@ -54,7 +54,7 @@ reviewed it.
 - Run `pnpm audit` before each release; do not auto-merge dependency PRs that
   touch the gateway or the database.
 
-## Dashboard (P5)
+## Dashboard (P6)
 
 The dashboard is a bigger attack surface than the bot. Every request resolves the
 session user, then checks that user's permission **in the specific guild** —

@@ -26,9 +26,9 @@ what keeps an all-in-one bot from becoming an unreviewed plugin bazaar.
 
 ## No CLA, no copyright assignment
 
-Contributions are accepted under the project licence (see [[Open-Questions]] for
-the still-open choice). We do not ask contributors to assign copyright or grant
-relicensing rights — that requirement is a documented reason people stop
+Contributions are accepted under the project licence, AGPL-3.0-or-later (see
+[LICENSE](../../../LICENSE)). We do not ask contributors to assign copyright or
+grant relicensing rights — that requirement is a documented reason people stop
 contributing to projects like NadekoBot.
 
 The trade-off is explicit: without a CLA, the project cannot unilaterally
@@ -48,6 +48,7 @@ is the whole point of [[Mission]].
 
 ## Succession
 
-The owner names a successor in `memory/machine/project.json` before P7. If none
-is named and the owner is unreachable for 90 days, maintainers may fork the
-project publicly and continue under the same licence.
+The owner names a successor publicly (a pinned issue) before v1.0, as
+[GOVERNANCE.md](../../../GOVERNANCE.md) records. If none is named and the owner
+is unreachable for 90 days, maintainers may fork the project publicly and
+continue under the same licence.

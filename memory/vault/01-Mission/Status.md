@@ -2,6 +2,30 @@
 
 ## Now
 
+**Pass 48 made the memory gate read prose** (2026-11-02):
+`memory/machine/claims.json` names the documents that speak in the present tense,
+and `pnpm memory:check` now recomputes roots, subcommands, actions, context
+menus, modules, tests and passes from `commands.json`, `project.json`, the vitest
+report and `passes.json`. A current-tense contradiction fails unless the sentence
+names the pass it describes. A capability with no code evidence — Components V2,
+i18n, the Next.js shell — must be marked planned. The drift named by the
+completion plan is corrected: README counts, the Gate block, every module ledger
+block, the stale Docker and expiry notes, and the V2/Next claims. The root
+CONTRIBUTING, GOVERNANCE, SECURITY and CODE_OF_CONDUCT files and the issue/PR
+templates now exist. No product behaviour changed; tests remain **471 / 71 files**
+and the live probe is **13/13**. See [pass 48](../../journal/2026-11-02-pass-48.md).
+
+**Pass 47 completed the teaching phase** (2026-11-02): all 14 lessons are
+written against the current code, and `memory/machine/lessons.json` makes them
+checkable. `pnpm memory:check` now verifies every lesson's source paths, proof
+commands, required sections and Curriculum link, and every count a lesson
+asserts against `commands.json`, `live.json` or `project.json`. The README
+Docker quickstart was corrected to match `apps/web/src/runtime.ts`: a
+gateway-only host runs `docker compose up --build bot worker`, while the default
+stack needs `SESSION_SECRET` before the optional web service can boot. No
+product behaviour changed; tests remain **471 / 71 files** and the live probe is
+still **13/13**. See [pass 47](../../journal/2026-11-02-pass-47.md).
+
 **Pass 46 finished the P7 lifecycle block** (2026-11-02): panic mode and
 goodbye messages. `/mod panic state:status|on|off` is one Administrator-only
 switch. `on` snapshots every text channel's `@everyone` SendMessages overwrite
@@ -120,7 +144,7 @@ wrote a draft, `edit` opened it, `panel` posted, `submit` wrote
 `delete` was refused while the history exists, and `export` produced a **1.5 KB**
 file that downloaded (HTTP 200, 1540 bytes) and parsed as **1 form / 1
 submission** with the same answers, reviewer and note and a checksum that
-recomputes. `commands:doctor` now reports **20 roots / 138 subcommands / 4
+recomputes. `commands:doctor` now reports **20 roots / 141 subcommands / 4
 context menus** with no drift. See [[04-Modules/forms/Status|Forms status]].
 
 **P7 `/verify` is a real two-subcommand hub with a complete persisted join gate**
@@ -141,7 +165,7 @@ cannot make a member join, receive the DM or click the button, so the join and
 completion paths are covered by security, command and PGlite tests, not claimed
 live. Pass 39 moved the DM itself onto `ModerationActions.directMessage`, so the
 join gate no longer borrows the community adapter; the body, button and refusal
-text are unchanged. `commands:doctor` now reports **20 roots / 138 subcommands /
+text are unchanged. `commands:doctor` now reports **20 roots / 141 subcommands /
 4 context menus** with no drift. See [[04-Modules/moderation/Status|Moderation
 status]].
 
@@ -163,11 +187,11 @@ with `dryRun: true` and never applies it; `reset` exposes the existing repositor
 No new root, store, migration or paid service. Live in `#ai-chat`: `!setup
 module` reported **9 modules · 2 disabled here**, `music` was enabled, then
 `!setup reset module=music` returned it to its schema default and a fresh read
-confirmed **disabled**; `/setup verify` read back from Discord reported **17
-roots · 113 subcommands** and **9 modules parsed**. `commands:doctor` agrees with
-no drift. The MCP cannot attach a file or invoke slash, so `import` is
-preview-tested only. The saved plan table names **12 roots / 59 subcommands**, not
-18 / 160; the 160 figure has no per-root list in the repository and remains
+confirmed **disabled**; at pass 34 `/setup verify` read back from Discord
+**17 roots · 113 subcommands** and **9 modules parsed**. `commands:doctor`
+agreed with no drift. The MCP cannot attach a file or invoke slash, so `import` is
+preview-tested only. The saved plan table's historical **12 roots / 59
+subcommands** are not 18 / 160; the 160 figure has no per-root list in the repository and remains
 unverified. See [[04-Modules/setup/Spec|Setup spec]] and
 [[04-Modules/setup/Status|Setup status]].
 
@@ -239,8 +263,8 @@ subcommands, no module, no table and no second settings store. Live in
 read-back after each write; `bogus` returned `automod.links: Invalid enum value`
 and the next read still returned `"alert"`. Pass 31 added `/export` and pass 32 added
 `/music`, pass 35 split `/appeal` into two, pass 36 split `/verify` into two and
-pass 42 added `/modmail` with six, so Discord now reports **20 roots / 138
-subcommands / 158 actions** including `config`, `export`, `form`, `modmail`,
+pass 42 added `/modmail` with six, so Discord now reports **20 roots / 141
+subcommands / 161 actions** including `config`, `export`, `form`, `modmail`,
 `music`, the five `/setup` actions, the two `/appeal` actions and the two
 `/verify` actions. The MCP cannot invoke slash
 commands or render embeds, so the live proof is the message bridge with
@@ -257,8 +281,8 @@ and an in-memory adapter over the same stores. The command is guild-scoped,
 admin-only and capped at a 90-day window. Live: `/logging status` reported **2
 stored** rows, `/analytics overview` reported the same **2 logged events**, and
 one MCP edit plus one delete appeared as **1 edited / 1 deleted**. Command runs
-rose 0 → 3 → 4 as bridge commands completed; the current invocation is recorded
-after its reply. At pass 29 Discord reported **14 roots / 90 subcommands / 104
+rose 0 → 3 → 4 as bridge commands completed; an invocation is recorded after
+its reply. At pass 29 Discord reported **14 roots / 90 subcommands / 104
 actions**; pass 30 added `/config`, pass 31 added `/export` and pass 32 added
 `/music`, pass 35 split `/appeal` into two, pass 36 split `/verify` into two and
 pass 40 added `/form` with eight, so at pass 40 the ledger was
@@ -327,11 +351,11 @@ got no reply; a third after the window replied again. See
 [[04-Modules/community/Spec|Community spec]] and
 [[04-Modules/community/Status|Community status]].
 
-**P7 command tree is in repo** (pass 26, 2026-11-01): the kernel now models
+**P7 command tree is in repo** (pass 26, 2026-11-01): the kernel gained
 real Discord subcommands and subcommand groups. Every hub that existed at that
 point exposes its working actions as subcommands — `/mod` 14, `/rank` 12,
 `/ticket` 8, `/tools` 24, `/ai` 11 and `/invites` 3 — for 12 roots, 77
-subcommands and 89 actions. `/help` (`browse`, `commands`, `search`, `privacy`,
+subcommands and 89 actions at pass 26. `/help` (`browse`, `commands`, `search`, `privacy`,
 `changelog`) reads the live registry, so its catalog cannot drift.
 `pnpm commands:catalog` generates `memory/machine/commands.json` and
 [[Command-Catalog]], and `pnpm commands:doctor` prints the live registration
@@ -343,13 +367,14 @@ that point. Pass 29 added `/analytics` with six subcommands, pass 30 added
 `/config` with four, pass 31 added `/export` with six and pass 32 added `/music`
 with eight, pass 34 split `/setup` into five, pass 35 split `/appeal` into two,
 pass 36 split `/verify` into two, pass 40 added `/form` with eight, pass 41
-added `/event` with seven and pass 42 added `/modmail` with six, so the current
-ledger is **20 roots · 138 subcommands · 158 actions**. After pass 30 the boot found
+added `/event` with seven and pass 42 added `/modmail` with six; the current
+ledger, after pass 45's `temp-role`, is **20 roots · 141 subcommands · 161
+actions**. After pass 30 the boot found
 `config` missing, cleared the global set once and re-registered it; pass 31's
 boot found only `export` missing and did the same. Pass 33 now models context
 menus as application commands with their own type and budget, and its boot found
 all four menus missing and re-registered 21 commands. `commands:doctor` now
-reports 20 roots / 138 subcommands plus 2 user and 2 message menus, including
+reports 20 roots / 141 subcommands plus 2 user and 2 message menus, including
 `analytics`, `logging`, `config`, `event`, `export`, `form`, `modmail`, `music`,
 the five `/setup` actions, the two `/appeal` actions and the two `/verify`
 actions. See
@@ -423,7 +448,7 @@ pipeline in `DEV_GUILD_ID`: `!ping`, `!about`, `!ai status`, `!mod history` and
 `/analytics`, pass 30 added `/config`, pass 31 added `/export` and pass 32 added
 `/music`, pass 34's `/setup` hub, pass 35's `/appeal` hub, pass 36's `/verify`
 hub, pass 40's `/form`, pass 41's `/event` and pass 42's `/modmail`, so Discord's
-fetched shape now reports **20 roots / 138 subcommands** with no missing, extra
+fetched shape now reports **20 roots / 141 subcommands** with no missing, extra
 or changed roots.
 The bridge
 added `!help commands`, `!help browse`, `!help search query=ban`, `!mod history`,
@@ -467,13 +492,13 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 438 tests / 66 files · budget 20/100 roots (138 subcommands · 158 actions · 4 context menus) · claims current · live 9/9 · memory current
+pnpm check        exit 0 · typecheck 0 · 471 tests / 71 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 13/13 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
-live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
+live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 141 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live substrate  2026-11-02 · Docker 29.9.2 · Postgres 16.15 with 13/13 migrations · Redis reachable · pnpm probe:live 9/9 · /healthz database=postgres · migration runner transaction defect fixed
+live substrate  2026-11-02 · Docker 29.9.2 · Postgres 16.15 with 14/14 migrations · Redis reachable · pnpm probe:live 13/13 · /healthz database=postgres · migration runner transaction defect fixed
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -607,7 +632,7 @@ read that file.
 | 7 | Admin-only and guild-only | `analytics.test.ts`: non-admin `blocked`, store not called; live bridge ran under the MCP member with `ManageGuild` | Dispatch + **live bridge** |
 | 8 | A disabled module refuses instead of returning zeros | `analytics.test.ts`: disabled returns `error` and no snapshot | Unit |
 | 9 | One root, no extra slot | `/analytics` with six subcommands; the budget was **15/100** after `/config` at pass 30 | Static registry |
-| 10 | The real surface runs | Live 2026-11-01: three `/analytics` views replied once each in `#ai-chat`; `commands:doctor` now reports 15 roots / 94 subcommands | **Live gateway + Discord API** |
+| 10 | The real surface runs | Live 2026-11-01: three `/analytics` views replied once each in `#ai-chat`; at pass 30 `commands:doctor` reported 15 roots / 94 subcommands | **Live gateway + Discord API** |
 | 11 | Embed fields and JSON export were read live | **Not performed** — the MCP text reader does not render embeds; command test covers the parseable export | Not claimed |
 
 ## P7 audit-logging acceptance evidence
@@ -636,7 +661,7 @@ read that file.
 | 5 | Flags are advisory | `invites.test.ts`: one log embed, footer "Advisory only"; the port has no ban/kick/timeout method | In-memory + recorder |
 | 6 | Settings are the module's own schema | `inviteSettingsSchema`; the dashboard uses the same catalog, no web-only schema | Shared catalog |
 | 7 | The command fits the budget and declares its intents | `commands.test.ts`: one root, budget 1, `GuildInvites` required, `GuildMembers` fallback named by `/setup` | Registry |
-| 8 | The real surface runs | Live 2026-11-01: `/invites` was registered with the then-current 12 roots / 77 subcommands (now 13 / 84); `!invites leaderboard` and `!invites who` dispatched and replied in `#ai-chat` | Live gateway |
+| 8 | The real surface runs | Live 2026-11-01: `/invites` was registered with the then-current 12 roots / 77 subcommands (13 / 84 at pass 28); `!invites leaderboard` and `!invites who` dispatched and replied in `#ai-chat` | Live gateway |
 | 9 | A live member join was **not** performed | `Status.md` limitation; no second account was available | Not claimed |
 
 ## P7 auto-responder acceptance evidence
@@ -724,7 +749,7 @@ import` and `/export delete` through a human Discord client are still open.
 | 3 | Core works without privileged intents | `INTENT_PROFILE=minimal` returns only non-privileged intents; `pnpm audit:intents` prints the disabled features | Registry + manifest tests |
 | 4 | `/setup` names disabled features | `modules/setup/src/setup.test.ts`: minimal profile shows `GuildMembers` consequence and the `INTENT_PROFILE=full` next step | Fake health probe, zero writes |
 | 5 | Optional intent contract is validated | `packages/kernel/src/registry.test.ts`: required/optional split, fallback join, duplicate rejection | Registry |
-| 6 | Memory cannot silently drift | `pnpm memory:check`: 123 features, 20 claims, 36 passes, 18 decisions, 4 generated pages, 388 wikilinks | Machine files + generated pages |
+| 6 | Memory cannot silently drift | `pnpm memory:check` at that pass: 123 features, 20 claims, 36 passes, 18 decisions, 4 generated pages, 388 wikilinks | Machine files + generated pages |
 | 7 | The plan is recorded | [[ADR-0012-required-and-optional-intents]], [[ADR-0013-roadmap-v2-portability-first]], [[ADR-0014-memory-v2-machine-truth]] | Vault check |
 
 ## P3 acceptance evidence
@@ -848,14 +873,16 @@ here.
 ## Next
 
 P7 parity work continues alongside the P6 exit items. Auto-responders, audit
-logging, the content filters, guild analytics, in-bot configuration and
-`/export` and the `/music` saved queue are done; the next open rows are
-forms/events, modmail, expiry jobs, case export, command-usage retention, panic
-mode and real music playback (a voice/Lavalink client). `automod.false-positive-report` is still the smallest useful
-moderation follow-up. P6 remains the active phase
+logging, the content filters, guild analytics, in-bot configuration,
+`/export`, the `/music` saved queue, forms, events, modmail, temporary
+moderation, panic mode and goodbye are done; the next open rows are real music
+playback (a voice/Lavalink client), forms modal input, scheduled event
+reminders/ICS, modmail DM relay and the planned Components V2 UI/i18n work.
+`automod.false-positive-report` is still the smallest useful moderation
+follow-up. P6 remains the active phase
 for the dashboard. The auth gate and settings writes are built;
-next are schema-driven field widgets, the Next.js shell (or a decision to keep
-server-rendered HTML), fleet actions/templates, token refresh and revocation,
+next are schema-driven field widgets, the planned Next.js shell (or a decision to
+keep server-rendered HTML), fleet actions/templates, token refresh and revocation,
 scoped API tokens, per-token rate limits, `Idempotency-Key`, webhooks and
 OpenAPI. Before launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

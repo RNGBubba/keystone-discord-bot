@@ -8,7 +8,7 @@ events. It is the seventh module and one event source `/analytics` now reads
 
 - `/logging` is registered through the shared catalog with `setup`, `channel`,
   `events`, `status`, `retention`, `export` and `disable`. The command ledger is
-  **20 roots / 138 subcommands / 158 actions** after analytics, `/config`,
+  **20 roots / 141 subcommands / 161 actions** after analytics, `/config`,
   `/export`, `/music`, `/setup` and `/appeal` landed.
 - An event is appended before delivery. A disabled module or a disabled event
   writes nothing; a configured channel that fails still leaves the row behind.
@@ -120,9 +120,9 @@ case that arrived through the case observer rather than the message adapter.
   observed across a full interval.
 - Delivery failure, a deleted channel and a refused setup are unit-tested; only
   successful delivery and the moderation hook were exercised live.
-- Docker Desktop is installed and running here, but its compose Postgres/Redis
-  containers are not started, so the live window is memory mode. The SQL store
-  is proven on PGlite only; pass 44 opens the SQL window.
+- Docker Desktop is installed and running here, and pass 44 started the compose
+  Postgres 16.15 and Redis containers. The SQL store is live-proven by the 13/13
+  probe; the earlier pass-28 window was memory mode.
 - `message_delete` records the message author as actor because Discord's gateway
   event does not name the moderator who deleted it. The audit-log API is not
   read. This is honest evidence, not a claim about who pressed delete.

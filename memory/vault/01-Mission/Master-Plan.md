@@ -150,8 +150,8 @@ names** where the plan has a record (59 from the original table, 7 for `/event`,
 pass 45's `/mod temp-role` and pass 46's `/mod panic` and `/tools goodbye`. Six
 registered roots (`/ping`, `/about`, `/ai`, `/invites`, `/analytics`, `/form`)
 are not in the plan table. 69 of the 141 registered names are beyond the 72
-planned names (41 extra names inside plan roots, 28 in those six roots). The
-handoff's **"18 roots / 160 subcommands"** still cannot be recomputed: the plan
+planned names (41 extra names inside plan roots, 28 in those six roots). The saved
+handoff's historical **"18 roots / 160 subcommands"** still cannot be recomputed: the plan
 records only 72 names, leaving **88 names unrecorded**, and it never identifies
 its 18 roots. Separately, the 141 registered names are 19 short of the raw 160
 count. Do not invent the missing names, and do not treat 160 as a target — the
@@ -222,8 +222,8 @@ messages, feeds, stat channels.
 **Exit demo:** the [[Parity-Matrix]] is green for these domains, all free, and the
 command ledger is still under 20 roots.
 
-**Teaching:** append-only ledgers; XP as a projection, not a counter; Components
-V2 layout budgets.
+**Teaching:** append-only ledgers; XP as a projection, not a counter; the
+planned Components V2 layout budgets.
 
 ### P4 — AI layer (3 weeks)
 

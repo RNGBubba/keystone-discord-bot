@@ -23,6 +23,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-48",
+    date: "2026-11-02",
+    summary:
+      "Truth gate: current-tense counts and capability claims now fail the build when they disagree with the machine files; root governance and issue/PR templates added.",
+    journal: "memory/journal/2026-11-02-pass-48.md",
+  },
+  {
+    pass: "pass-47",
+    date: "2026-11-02",
+    summary:
+      "Teaching pass: 14 lessons taught against the real code, a memory gate that checks their commands and counts, and a Docker quickstart that matches the web guard.",
+    journal: "memory/journal/2026-11-02-pass-47.md",
+  },
+  {
     pass: "pass-46",
     date: "2026-11-02",
     summary:

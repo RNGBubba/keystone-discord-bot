@@ -44,8 +44,8 @@ P7 added the auto-responder in pass 25. Exact, contains and regex triggers are
 guild records; a message gets at most one reply, exact beats contains and
 contains beats regex, and each trigger carries its own cooldown. `/tools` gained
 `responder`, `responders` and `responder-remove` subcommands, so the command
-ledger stayed at 12 roots / 77 subcommands at that pass (now 14 / 90 with audit
-logging and analytics). Live 2026-11-01: the seeded `hello keystone` trigger replied to
+ledger stayed at 12 roots / 77 subcommands at that pass (14 / 90 at pass 29,
+after audit logging and analytics). Live 2026-11-01: the seeded `hello keystone` trigger replied to
 a marked MCP message, a second identical message inside the 60-second cooldown
 got no reply, and a third after the window replied again. The admin actions were
 not run live because the MCP bot lacks `ManageGuild`; they are covered by the

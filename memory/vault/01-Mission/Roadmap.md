@@ -191,8 +191,8 @@ disabled `add` was refused. Pass 33 added the four context menus the plan named:
 The kernel now models application-command type and audits the separate 15 + 15
 menu budget; the menus reuse the existing case, level and AI services and add no
 store. One memory-mode boot found all four missing, cleared once and registered
-21 commands; Discord reported **17 roots / 108 subcommands / 2 user menus / 2
-message menus** with no drift. The MCP cannot right-click, so invocation is
+21 commands; at pass 33 Discord reported **17 roots / 108 subcommands / 2 user
+menus / 2 message menus** with no drift. The MCP cannot right-click, so invocation is
 covered by adapter and command tests and is not claimed live. Pass 34 audited the
 subcommand gap: the only saved plan table names 12 roots / 59 subcommands, not
 18 / 160, so the larger figure stays unverified rather than invented. The
@@ -279,8 +279,8 @@ repo contains no streamer; the Activity go/no-go is written down.
 - Licence finalised (AGPL-3.0 recommended), DCO, no CLA.
 - Astro Starlight docs generated from the vault; link checker; tested snippets.
 - Curriculum 14 lessons; module generator; `pnpm lesson:verify`.
-- Root CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT; issue/PR templates;
-  release workflow; changelog; Docker images.
+- Root CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT and issue/PR templates
+  are in repo (pass 48); release workflow; changelog; Docker images.
 - One-command self-host; status page, privacy policy, ToS; App Directory/top.gg
   listing assets; staging-guild E2E.
 

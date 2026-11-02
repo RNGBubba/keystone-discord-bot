@@ -2,11 +2,12 @@
 
 ## Now
 
-The tenth module is in repo and live-proven in memory mode. `/form` is the first
-root added after the saved plan table reached 59 of 59.
+The tenth module is in repo and live-proven through the development bridge in
+the pass-40 memory window. `/form` is the first root added after the saved plan
+table reached 59 of 59.
 
 - `/form create | edit | delete | list | panel | submit | review | export` is
-  registered. The ledger is **20 roots / 138 subcommands / 158 actions / 4
+  registered. The ledger is **20 roots / 141 subcommands / 161 actions / 4
   context menus**.
 - Forms and submissions are **real rows** in `forms` and `form_submissions`
   (migration `0011_forms`). `FormStore` has one in-memory and one Drizzle
@@ -33,9 +34,9 @@ pnpm vitest run modules/forms packages/db/src/form-store.test.ts
   ✓ modules/forms/src/forms.test.ts (12 tests)
   ✓ packages/db/src/form-store.test.ts (3 tests)
 pnpm test
-  435 tests / 65 files
+  471 tests / 71 files
 pnpm budget
-  20/100 roots · 138 subcommands · 158 actions · 4 context menus, OK
+  20/100 roots · 141 subcommands · 161 actions · 4 context menus, OK
 ```
 
 - Parsing: derived and explicit keys, empty/duplicate/oversized field lists,
@@ -59,13 +60,9 @@ The SQL cross-check is the raw query in `form-store.test.ts`
 
 ## Live evidence
 
-`.env` was re-probed before boot. Both services are still unreachable, so the
-window is memory mode and the SQL path is PGlite-only:
-
-```text
-DATABASE_URL: ECONNREFUSED at localhost:5432
-REDIS_URL: ECONNREFUSED at localhost:6379
-```
+At pass 40 the `.env` probe found both service ports closed, so that window was
+memory mode and the SQL path was PGlite-only. Pass 44 has since opened the SQL
+window and applied all 14 migrations.
 
 One bot process (`DATABASE_URL= REDIS_URL= pnpm start`), connected as
 `AI Team#5758` with `"modules":10` and `"count":22` registered application
@@ -127,8 +124,9 @@ The other refusal branches — duplicate pending, unknown field, closed form,
 wrong `confirm`, key collision, missing `ManageGuild` and disabled forms — are
 covered by the focused tests rather than claimed live.
 
-`pnpm commands:doctor` read Discord and reported **18 global chat-input commands ·
-125 subcommands · 2 user menus · 2 message menus**, with the registered names
+At pass 40, `pnpm commands:doctor` read Discord and reported **18 global
+chat-input commands · 125 subcommands · 2 user menus · 2 message menus**, with
+the registered names
 including `form`, and no drift.
 
 ## Known limitations
@@ -139,8 +137,8 @@ including `form`, and no drift.
 - The panel embed is not readable through the MCP text reader. The message was
   posted (it has a real message id) and the command test asserts its fields; the
   live text proves the command ran.
-- The live window is memory mode; Postgres and Redis still return
-  `ECONNREFUSED`.
+- The live window was memory mode at pass 40; pass 44 has since opened
+  Postgres and Redis.
 - `/export guild` (the portability bundle) does **not** include `forms` or
   `form_submissions`. The dedicated `/form export` is the truthful export; the
   guild bundle gap is open.

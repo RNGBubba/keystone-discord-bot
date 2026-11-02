@@ -93,8 +93,8 @@ conditional update is atomic.
 
 ## Limits
 
-- One global command root. `pnpm budget` reports **20/100 roots · 138
-  subcommands · 158 actions · 4 context menus**.
+- One global command root. `pnpm budget` reports **20/100 roots · 141
+  subcommands · 161 actions · 4 context menus**.
 - No new dependency, no privileged intent, no paid service.
 - Defaults: 500 threads per guild, 200 messages per thread, 2,000 characters per
   message, 120 per subject. All but the subject are module settings.

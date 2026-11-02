@@ -54,13 +54,14 @@ exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
 human client is still the next live check. Pass 44 opened the live SQL window:
 Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and Redis, all 14
-migrations are applied, and `pnpm probe:live` passed 12/12 checks — settings
-survive a pool restart, cooldowns are shared through Redis, a BullMQ job runs
-once with a Postgres receipt, a delayed timer fires after its delay, a real case
-expires through `TemporaryActionService`, a real reminder/scheduled record
-delivers once, portability imports/rolls back/deletes real rows, and `/healthz`
-reports `database: postgres`. That run also found and fixed a real migrator
-defect: postgres.js rejects the raw `BEGIN` the runner used. See
+migrations are applied, and `pnpm probe:live` is now 13/13 — settings survive a
+pool restart, cooldowns are shared through Redis, a BullMQ job runs once with a
+Postgres receipt, a delayed timer fires after its delay, a real case expires
+through `TemporaryActionService`, a reminder/scheduled record delivers once, a
+panic snapshot round-trips on Postgres, portability imports/rolls back/deletes
+real rows, and `/healthz` reports `database: postgres`. That run also found and
+fixed a real migrator defect: postgres.js rejects the raw `BEGIN` the runner
+used. See
 [the live window](memory/vault/06-Operations/Live-Window.md) and
 [pass 44](memory/journal/2026-11-02-pass-44.md).
 Pass 46 completed the lifecycle block: `/mod panic state:status|on|off` snapshots
@@ -84,6 +85,14 @@ send keeps `sent:true`. The live probe proves the SQL and service paths; the
 Discord action is a recording port, not a gateway, so those rows stay marked
 **live unverified for Discord**. See
 [pass 45](memory/journal/2026-11-02-pass-45.md).
+Pass 48 made the docs answer to the machine: `memory/machine/claims.json` names
+the documents that speak in the present tense, and `pnpm memory:check` recomputes
+the roots, subcommands, actions, menus, modules, test count and pass count from
+the generated files. A current-tense sentence that disagrees fails the gate; a
+historical sentence is allowed only when it names its pass. A capability claim
+with no code behind it — Components V2, i18n and the Next.js shell today — must
+be marked planned. The same pass added the root governance and issue/PR files.
+See [pass 48](memory/journal/2026-11-02-pass-48.md).
 
 This repo is both the product and the course: every module has a spec, tests, a
 teaching note and a status page. The docs are the source of truth, not a
@@ -177,16 +186,26 @@ pnpm web:start           # third terminal: dashboard/API at http://localhost:300
 
 `pnpm db:migrate` is safe to rerun. Postgres data lives in the `pgdata` volume.
 
-### 4. All-in-one Docker
+### 4. Docker stack
+
+A gateway-only host can skip the optional dashboard:
+
+```bash
+docker compose up --build bot worker
+```
+
+With `SESSION_SECRET` set in `.env`, the default stack also starts the web
+service:
 
 ```bash
 docker compose up --build
 ```
 
-This builds the bot, runs migrations once, then starts the bot, worker and web
-service. `docker compose up -d postgres redis` is the lighter path when you want
-hot reload with `pnpm dev`; the web service is optional, so a gateway-only
-self-host can omit it or run `docker compose up bot worker` without a dashboard.
+Either command builds the images and runs migrations once before the selected
+services start. The web process refuses to boot in production without a valid
+`SESSION_SECRET`, so a gateway-only self-host should use the first command.
+`docker compose up -d postgres redis` is still the lighter path when you want hot
+reload with `pnpm dev`.
 
 ### 5. Dashboard and API (optional)
 
@@ -298,8 +317,8 @@ refusals. See [the community spec](memory/vault/04-Modules/community/Spec.md).
 
 ## Commands
 
-Discord's global limit is 100 **roots**; Keystone uses **20** and exposes **138
-real subcommands** (158 total actions), plus **4 context menus** on their own
+Discord's global limit is 100 **roots**; Keystone uses **20** and exposes **141
+real subcommands** (161 total actions), plus **4 context menus** on their own
 15 + 15 budget. A subcommand does not spend another global slot, which is why the
 picker now expands instead of showing one flat `action` option. Slash commands
 are the product surface; context menus appear under right-click → Apps. In
@@ -519,7 +538,7 @@ Everything below is free. No feature is moved behind a paywall.
   and i18n.
 - **P8:** `/music` queue control ships disabled by default; bring-your-own
   Lavalink playback is the open piece (no bundled streamer).
-- **P9:** docs site, 14-lesson curriculum, release workflow, self-host kit.
+- **P9:** docs site, release workflow and self-host kit; the 14-lesson curriculum is already in `memory/vault/05-Learning/` and checked by `pnpm memory:check`.
 - **P10:** sharding, load tests, SLOs, Discord.js v15 migration.
 
 See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
@@ -537,7 +556,7 @@ See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
 | P4.5 Platform hardening | Done | Channel resolver, intents, capability report |
 | P5 Portability | Done | Export/restore/rollback, importers, drift |
 | P6 Dashboard + API | **In progress** | OAuth/PKCE sessions, per-guild authz, schema-validated settings writes and `/api/v1` |
-| P7 Command tree | Done | 20 roots · 138 real subcommands; `/help`; generated catalog; shape-aware sync and doctor |
+| P7 Command tree | Done | 20 roots · 141 real subcommands; `/help`; generated catalog; shape-aware sync and doctor |
 | P7 Context menus | Done | 4 menus (2 user, 2 message) registered in Discord; report opens a real case, case history and rank card read existing rows, explain uses the capped AI path; invocation is human-only |
 | P7 Slash harness | Harness done | Synthetic nested `/mod ban` through the real adapter + dispatch; gateway `InteractionCreate` still human-only |
 | P7 Audit logging | Done | `/logging`; five event kinds, per-event toggles, append-only ledger, retention; message and moderation events live-proven |
@@ -626,8 +645,8 @@ then deleted; `!logging status` reported **2 stored** events, and
 `!analytics overview days=7` printed **2 logged events** for the same window.
 `!analytics messages days=7` printed exactly **1 deleted · 1 edited**, matching
 the two MCP actions. `!analytics commands days=7` rose from 0 to 3 to 4 as bridge
-commands completed, because the current `/analytics` run is recorded after its
-reply. At pass 29 `pnpm commands:doctor` reported `Registry 14 roots · 90
+commands completed, because an `/analytics` run is recorded after its reply.
+At pass 29 `pnpm commands:doctor` reported `Registry 14 roots · 90
 subcommands`; after pass 30's `/config` it reported 15 roots / 94 subcommands,
 pass 31's `/export` reached 16 roots / 100 subcommands, and pass 32's `/music`
 brought it to 17 roots / 108 subcommands; pass 34's `/setup` hub brought it to
@@ -680,8 +699,8 @@ this live window. See [pass 32](memory/journal/2026-11-01-pass-32.md).
 
 Context-menu live evidence (2026-11-01, pass 33): one memory-mode process booted,
 found all four menus missing, cleared the global set once and registered **21
-application commands** (17 roots + 4 menus). `pnpm commands:doctor` then read
-Discord's own registry and reported **17 chat-input commands · 108 subcommands ·
+application commands** (17 roots + 4 menus). At pass 33, `pnpm commands:doctor`
+then read Discord's own registry and reported **17 chat-input commands · 108 subcommands ·
 2 user menus · 2 message menus** with no missing, extra or changed entries.
 The MCP bot cannot right-click, so none of the four handlers was invoked live;
 `Report message` opening a real case, `Case history` reading the same rows,
@@ -722,8 +741,8 @@ messages to this user). Open DMs from server members and run /verify start
 again.**; a second `!verify status` still returned no record, proving `start`
 did not mark the member verified. The MCP account is a bot and cannot receive a
 DM or click a button, so the completion path is covered by the command test and
-PGlite member-store test, not claimed live. `commands:doctor` read Discord and
-reported **17 roots / 117 subcommands** with 0 drift.
+PGlite member-store test, not claimed live. At pass 36, `commands:doctor` read
+Discord and reported **17 roots / 117 subcommands** with 0 drift.
 
 Join-gate state evidence (2026-11-01, pass 37): the security coordinator now
 writes a quarantined `members` row only after an enforced join-gate hold. The
@@ -759,8 +778,8 @@ because the history exists; `!form export` attached a **1.5 KB**
 (HTTP 200, 1540 bytes) and parsed: **1 form / 1 submission**, the same
 `why=One clean bot process on the real bridge` and `tz=UTC` answers, state
 `accepted`, reviewer id and note, and a SHA-256 that recomputes to the same
-value. `commands:doctor` read Discord and reported **18 roots / 125 subcommands /
-2 user + 2 message menus** with no drift. Modal input, the panel embed's rendered
+value. At pass 40, `commands:doctor` read Discord and reported **18 roots / 125
+subcommands / 2 user + 2 message menus** with no drift. Modal input, the panel embed's rendered
 text and a human staff member without `ManageGuild` were not exercised live; the
 command and PGlite tests cover them. See
 [pass 40](memory/journal/2026-11-01-pass-40.md).
@@ -979,11 +998,15 @@ live in `invite-tracker.ts`. See [System-Overview](memory/vault/03-Architecture/
 
 ## Contributing and licence
 
-Start with [Contributing](memory/vault/07-OpenSource/Contributing.md), then
-[the module contract](memory/vault/05-Learning/01-the-module-contract.md). Open
-an issue with a small spec before writing a large feature; scope control is what
-keeps this maintainable. The expected checks are `pnpm check` and a memory
-update in the same PR.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), then
+[the module contract](memory/vault/05-Learning/01-the-module-contract.md) and the
+longer [Contributing](memory/vault/07-OpenSource/Contributing.md) notes.
+Governance is [GOVERNANCE.md](GOVERNANCE.md), conduct is
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and vulnerabilities go through
+[SECURITY.md](SECURITY.md) — never a public issue. Open an issue with a small
+spec before writing a large feature; scope control is what keeps this
+maintainable. The expected checks are `pnpm check` and a memory update in the
+same PR.
 
 **No paid dependencies.** Keystone must stay runnable on free/local services:
 public GitHub, Discord, Postgres, Redis, Ollama, PGlite and in-memory adapters.

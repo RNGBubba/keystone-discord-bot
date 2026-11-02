@@ -152,9 +152,9 @@ rate-limited register leaves the app with no commands.
 - P7 `/setup` is a hub: `status`, `module`, `verify`, `import` (preview only) and
   `reset`. It reuses `HealthProbe`, `ConfigPort`, `ExportPort` and the module
   schemas; reset clears one module's settings record, never cases or rows.
-  Live: 9 modules / 2 disabled at the time, music enabled then reset to its
-  default, and `verify` read a live catalog; the module count is now 12 with
-  `/form`, `/event` and `/modmail`.
+  Live at pass 34: 9 modules / 2 disabled, music enabled then reset to its
+  default, and `verify` read a live catalog; the module count later reached 12
+  with `/form`, `/event` and `/modmail`.
 - P7 appeals are a real hub in repo and live-proven: `/appeal open | status`.
   `open` appends the existing `appealed` event; `status` reads `case_events`
   through `CaseStore.listEvents`, so an appeal is still reported after a
@@ -231,9 +231,10 @@ rate-limited register leaves the app with no commands.
   feeds a nested `/mod ban` payload through the real `asInteractionLike` adapter,
   registry and dispatch; it is not a gateway `InteractionCreate` and does not
   replace a human slash check.
-- The rest of P7 (expiry jobs, Components V2 UI/i18n) is open;
-  analytics, in-bot config, `/export`, `/music`, forms, events, modmail, the
-  `/setup`, `/appeal` and `/verify` hubs and the context menus are shipped.
+- The rest of P7 (Components V2 UI/i18n and the parity gaps named below) is
+  open; analytics, in-bot config, `/export`, `/music`, forms, events, modmail,
+  temporary moderation, scheduled delivery, panic mode, goodbye, the `/setup`,
+  `/appeal` and `/verify` hubs and the context menus are shipped.
 - Pass 43 is a truth pass: `pnpm audit:claims` checks documented root,
   subcommand, action, module and test counts, module paths, the `/help
   changelog` pointer and Components V2 claims against the code. `memory:check`
@@ -260,6 +261,20 @@ rate-limited register leaves the app with no commands.
   `WelcomeService.handleLeave` sends text with no role/DM branch. The live
   probe is 13/13, adding the panic snapshot's Postgres round-trip; the Discord
   lockdown calls and `GuildMemberRemove` are adapter-tested only.
+- Pass 47 completed the teaching phase: all 14 lessons are written against the
+  current code and `memory/machine/lessons.json` records each lesson's paths,
+  proof commands and taught counts. `pnpm memory:check` verifies the package
+  scripts and files exist, the required sections and Curriculum links are
+  present, and every taught count matches the machine files. No product
+  behaviour changed; the Docker quickstart now matches the production web guard.
+- Pass 48 made the prose answer to the machine: `memory/machine/claims.json`
+  names the governed documents, and `pnpm memory:check` checks current-tense
+  counts against `commands.json`, the vitest report and the pass ledger. A
+  historical sentence must name its pass; a current one must match. A capability
+  with no code evidence (Components V2, i18n, the Next.js shell) must be marked
+  planned. The drift named by the completion plan is corrected, and the root
+  CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT files plus issue/PR templates
+  were added. No product behaviour changed.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in

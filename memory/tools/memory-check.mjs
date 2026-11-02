@@ -352,9 +352,501 @@ async function checkCurriculum() {
   console.log(`memory: ${files.length} lesson file(s), ${linked.length} linked lesson(s) checked`);
 }
 
+const LESSON_HEADINGS = [
+  "## The problem",
+  "## Our version",
+  "## Exercise",
+  "## What we rejected",
+  "## Check yourself",
+];
+
+/**
+ * Lessons are code, not prose. Each one names real package scripts and real
+ * files; a count is only allowed when a machine source can recompute it. This
+ * keeps a teaching page from rotting after the code it describes moves.
+ */
+async function checkLessons() {
+  const lessonsPath = memoryPath("machine/lessons.json");
+  if (!existsSync(lessonsPath)) return;
+
+  const machine = JSON.parse(await readText(lessonsPath));
+  const project = await readJson("machine/project.json");
+  const commands = await readJson("machine/commands.json");
+  const live = await readJson("machine/live.json");
+  const packageJson = JSON.parse(await readText(path.join(root, "package.json")));
+  const scripts = new Set(Object.keys(packageJson.scripts ?? {}));
+  const learningDir = path.join(vaultDir, "05-Learning");
+  const entries = machine.lessons ?? [];
+  const ids = new Set();
+  const orders = new Set();
+  const sources = {
+    limit: commands.limit,
+    contextMenuLimit: commands.contextMenuLimit,
+    userContextMenus: commands.userContextMenus,
+    messageContextMenus: commands.messageContextMenus,
+    migrations: live.services?.postgres?.migrations?.applied,
+    modules: project.metrics?.modules,
+    roots: commands.roots,
+    subcommands: commands.subcommands,
+    actions: commands.actions,
+    contextMenus: commands.contextMenus,
+    liveChecks: live.checks?.length,
+    lessons: entries.length,
+  };
+
+  check("lessons schemaVersion is 1", machine.schemaVersion === 1, "machine/lessons.json schemaVersion must be 1");
+  check("lessons updatedAt is a date", isDate(machine.updatedAt), "machine/lessons.json updatedAt must be YYYY-MM-DD");
+  check(
+    "lessons target matches the written lessons",
+    Number.isInteger(machine.target) && machine.target === entries.length,
+    `lessons target is ${machine.target}, but ${entries.length} lessons are listed`,
+  );
+
+  const curriculum = await readText(path.join(learningDir, "Curriculum.md"));
+  check(
+    "Curriculum states the lesson count",
+    curriculum.includes(`${machine.target} lessons`),
+    `Curriculum.md does not state the ${machine.target}-lesson count`,
+  );
+
+  const files = (await readdir(learningDir))
+    .filter((file) => /^\d{2}-.+\.md$/.test(file))
+    .map((file) => file.replace(/\.md$/, ""));
+
+  for (const lesson of entries) {
+    const label = `lesson ${lesson.id ?? "<unnamed>"}`;
+    check(`${label} has an id`, Boolean(lesson.id), `${label} is missing an id`);
+    check(`${label} id is unique`, Boolean(lesson.id) && !ids.has(lesson.id), `${label} id is duplicated`);
+    ids.add(lesson.id);
+    check(
+      `${label} order is positive and unique`,
+      Number.isInteger(lesson.order) && lesson.order > 0 && !orders.has(lesson.order),
+      `${label} has an invalid or duplicate order`,
+    );
+    orders.add(lesson.order);
+    check(
+      `${label} path matches its id`,
+      lesson.path === `vault/05-Learning/${lesson.id}.md`,
+      `${label} path is ${lesson.path}, expected vault/05-Learning/${lesson.id}.md`,
+    );
+    check(`${label} file exists`, existsSync(memoryPath(lesson.path ?? "")), `${label} file is missing: ${lesson.path}`);
+    check(
+      `${label} is linked from Curriculum`,
+      curriculum.includes(`[[${lesson.id}]]`),
+      `Curriculum.md does not link [[${lesson.id}]]`,
+    );
+
+    check(
+      `${label} has proof commands`,
+      Array.isArray(lesson.proofCommands) && lesson.proofCommands.length > 0,
+      `${label} has no proofCommands`,
+    );
+    check(
+      `${label} has source files`,
+      Array.isArray(lesson.files) && lesson.files.length > 0,
+      `${label} has no source files`,
+    );
+
+    for (const file of lesson.files ?? []) {
+      check(`${label} source ${file} exists`, existsSync(path.join(root, file)), `${label} source does not exist: ${file}`);
+    }
+
+    if (!existsSync(memoryPath(lesson.path ?? ""))) continue;
+    const text = await readText(memoryPath(lesson.path));
+    for (const heading of LESSON_HEADINGS) {
+      check(`${label} has "${heading}"`, text.includes(heading), `${lesson.path} is missing the "${heading}" section`);
+    }
+
+    for (const command of lesson.proofCommands ?? []) {
+      check(`${label} teaches its proof command`, text.includes(command), `${lesson.path} does not contain the proof command "${command}"`);
+      const parts = String(command).trim().split(/\s+/);
+      check(`${label} proof command starts with pnpm`, parts[0] === "pnpm", `invalid proof command: ${command}`);
+      const script = parts[1];
+      check(
+        `${label} proof command ${script} is a package script`,
+        Boolean(script) && (scripts.has(script) || script === "vitest"),
+        `proof command uses unknown package script: ${command}`,
+      );
+      const args = parts.slice(2);
+      if (args[0] === "--") args.shift();
+      for (const arg of args) {
+        if (arg.includes("/") || arg.includes("\\")) {
+          check(
+            `${label} proof path ${arg} exists`,
+            existsSync(path.join(root, arg)),
+            `proof command path does not exist: ${arg}`,
+          );
+        }
+      }
+    }
+
+    for (const fact of lesson.facts ?? []) {
+      const actual = sources[fact.source];
+      const match = String(fact.text ?? "").match(/(\d[\d,]*)/);
+      check(
+        `${label} fact ${fact.text} has a known source`,
+        actual !== undefined && Number.isFinite(actual),
+        `${label} fact uses unknown source ${fact.source}`,
+      );
+      check(
+        `${label} fact ${fact.text} matches ${fact.source}`,
+        Boolean(match) && Number(match[1].replaceAll(",", "")) === actual,
+        `${label} says "${fact.text}" but ${fact.source} is ${actual}`,
+      );
+      check(
+        `${label} fact ${fact.text} is taught`,
+        text.includes(fact.text),
+        `${lesson.path} does not contain the fact "${fact.text}"`,
+      );
+    }
+  }
+
+  for (const file of files) {
+    check(
+      `written lesson ${file} is in machine/lessons.json`,
+      ids.has(file),
+      `05-Learning/${file}.md exists but machine/lessons.json does not list it`,
+    );
+  }
+
+  const ordered = [...entries].sort((a, b) => a.order - b.order);
+  check(
+    "lesson order has no gaps",
+    ordered.every((lesson, index) => lesson.order === index + 1),
+    "lesson order must be 1..n with no gaps",
+  );
+
+  console.log(`memory: ${entries.length} lessons checked against code, commands and facts`);
+}
+
+/**
+ * Prose is memory too.
+ *
+ * Links and schemas can be perfect while a sentence says "18 roots" beside a
+ * registry with 20. This pass scans the documents that speak in the present
+ * tense and makes every count answer to the same machine files the bot reads.
+ * A historical sentence is allowed to be wrong about today when it names the
+ * pass it describes; a sentence with "now" or "current" in it never is.
+ */
+const COUNT_FACTS = {
+  roots: "commands.json roots",
+  subcommands: "commands.json subcommands",
+  actions: "commands.json actions",
+  contextMenus: "commands.json contextMenus",
+  modules: "project.metrics.modules",
+  tests: "test-report.json numTotalTests",
+  files: "test-report.json testResults.length",
+  passes: "passes.json passes.length",
+};
+
+// Only sentences that claim the global ledger are governed. A module page may
+// legitimately say "3 roots" about its own share of the tree; that is not a
+// contradiction. The phrasing below is what the live ledger and the budget use.
+const COUNT_RULES = [
+  { key: "roots", label: "root(s)", regex: /(\d[\d,]*)\s*\/\s*100\s+roots?\b/gi },
+  { key: "roots", label: "root(s)", regex: /(\d[\d,]*)\s+(?:global\s+)?command\s+roots?\b/gi },
+  { key: "roots", label: "root(s)", regex: /\bRegistry\s+(\d[\d,]*)\s+roots?\b/gi },
+  { key: "roots", label: "root(s)", regex: /(\d[\d,]*)\s+roots?\s*(?:\/|·|\|)\s*\d[\d,]*\s+subcommands?/gi },
+  {
+    key: "roots",
+    label: "root(s)",
+    regex: /\b(?:ledger|registry|budget)\b[^.\n]{0,30}(?<![\d,])(\d[\d,]*)\s+roots?\b/gi,
+  },
+  {
+    key: "subcommands",
+    label: "subcommand(s)",
+    regex: /(\d[\d,]*)\s+(?:real\s+)?subcommands?\b/gi,
+    requires: /\b(?:ledger|registry|budget|roots?|actions?|doctor|total)\b/i,
+  },
+  {
+    key: "actions",
+    label: "action(s)",
+    regex: /(\d[\d,]*)\s+(?:total\s+)?actions?\b/gi,
+    requires: /\b(?:ledger|registry|budget|subcommands?|total|doctor)\b/i,
+  },
+  {
+    key: "contextMenus",
+    label: "context menu(s)",
+    regex: /(?<![\w])(\d[\d,]*)\s+context\s+menus?\b/gi,
+    requires: /\b(?:budget|ledger|registry|doctor|total)\b/i,
+  },
+  {
+    key: "modules",
+    label: "module(s)",
+    regex: /(\d[\d,]*)\s+modules?\b/gi,
+    requires: /\b(?:registered|total|ledger|all|modules,|catalog)\b/i,
+  },
+  { key: "passes", label: "pass(es)", regex: /(\d[\d,]*)\s+passes?\b/gi },
+  { key: "suite", label: "full test suite", regex: /(\d[\d,]*)\s+tests?\s+(?:in|across)\s+(\d[\d,]*)\s+files?/gi },
+  { key: "suite", label: "full test suite", regex: /(\d[\d,]*)\s+tests?\s*\/\s*(\d[\d,]*)\s+files?/gi },
+  {
+    key: "suite",
+    label: "full test suite",
+    regex: /[Tt]ests?\s+(?:are|remain|:)\s*\**\s*(\d[\d,]*)\s*\/\s*(\d[\d,]*)\s+files?/gi,
+  },
+];
+
+const PROSE_CURRENT = /(?<!then-)\b(?:now|current|currently|today|as of)\b/i;
+const PROSE_HISTORY =
+  /\b(?:at pass|in pass|before pass|after pass|since pass|pass[- ]?\d+|was|were|had|formerly|previously|brought|reached|became|rose|grew|old ledger|historical|at that pass|at that point|at the time|then-current|live\s+\d{4}-\d{2}-\d{2})\b/i;
+
+function parseCount(value) {
+  return Number(String(value).replaceAll(",", ""));
+}
+
+async function capabilityHasCode(capability) {
+  for (const evidence of capability.evidence ?? []) {
+    if (evidence.type === "path") {
+      if (existsSync(path.join(root, evidence.path))) return true;
+    } else if (evidence.type === "contains") {
+      const file = path.join(root, evidence.path);
+      if (existsSync(file) && (await readText(file)).includes(evidence.text)) return true;
+    }
+  }
+  return false;
+}
+
+async function checkProseClaims() {
+  const claimsPath = memoryPath("machine/claims.json");
+  check("machine/claims.json exists", existsSync(claimsPath), "machine/claims.json is missing; prose is not governed");
+  if (!existsSync(claimsPath)) return;
+
+  const claims = JSON.parse(await readText(claimsPath));
+  check("claims schemaVersion is 1", claims.schemaVersion === 1, "machine/claims.json schemaVersion must be 1");
+  check("claims updatedAt is a date", isDate(claims.updatedAt), "machine/claims.json updatedAt must be YYYY-MM-DD");
+  check(
+    "claims govern at least one document",
+    Array.isArray(claims.governed?.files) || Array.isArray(claims.governed?.directories),
+    "machine/claims.json has no governed files or directories",
+  );
+
+  const commands = await readJson("machine/commands.json");
+  const project = await readJson("machine/project.json");
+  const passes = await readJson("machine/passes.json");
+  const reportPath = memoryPath("machine/test-report.json");
+  const report = existsSync(reportPath) ? JSON.parse(await readText(reportPath)) : undefined;
+
+  // The prose points at commands.json, which must point at the same metrics the
+  // registry audit checks. This closes the chain: prose -> commands.json ->
+  // project.metrics -> registry.
+  check(
+    "commands.json roots matches project.metrics.commands",
+    commands.roots === project.metrics?.commands,
+    `commands.json has ${commands.roots} roots; project.metrics.commands is ${project.metrics?.commands}`,
+  );
+  check(
+    "commands.json subcommands matches project.metrics.subcommands",
+    commands.subcommands === project.metrics?.subcommands,
+    `commands.json has ${commands.subcommands} subcommands; project.metrics.subcommands is ${project.metrics?.subcommands}`,
+  );
+  check(
+    "commands.json actions matches project.metrics.actions",
+    commands.actions === project.metrics?.actions,
+    `commands.json has ${commands.actions} actions; project.metrics.actions is ${project.metrics?.actions}`,
+  );
+  check(
+    "commands.json contextMenus matches project.metrics.contextMenus",
+    commands.contextMenus === project.metrics?.contextMenus,
+    `commands.json has ${commands.contextMenus} context menus; project.metrics.contextMenus is ${project.metrics?.contextMenus}`,
+  );
+  check(
+    "project.metrics.modules matches the module list",
+    project.metrics?.modules === (project.modules ?? []).length,
+    `project.metrics.modules is ${project.metrics?.modules}; project.modules has ${(project.modules ?? []).length} entries`,
+  );
+  check(
+    "project.metrics.tests matches the test report",
+    Boolean(report) && project.metrics?.tests === report.numTotalTests,
+    `project.metrics.tests is ${project.metrics?.tests}; the test report says ${report?.numTotalTests ?? "<none>"}`,
+  );
+
+  const facts = {
+    roots: commands.roots,
+    subcommands: commands.subcommands,
+    actions: commands.actions,
+    contextMenus: commands.contextMenus,
+    modules: project.metrics?.modules,
+    tests: report?.numTotalTests,
+    files: report?.testResults?.length,
+    passes: passes.passes?.length,
+  };
+
+  // --- governed documents --------------------------------------------------
+  const governed = claims.governed ?? {};
+  const excluded = new Set(governed.exclude ?? []);
+  const docs = new Set();
+
+  for (const file of governed.files ?? []) {
+    check(`claims governed file ${file} exists`, existsSync(path.join(root, file)), `machine/claims.json governs a missing file: ${file}`);
+    if (existsSync(path.join(root, file))) docs.add(path.join(root, file));
+  }
+  for (const dir of governed.directories ?? []) {
+    const full = path.join(root, dir);
+    check(`claims governed directory ${dir} exists`, existsSync(full), `machine/claims.json governs a missing directory: ${dir}`);
+    if (existsSync(full)) for (const file of await listMarkdown(full)) docs.add(file);
+  }
+
+  const docList = [...docs].filter((file) => !excluded.has(rel(file))).sort();
+  check("claims scan at least one document", docList.length > 0, "machine/claims.json resolves to no documents");
+
+  let countClaims = 0;
+  let capabilityMentions = 0;
+
+  // --- current-tense counts ------------------------------------------------
+  for (const file of docList) {
+    const lines = (await readText(file)).split(/\r?\n/);
+    const paragraphStart = [];
+    let start = 0;
+    for (let index = 0; index < lines.length; index += 1) {
+      if (lines[index].trim() === "") start = index + 1;
+      paragraphStart[index] = start;
+    }
+
+    const seen = new Set();
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const window = [lines[index - 1] ?? "", line, lines[index + 1] ?? ""].join(" ");
+      const heading = /^\s*\*{0,2}Pass[- ]?\d+/i.test(lines[paragraphStart[index]] ?? "");
+      const historical = PROSE_HISTORY.test(window) || heading;
+      if (historical && !PROSE_CURRENT.test(window)) continue;
+
+      for (const rule of COUNT_RULES) {
+        if (rule.requires && !rule.requires.test(window)) continue;
+        for (const match of line.matchAll(rule.regex)) {
+          const raw = match[1];
+          if (raw === undefined) continue;
+          const value = parseCount(raw);
+          if (rule.key === "roots" && value === 100) continue;
+          if (rule.key === "roots" && /for this module|of Discord's|this module|global roots \(|per module/i.test(window)) continue;
+          // A command-level test run is not the full-suite claim.
+          if (rule.key === "suite" && /vitest run|modules\//i.test(line)) continue;
+
+          const id = `${index}:${match.index}:${rule.key}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          countClaims += 1;
+
+          if (rule.key === "suite") {
+            const files = parseCount(match[2] ?? "0");
+            check(
+              `${rel(file)}:${index + 1} full-suite test claim is ${value} / ${files}`,
+              value === facts.tests && files === facts.files,
+              `${rel(file)}:${index + 1} says ${value} tests in ${files} files, but the runner reports ${facts.tests} in ${facts.files}`,
+            );
+            continue;
+          }
+
+          const expected = facts[rule.key];
+          if (expected === undefined) continue;
+          check(
+            `${rel(file)}:${index + 1} ${rule.label} claim is ${value}`,
+            value === expected,
+            `${rel(file)}:${index + 1} says ${value} ${rule.label}, but ${COUNT_FACTS[rule.key]} is ${expected}`,
+          );
+        }
+      }
+    }
+  }
+
+  // --- capabilities with no code behind them -------------------------------
+  let capabilityIds = new Set();
+  for (const capability of claims.capabilities ?? []) {
+    const label = `capability ${capability.id ?? "<unnamed>"}`;
+    check(`${label} has an id`, Boolean(capability.id), "a capability in machine/claims.json has no id");
+    check(`${label} id is unique`, Boolean(capability.id) && !capabilityIds.has(capability.id), `${label} id is duplicated`);
+    capabilityIds.add(capability.id);
+    check(`${label} has a label`, typeof capability.label === "string" && capability.label.length > 0, `${label} has no label`);
+    check(
+      `${label} has evidence probes`,
+      Array.isArray(capability.evidence) && capability.evidence.length > 0,
+      `${label} has no evidence probes`,
+    );
+
+    let claimRegex;
+    let markerRegex;
+    try {
+      claimRegex = new RegExp(capability.claim, "i");
+      check(`${label} claim is a valid pattern`, true);
+    } catch {
+      check(`${label} claim is a valid pattern`, false, `${label} claim is not a valid regular expression`);
+      continue;
+    }
+    try {
+      markerRegex = new RegExp(capability.allowedMarker, "i");
+      check(`${label} allowedMarker is a valid pattern`, true);
+    } catch {
+      check(`${label} allowedMarker is a valid pattern`, false, `${label} allowedMarker is not a valid regular expression`);
+      continue;
+    }
+
+    for (const evidence of capability.evidence ?? []) {
+      if (evidence.type === "contains") {
+        check(
+          `${label} evidence file ${evidence.path} exists`,
+          existsSync(path.join(root, evidence.path)),
+          `${label} evidence file does not exist: ${evidence.path}`,
+        );
+      }
+    }
+
+    if (await capabilityHasCode(capability)) continue;
+
+    for (const file of docList) {
+      const lines = (await readText(file)).split(/\r?\n/);
+      for (let index = 0; index < lines.length; index += 1) {
+        if (!claimRegex.test(lines[index])) continue;
+        if (PROSE_HISTORY.test([lines[index - 1] ?? "", lines[index], lines[index + 1] ?? ""].join(" ")) && !PROSE_CURRENT.test(lines[index])) {
+          // A journal-style sentence about a past decision is not a claim that
+          // the capability exists today.
+          continue;
+        }
+        capabilityMentions += 1;
+        const context = [lines[index - 1] ?? "", lines[index], lines[index + 1] ?? ""].join(" ");
+        check(
+          `${rel(file)}:${index + 1} marks ${capability.label} as future work`,
+          markerRegex.test(context),
+          `${rel(file)}:${index + 1} mentions ${capability.label} without a planned/future marker, and no code evidence exists`,
+        );
+      }
+    }
+  }
+
+  // --- environment prose ---------------------------------------------------
+  const live = await readJson("machine/live.json");
+  if (live.services?.postgres?.reachable) {
+    const stoppedClaim = /compose[^.\n]{0,80}(?:not started|not running)|live window is memory mode|DATABASE_URL: ECONNREFUSED|REDIS_URL: ECONNREFUSED/i;
+    for (const file of docList) {
+      const lines = (await readText(file)).split(/\r?\n/);
+      for (let index = 0; index < lines.length; index += 1) {
+        if (!stoppedClaim.test(lines[index])) continue;
+        const window = [lines[index - 1] ?? "", lines[index], lines[index + 1] ?? ""].join(" ");
+        if (PROSE_HISTORY.test(window) && !PROSE_CURRENT.test(window)) continue;
+        check(
+          `${rel(file)}:${index + 1} does not call live services stopped`,
+          false,
+          `${rel(file)}:${index + 1} says Postgres/Redis are stopped, but machine/live.json records them reachable`,
+        );
+      }
+    }
+  }
+
+  console.log(
+    `memory: ${countClaims} prose count claim(s) and ${capabilityMentions} capability mention(s) checked against machine truth`,
+  );
+}
+
 async function checkLocalLinks() {
   const files = await listMarkdown(vaultDir);
-  const rootDocs = [path.join(root, "README.md"), path.join(root, "AGENTS.md")].filter((file) => existsSync(file));
+  const rootDocs = [
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "GOVERNANCE.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+  ]
+    .map((file) => path.join(root, file))
+    .filter((file) => existsSync(file));
   let count = 0;
 
   for (const file of [...files, ...rootDocs]) {
@@ -588,6 +1080,8 @@ async function main() {
   await checkDecisions();
   await checkGenerated();
   await checkCurriculum();
+  await checkLessons();
+  await checkProseClaims();
   await checkLocalLinks();
   await checkVaultLinks();
 

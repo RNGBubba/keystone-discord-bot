@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-02",
+  "target": 14,
+  "lessons": [
+    {
+      "id": "01-the-module-contract",
+      "order": 1,
+      "path": "vault/05-Learning/01-the-module-contract.md",
+      "files": [
+        "packages/kernel/src/dispatch.ts",
+        "packages/kernel/src/registry.ts",
+        "modules/diagnostics/src/manifest.ts"
+      ],
+      "proofCommands": ["pnpm check"]
+    },
+    {
+      "id": "02-guards-and-permissions",
+      "order": 2,
+      "path": "vault/05-Learning/02-guards-and-permissions.md",
+      "files": [
+        "packages/kernel/src/guards.ts",
+        "packages/kernel/src/dispatch.ts",
+        "modules/moderation/src/commands/mod.ts"
+      ],
+      "proofCommands": [
+        "pnpm test -- packages/kernel/src/dispatch.test.ts",
+        "pnpm test -- modules/moderation/src/mod.test.ts"
+      ]
+    },
+    {
+      "id": "03-settings-that-cannot-corrupt",
+      "order": 3,
+      "path": "vault/05-Learning/03-settings-that-cannot-corrupt.md",
+      "files": [
+        "modules/community/src/settings.ts",
+        "packages/kernel/src/settings.ts"
+      ],
+      "proofCommands": ["pnpm test -- packages/kernel/src/settings.test.ts"]
+    },
+    {
+      "id": "04-tests-without-a-token",
+      "order": 4,
+      "path": "vault/05-Learning/04-tests-without-a-token.md",
+      "files": [
+        "packages/testing/src/index.ts",
+        "packages/queue/src/index.ts",
+        "packages/kernel/src/idempotency.ts"
+      ],
+      "proofCommands": ["pnpm test -- modules/moderation/src/mod.test.ts"]
+    },
+    {
+      "id": "05-cases-and-evidence",
+      "order": 5,
+      "path": "vault/05-Learning/05-cases-and-evidence.md",
+      "files": [
+        "modules/moderation/src/cases.ts",
+        "packages/db/src/case-store.ts",
+        "modules/moderation/src/format.ts"
+      ],
+      "proofCommands": ["pnpm test -- packages/db/src/cases.test.ts"]
+    },
+    {
+      "id": "06-subcommands-and-the-budget",
+      "order": 6,
+      "path": "vault/05-Learning/06-subcommands-and-the-budget.md",
+      "files": [
+        "packages/kernel/src/budget.ts",
+        "modules/moderation/src/commands/mod.ts",
+        "scripts/commands-doctor.ts"
+      ],
+      "proofCommands": ["pnpm commands:catalog"],
+      "facts": [
+        { "text": "100 global roots", "source": "limit" },
+        { "text": "15 user", "source": "contextMenuLimit" },
+        { "text": "15 message", "source": "contextMenuLimit" }
+      ]
+    },
+    {
+      "id": "07-jobs-and-idempotency",
+      "order": 7,
+      "path": "vault/05-Learning/07-jobs-and-idempotency.md",
+      "files": [
+        "packages/queue/src/index.ts",
+        "packages/kernel/src/idempotency.ts",
+        "packages/db/src/idempotency.ts"
+      ],
+      "proofCommands": ["pnpm test -- packages/queue/src/queue.test.ts"]
+    },
+    {
+      "id": "08-the-bot-side-timer",
+      "order": 8,
+      "path": "vault/05-Learning/08-the-bot-side-timer.md",
+      "files": [
+        "apps/bot/src/timers.ts",
+        "modules/moderation/src/temporary.ts",
+        "apps/bot/src/runtime.ts"
+      ],
+      "proofCommands": ["pnpm test -- modules/moderation/src/temporary.test.ts"]
+    },
+    {
+      "id": "09-memory-that-checks-itself",
+      "order": 9,
+      "path": "vault/05-Learning/09-memory-that-checks-itself.md",
+      "files": [
+    "memory/tools/memory-check.mjs",
+    "memory/machine/claims.json",
+    "scripts/audit-claims.ts",
+    "packages/db/src/migrator.ts"
+      ],
+      "proofCommands": ["pnpm memory:check"]
+    },
+    {
+      "id": "10-the-live-window",
+      "order": 10,
+      "path": "vault/05-Learning/10-the-live-window.md",
+      "files": [
+        "scripts/live-probe.ts",
+        "compose.yaml",
+        "memory/machine/live.json"
+      ],
+      "proofCommands": ["pnpm probe:live"],
+      "facts": [
+        { "text": "14 migrations", "source": "migrations" },
+        { "text": "13 live checks", "source": "liveChecks" }
+      ]
+    },
+    {
+      "id": "11-panic-mode",
+      "order": 11,
+      "path": "vault/05-Learning/11-panic-mode.md",
+      "files": [
+        "modules/moderation/src/panic.ts",
+        "apps/bot/src/moderation-actions.ts",
+        "modules/moderation/src/security.test.ts"
+      ],
+      "proofCommands": ["pnpm test -- modules/moderation/src/panic.test.ts apps/bot/src/moderation-actions.test.ts"]
+    },
+    {
+      "id": "12-goodbye",
+      "order": 12,
+      "path": "vault/05-Learning/12-goodbye.md",
+      "files": [
+        "apps/bot/src/community-events.ts",
+        "modules/community/src/settings.ts",
+        "apps/bot/src/community-events.test.ts"
+      ],
+      "proofCommands": ["pnpm test -- modules/community/src/community.test.ts modules/community/src/commands.test.ts apps/bot/src/community-events.test.ts"]
+    },
+    {
+      "id": "13-portability-and-receipts",
+      "order": 13,
+      "path": "vault/05-Learning/13-portability-and-receipts.md",
+      "files": [
+        "packages/importer/src/service.ts",
+        "packages/db/src/portability-store.ts",
+        "scripts/live-probe.ts"
+      ],
+      "proofCommands": ["pnpm test -- packages/db/src/portability.test.ts"]
+    },
+    {
+      "id": "14-self-host-quickstart",
+      "order": 14,
+      "path": "vault/05-Learning/14-self-host-quickstart.md",
+      "files": [
+        "compose.yaml",
+        "scripts/migrate.ts",
+        "packages/config/src/index.ts"
+      ],
+      "proofCommands": ["pnpm db:migrate"],
+      "facts": [{ "text": "12 modules", "source": "modules" }]
+    }
+  ]
+}

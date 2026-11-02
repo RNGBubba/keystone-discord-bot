@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-02",
+  "note": "Prose that answers to machine truth. memory:check scans these documents for current-tense counts and for capability claims with no code behind them. Historical statements are allowed when they name a pass or use past tense; a current marker (now, current, today) is never excused.",
+  "governed": {
+    "files": [
+      "AGENTS.md",
+      "README.md",
+      "CONTRIBUTING.md",
+      "GOVERNANCE.md",
+      "SECURITY.md",
+      "CODE_OF_CONDUCT.md"
+    ],
+    "directories": [
+      "memory/vault/01-Mission",
+      "memory/vault/04-Modules",
+      "memory/vault/06-Operations",
+      "memory/vault/07-OpenSource"
+    ],
+    "exclude": [
+      "memory/vault/01-Mission/Pass-Ledger.md",
+      "memory/vault/01-Mission/Command-Catalog.md"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "components-v2",
+      "label": "Components V2",
+      "claim": "packages/ui|V2 (?:panel|UI|layout|image card)|Components V2 (?:panel|UI|welcome|goodbye|layout)",
+      "allowedMarker": "planned|future|will\\b|not exist|not shipped|is open|stays open|deferred|once\\b|when\\b|later|P7|post-v1|no\\b",
+      "evidence": [
+        { "type": "path", "path": "packages/ui" },
+        { "type": "contains", "path": "apps/bot/src/adapt.ts", "text": "IsComponentsV2" }
+      ]
+    },
+    {
+      "id": "i18n",
+      "label": "i18n",
+      "claim": "\\bi18n\\b",
+      "allowedMarker": "planned|future|will\\b|open|not shipped|deferred|P7|post-v1|once\\b|when\\b|no\\b",
+      "evidence": [{ "type": "path", "path": "packages/i18n" }]
+    },
+    {
+      "id": "nextjs-dashboard",
+      "label": "the Next.js dashboard shell",
+      "claim": "Next\\.js",
+      "allowedMarker": "planned|future|will\\b|open|remaining|P6|P9|not built|no\\b",
+      "evidence": [{ "type": "contains", "path": "package.json", "text": "\"next\":" }]
+    }
+  ]
+}

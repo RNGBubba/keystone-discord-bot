@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-02",
   "phase": "P7",
-  "lastPass": "journal/2026-11-02-pass-46.md",
-  "nextAction": "pass-47 — the remaining P7 interaction gaps and a human gateway proof; the dashboard, Lavalink and i18n phases stay closed",
+  "lastPass": "journal/2026-11-02-pass-48.md",
+  "nextAction": "pass-49 — resume the approved completion plan at P6 capability work; the prose gate is current and deliberately did not start it",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-02"

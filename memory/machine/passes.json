@@ -606,6 +606,36 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-47",
+      "date": "2026-11-02",
+      "phase": "P7",
+      "summary": "Teaching pass: all 14 lessons are written and now machine-checked. memory/machine/lessons.json records each lesson's path, source files, proof commands and taught counts; memory:check verifies the paths and package scripts exist, the five required sections and Curriculum link are present, and every count matches commands.json, live.json or project.json. The README Docker quickstart now matches apps/web/src/runtime.ts: gateway-only hosts run bot + worker, while the default stack needs SESSION_SECRET before the optional web service boots. Lesson 7's doubled heading was fixed. No product behaviour, feature row or test count changed; the live probe remains 13/13.",
+      "journal": "journal/2026-11-02-pass-47.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "471",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "13/13",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
+      "id": "pass-48",
+      "date": "2026-11-02",
+      "phase": "P7",
+      "summary": "Truth gate: memory/machine/claims.json names the documents that speak in the present tense, and memory:check now recomputes roots, subcommands, actions, context menus, modules, tests and passes from the machine files. A current-tense contradiction fails unless the sentence names the pass it describes; a capability claim with no code evidence (Components V2, i18n, the Next.js shell) must be marked planned; a governed page cannot call the live services stopped. The drift named by the completion plan is corrected across README, Status, the module Spec/Status ledger blocks and the stale Docker/expiry notes, and the root CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT files plus issue/PR templates were added. No product behaviour changed; tests remain 471 in 71 files and the live probe remains 13/13.",
+      "journal": "journal/2026-11-02-pass-48.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "471",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "13/13",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

@@ -6,7 +6,7 @@ P7 modmail is in repo and live-proven for its command surface. It is the twelfth
 module and the last root named by the approved plan.
 
 - `/modmail setup | open | reply | close | transcript | stats` is registered
-  through the shared catalog. The ledger is **20 roots / 138 subcommands / 158
+  through the shared catalog. The ledger is **20 roots / 141 subcommands / 161
   actions / 4 context menus**.
 - A thread belongs to the member who opened it. Only the owner or staff may read
   it, reply to it or close it; a foreign thread and a missing thread return the
@@ -30,9 +30,9 @@ pnpm vitest run modules/modmail packages/db/src/modmail-store.test.ts
   ✓ modules/modmail/src/modmail.test.ts (6 tests)
   ✓ packages/db/src/modmail-store.test.ts (4 tests)
 
-pnpm test                          # 435 tests / 65 files
-pnpm budget                        # 20/100 roots · 138 subcommands · 158 actions · 4 context menus
-pnpm commands:doctor               # Registry 20 roots · 138 subcommands · 4 context menus
+pnpm test                          # 471 tests / 71 files
+pnpm budget                        # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
+pnpm commands:doctor               # Registry 20 roots · 141 subcommands · 4 context menus
 ```
 
 Focused coverage:
@@ -63,8 +63,9 @@ against `!modmail stats` reading **2 messages** and **1 thread / 0 active**.
 
 ## Live evidence
 
-`.env` was re-probed before boot. Both services are still unreachable, so the
-window is memory mode and the SQL path is PGlite-only:
+At pass 42 the `.env` probe found both service ports closed, so that window was
+memory mode and the SQL path was PGlite-only. Pass 44 has since opened the SQL
+window and applied all 14 migrations:
 
 ```text
 DATABASE_URL 127.0.0.1:5432  ECONNREFUSED  connect ECONNREFUSED 127.0.0.1:5432
@@ -118,8 +119,8 @@ transcript read reports the same **2 messages** and `archived`; `!modmail stats`
 reads **1 thread / 0 active / 2 messages**. The duplicate close was refused and
 the archived read still reports one transcript, not two. The checksum prefix
 `c3c539706ed70e53…` is the one printed at close, and the module test recomputes
-the full SHA-256 over the archived payload. Because the window is memory mode,
-the durable-row half of that cross-check runs in PGlite
+the full SHA-256 over the archived payload. Because the pass-42 window was
+memory mode, the durable-row half of that cross-check runs in PGlite
 (`packages/db/src/modmail-store.test.ts`), not against a server.
 
 **What the MCP account could not do:** it is a bot, so the thread it opened

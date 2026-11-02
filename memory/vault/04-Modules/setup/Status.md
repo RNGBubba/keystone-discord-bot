@@ -24,9 +24,9 @@ P1 complete; `/config` added in pass 30 and `/export` in pass 31 (2026-11-01).
 ```text
 pnpm typecheck
 pnpm vitest run modules/setup/src   # 27 tests / 3 files
-pnpm test                           # 435 tests / 65 files
-pnpm budget                         # 20/100 roots · 138 subcommands · 158 actions · 4 context menus
-pnpm commands:doctor                # Registry 18 roots · 125 subcommands · 4 context menus
+pnpm test                           # 471 tests / 71 files
+pnpm budget                         # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
+pnpm commands:doctor                # Registry 20 roots · 141 subcommands · 4 context menus
 ```
 
 P1 exit evidence for `/setup`:
@@ -37,9 +37,10 @@ P1 exit evidence for `/setup`:
   asserted; the module enabled state comes from its own settings.
 - A repository spy that throws on `set`/`clear` proves the command never writes.
 - Proven at P1 exit with fixtures and a fake health probe; a live Postgres/Redis
-  run was then outstanding. Pass 44 opened that window: Postgres 16.15, Redis,
-  13/13 migrations and `pnpm probe:live` 9/9, including a settings row that
-  survived a pool close/reopen. See [[06-Operations/Live-Window|Live window]].
+  run was then outstanding. Pass 44 opened that window; since pass 46 it has
+  Postgres 16.15, Redis, 14 migrations and `pnpm probe:live` 13/13, including a
+  settings row that survived a pool close/reopen. See
+  [[06-Operations/Live-Window|Live window]].
 
 Pass 30 evidence for `/config`:
 
@@ -52,8 +53,8 @@ Pass 30 evidence for `/config`:
 - Live in `#ai-chat`: `alert -> delete -> alert` on
   `moderation.automod.links`, read back after each write; `bogus` returned
   `automod.links: Invalid enum value` and the next read still returned `"alert"`.
-- One bot process performed one drift-triggered clear + re-register, and
-  `commands:doctor` reports 15 roots / 94 subcommands including `config`.
+- One bot process performed one drift-triggered clear + re-register; at pass 30
+  `commands:doctor` reported 15 roots / 94 subcommands including `config`.
 
 Pass 31 evidence for `/export`:
 
@@ -105,8 +106,8 @@ it lacks for the rest.
   owning module.
 - Settings changes are not yet in the audit ledger, so `/config set` leaves no
   who-changed-what row. It is visible through `/config get` and `export`.
-- The live run used memory mode because the configured local Postgres/Redis
-  endpoints returned `ECONNREFUSED`; settings reset when the process stops.
+- The pass-30 live run used memory mode because the configured local
+  Postgres/Redis endpoints were closed; pass 44 has since opened them.
 - The MCP cannot invoke slash commands or render embeds, so the live proof is
   the message bridge with plain-text replies; the list and export embeds are
   covered by the command test.

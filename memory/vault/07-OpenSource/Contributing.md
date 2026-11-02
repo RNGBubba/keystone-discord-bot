@@ -1,12 +1,15 @@
 # Contributing
 
+The repo-root [CONTRIBUTING.md](../../../CONTRIBUTING.md) is the short path; this
+page keeps the project's reasoning.
+
 ## Setup
 
 Requires Node 22+ and pnpm 12+.
 
 ```bash
 pnpm install
-pnpm check        # typecheck + tests + budget + memory links
+pnpm check        # typecheck + tests + budget + claims + memory
 pnpm dev          # needs DISCORD_TOKEN; everything else does not
 ```
 

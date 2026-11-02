@@ -8,8 +8,8 @@ unbuilt.
 
 - `/event create | edit | delete | list | rsvp | remind | export` is registered
   through the shared catalog. At pass 41 the ledger was **19 roots / 132
-  subcommands / 151 actions / 4 context menus**; it is **20 roots / 138
-  subcommands / 158 actions / 4 context menus** now.
+  subcommands / 151 actions / 4 context menus**; it is **20 roots / 141
+  subcommands / 161 actions / 4 context menus** after pass 45.
 - The lifecycle is draft → open → closed. `rsvp` is refused outside `open`;
   `remind` is refused on a draft or closed event; existing RSVPs stay readable.
 - `EventStore` is one port. Postgres uses `DrizzleEventStore`; local mode uses
@@ -28,9 +28,9 @@ pnpm vitest run modules/events packages/db/src/event-store.test.ts
   ✓ modules/events/src/events.test.ts (9 tests)
   ✓ packages/db/src/event-store.test.ts (3 tests)
 
-pnpm test                          # 435 tests / 65 files
-pnpm budget                        # 20/100 roots · 138 subcommands · 158 actions · 4 context menus
-pnpm commands:doctor               # Registry 20 roots · 138 subcommands · 4 context menus
+pnpm test                          # 471 tests / 71 files
+pnpm budget                        # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
+pnpm commands:doctor               # Registry 20 roots · 141 subcommands · 4 context menus
 ```
 
 Focused coverage:
@@ -57,13 +57,9 @@ event_rsvps` after a cascade), not the adapter's own read methods.
 
 ## Live evidence
 
-`.env` was re-probed before boot. Both services are still unreachable, so the
-window is memory mode and the SQL path is PGlite-only:
-
-```text
-DATABASE_URL: ECONNREFUSED (localhost:5432)
-REDIS_URL: ECONNREFUSED (localhost:6379)
-```
+At pass 41 the `.env` probe found both service ports closed, so that window was
+memory mode and the SQL path was PGlite-only. Pass 44 has since opened the SQL
+window and applied all 14 migrations.
 
 One bot process (`DATABASE_URL= REDIS_URL= pnpm start`), connected as
 `AI Team#5758` with `"modules":11`; boot found `event` missing, cleared once and

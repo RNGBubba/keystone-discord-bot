@@ -6,7 +6,7 @@ P7 invite tracking is complete in-repo. It is the sixth module and the first P7
 parity slice.
 
 - `/invites` is registered through the shared catalog with `leaderboard`, `stats`
-  and `who`; the command ledger is **20 roots / 138 subcommands** after
+  and `who`; the command ledger is **20 roots / 141 subcommands** after
   `/logging`, `/analytics`, `/config`, `/export`, `/music`, `/setup` and
   `/appeal` landed.
 - Attribution diffs cached invite counters after every join **when a baseline

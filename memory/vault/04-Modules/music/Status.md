@@ -6,8 +6,8 @@ P8 music is in repo and live-proven through the development bridge. It is the
 ninth module and the last named root in the approved v1.0 plan.
 
 - `/music` is registered with `play`, `queue`, `add`, `remove`, `clear`, `skip`,
-  `stop` and `status`. The command ledger is now **20 roots / 138 subcommands /
-  158 actions** (it was 18 / 125 / 143 when `/music` shipped).
+  `stop` and `status`. The command ledger is now **20 roots / 141 subcommands /
+  161 actions** (it was 18 / 125 / 143 when `/music` shipped).
 - The saved queue is **real and durable in SQL mode**: one
   `community_records` row per guild under kind `music_queue`, key `default`.
   The SQL adapter locks the guild row, so the cap holds under concurrent adds.
@@ -47,10 +47,10 @@ The SQL cross-check is the raw query in `music-store.test.ts`, not the adapter's
 own `list()`: it reads `community_records` directly and asserts one row with the
 expected identity and two tracks.
 
-Live evidence (2026-11-01, AI Team#5758, **one** bot process, memory mode). The
-`.env` probe first: `DATABASE_URL` and `REDIS_URL` are set but both ports still
-answer `ECONNREFUSED`, so the live window is memory mode and the SQL adapter is
-PGlite-only this pass.
+Live evidence (2026-11-01, AI Team#5758, **one** bot process, pass-32 memory
+mode). The `.env` probe first: `DATABASE_URL` and `REDIS_URL` were set but both
+ports answered `ECONNREFUSED`, so the pass-32 live window was memory mode and
+the SQL adapter was PGlite-only.
 
 ```text
 !music status
@@ -112,8 +112,9 @@ is the shipped behaviour, not a missing test.
 - **Audio is not played.** A voice/Lavalink client and a configured endpoint are
   the named next dependency; until then the queue is a planning surface. The
   journal says this plainly rather than listing music as working.
-- The live window is memory mode because local Postgres/Redis still refuse
-  connections. The SQL queue is PGlite-proven, not live-proven.
+- The pass-32 live window was memory mode because local Postgres/Redis were
+  closed; pass 44 has since opened them. The SQL queue is PGlite-proven, not
+  live-proven through Discord.
 - No buttons or select menus; only text commands.
 - `queue` shows the first ten tracks. A larger queue is truncated with a count.
 - The MCP reader does not render ephemeral state; replies were captured as
