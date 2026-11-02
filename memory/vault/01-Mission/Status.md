@@ -448,8 +448,10 @@ pipeline in `DEV_GUILD_ID`: `!ping`, `!about`, `!ai status`, `!mod history` and
 `/analytics`, pass 30 added `/config`, pass 31 added `/export` and pass 32 added
 `/music`, pass 34's `/setup` hub, pass 35's `/appeal` hub, pass 36's `/verify`
 hub, pass 40's `/form`, pass 41's `/event` and pass 42's `/modmail`, so Discord's
-fetched shape now reports **20 roots / 141 subcommands** with no missing, extra
-or changed roots.
+fetched shape at pass 42 reported **20 roots / 138 subcommands** with no missing,
+extra or changed roots.
+
+The registry now has 141 subcommands.
 The bridge
 added `!help commands`, `!help browse`, `!help search query=ban`, `!mod history`,
 `!ai status`, `!logging status`, `!logging events`, `!logging retention`,
@@ -494,7 +496,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ```
 pnpm check        exit 0 · typecheck 0 · 471 tests / 71 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 13/13 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
-live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 141 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
+live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected

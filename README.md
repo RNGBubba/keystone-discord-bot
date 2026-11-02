@@ -52,9 +52,9 @@ including
 `/help`’s generated catalog. The dashboard was booted in memory mode and
 exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
-human client is still the next live check. Pass 44 opened the live SQL window:
-Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and Redis, all 14
-migrations are applied, and `pnpm probe:live` is now 13/13 — settings survive a
+human client is still the next live check. Pass 44 opened the live SQL window.
+Since then Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and
+Redis, all 14 migrations are applied, and `pnpm probe:live` is 13/13 — settings survive a
 pool restart, cooldowns are shared through Redis, a BullMQ job runs once with a
 Postgres receipt, a delayed timer fires after its delay, a real case expires
 through `TemporaryActionService`, a reminder/scheduled record delivers once, a
