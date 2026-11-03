@@ -30,15 +30,15 @@ pnpm db:migrate
 pnpm probe:live
 ```
 
-The probe opens the configured Postgres, checks that the 17 migrations are current,
+The probe opens the configured Postgres, checks that the 18 migrations are current,
 writes a settings row, closes the pool, reopens it and reads the row again. It
 uses two Redis clients to prove a cooldown is shared. It runs a BullMQ job twice
 with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 19 live checks against 17
-migrations. The newest six drive real local HTTP on Postgres: the schema form
+into the Live-Window page. The last recorded run is 20 live checks against 18
+migrations. The newest seven drive real local HTTP on Postgres: the schema form
 path (login, session, CSRF, save, reject), the fleet template path (list,
 preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
 guild), the config path (checksummed file export, multipart upload, preview
@@ -50,7 +50,10 @@ ledger rows checked against the API and page, an empty guild, invalid windows
 refused before the store is called), and the session-hardening path (owner
 console 401/403/200, owner revocation, every limited class returning 429 then
 recovering, the rotated cookie replaying as 401, and logout revoking at the
-OAuth port). The numbers are checked against the report, not typed by hand.
+OAuth port), and the token path (a one-shot secret, hash-only storage, the same
+handlers under a bearer, scope and guild refusals, a per-token 429 then recovery,
+revocation, and one audit row per issue/revoke). The numbers are checked against
+the report, not typed by hand.
 
 The evidence levels are intentionally separate:
 

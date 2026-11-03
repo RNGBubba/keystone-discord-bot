@@ -5,7 +5,7 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**133 features** across 17 domains: **111 in repo**, **11 open**, **7 planned**. Live behaviour is marked separately; a green
+**134 features** across 17 domains: **112 in repo**, **11 open**, **7 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
@@ -22,7 +22,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Content | 7 | 6 | 0 | 0 |
 | Music | 4 | 1 | 1 | 0 |
 | AI | 7 | 6 | 1 | 0 |
-| Operations | 16 | 12 | 2 | 2 |
+| Operations | 17 | 13 | 2 | 2 |
 | Portability | 12 | 12 | 0 | 0 |
 | Invites | 3 | 3 | 0 | 0 |
 | Forms and applications | 3 | 3 | 0 | 0 |
@@ -179,7 +179,8 @@ box means the code and its tests exist, not that a live guild has run it.
 | Multi-server fleet | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `apps/web/src/overview.ts`, `apps/web/src/authorization.ts`, `apps/web/src/render.ts`, `memory/vault/03-Architecture/Dashboard.md` · live verified |
 | Config templates | P6 | ✅ in repo | `apps/web/src/templates.ts`, `apps/web/src/templates.test.ts`, `apps/web/src/saved-templates.test.ts`, `apps/web/src/web.test.ts`, `apps/web/src/render.ts`, `packages/kernel/src/saved-templates.ts`, `packages/db/src/config-template-store.ts`, `packages/db/src/config-template-store.test.ts`, `packages/db/src/migrations/0016-config-templates.ts`, `scripts/live-probe.ts` · live verified |
 | Config export, import and drift | P6 | ✅ in repo | `apps/web/src/config-bundle.ts`, `apps/web/src/config-bundle.test.ts`, `apps/web/src/overview.ts`, `apps/web/src/routes/dashboard.ts`, `apps/web/src/render.ts`, `packages/kernel/src/baselines.ts`, `packages/db/src/config-baseline-store.ts`, `packages/db/src/config-baseline-store.test.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
-| Public API / webhooks | P6 | ◐ open | OAuth-session reads and settings writes are built; public token issuance, scopes, per-token rate limits, Idempotency-Key, webhooks and OpenAPI are not. |
+| Scoped API tokens | P6 | ✅ in repo | `packages/kernel/src/api-tokens.ts`, `packages/db/src/api-token-store.ts`, `packages/db/src/migrations/0018-api-tokens.ts`, `packages/db/src/web-store.test.ts`, `apps/web/src/api-tokens.ts`, `apps/web/src/api-tokens.test.ts`, `apps/web/src/openapi.ts`, `apps/web/src/openapi.test.ts`, `apps/web/src/authorization.ts`, `apps/web/src/routes/tokens.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
+| Public API / webhooks | P6 | ◐ open | Session and bearer-token reads/writes, scopes, per-token limits and the generated OpenAPI document are built; webhook subscriptions and delivery, signed payloads and Idempotency-Key replay are not. |
 | i18n | P7 | ⏳ planned | i18next, per-guild locale |
 | Status page | P9 | ⏳ planned | Public incidents |
 

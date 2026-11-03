@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WebSession } from "@keystone/kernel";
+import { DrizzleApiTokenStore } from "./api-token-store";
 import { DrizzleDashboardStore } from "./web-dashboard-store";
 import { DrizzleSessionStore } from "./web-session-store";
 import { createMigratedPglite } from "./testing";
@@ -74,6 +75,51 @@ describe("Drizzle web stores", () => {
       expect(await store.deleteForUser(original.userId)).toBe(1);
       expect(await store.get(next.id)).toBeUndefined();
       expect(await store.get("another-row")).toBeDefined();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("stores a token hash and scopes, scopes reads to one guild and revokes once", async () => {
+    const harness = await createMigratedPglite();
+    try {
+      const store = new DrizzleApiTokenStore(harness.db);
+      const created = await store.create({
+        id: "0f7dbc9c-0000-4000-8000-000000000001",
+        guildId: GUILD,
+        guildName: "Alpha",
+        name: "deploy",
+        tokenHash: "a".repeat(64),
+        scopes: ["guild:read", "analytics:read"],
+        createdBy: "444444444444444444",
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+      expect(created.scopes).toEqual(["guild:read", "analytics:read"]);
+      expect(created.tokenHash).toBe("a".repeat(64));
+
+      await store.create({
+        id: "0f7dbc9c-0000-4000-8000-000000000002",
+        guildId: "222222222222222222",
+        guildName: "Beta",
+        name: "other",
+        tokenHash: "b".repeat(64),
+        scopes: ["guild:read"],
+      });
+
+      expect(await store.findByHash("a".repeat(64))).toMatchObject({ name: "deploy", guildId: GUILD });
+      expect(await store.findByHash("c".repeat(64))).toBeUndefined();
+      expect((await store.list(GUILD)).map((token) => token.name)).toEqual(["deploy"]);
+      expect(await store.get("222222222222222222", created.id)).toBeUndefined();
+
+      const revokedAt = new Date().toISOString();
+      expect(await store.revoke(GUILD, created.id, revokedAt)).toMatchObject({ revokedAt });
+      expect(await store.revoke(GUILD, created.id, revokedAt)).toBeUndefined();
+      // The row is retained so the audit trail can still name the token.
+      const [retained] = await store.list(GUILD);
+      expect(retained).toMatchObject({ id: created.id, revokedAt });
+
+      await store.touch(created.id, revokedAt);
+      expect((await store.get(GUILD, created.id))?.lastUsedAt).toBe(revokedAt);
     } finally {
       await harness.close();
     }

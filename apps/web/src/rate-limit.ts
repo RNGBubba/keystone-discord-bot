@@ -10,7 +10,7 @@ import { HttpError } from "./http-error";
  * inherits the dashboard budget instead of accidentally shipping unlimited.
  */
 
-export type RateLimitClass = "auth" | "dashboard" | "write" | "api";
+export type RateLimitClass = "auth" | "dashboard" | "write" | "api" | "apiToken";
 
 export interface RateLimitPolicy {
   readonly max: number;
@@ -28,6 +28,8 @@ export const DEFAULT_RATE_LIMITS: RateLimitPolicies = {
   write: { max: 30, windowMs: 60_000 },
   // Session-backed API reads and writes.
   api: { max: 60, windowMs: 60_000 },
+  // One bucket per issued token, so one client cannot spend another's budget.
+  apiToken: { max: 60, windowMs: 60_000 },
 };
 
 /** The health check is deliberately exempt: readiness must never be limited. */

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Env } from "@keystone/config";
 import {
+  InMemoryApiTokenStore,
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
@@ -11,6 +12,7 @@ import {
   SettingsService,
   createLogger,
   type AnalyticsStore,
+  type ApiTokenStore,
   type AuditStore,
   type ConfigBaselineStore,
   type DashboardStore,
@@ -21,6 +23,7 @@ import {
 } from "@keystone/kernel";
 import {
   createAnalyticsStore,
+  createApiTokenStore,
   createAuditStore,
   createConfigBaselineStore,
   createDashboardStore,
@@ -32,6 +35,7 @@ import {
 } from "@keystone/db";
 import { modules } from "@keystone/module-catalog";
 import { GuildAccessService } from "./access";
+import { ApiTokenService } from "./api-tokens";
 import { AuthService } from "./auth";
 import { parseSessionSecret, SecretBox } from "./crypto";
 import { DiscordOAuthClient, type DiscordOAuth } from "./oauth";
@@ -79,6 +83,7 @@ export function createWebRuntime(env: Env): WebRuntime {
   let auditStore: AuditStore;
   let baselineStore: ConfigBaselineStore;
   let savedTemplateStore: SavedTemplateStore;
+  let apiTokenStore: ApiTokenStore;
   let analyticsStore: AnalyticsStore | undefined;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
@@ -88,6 +93,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     auditStore = createAuditStore(database);
     baselineStore = createConfigBaselineStore(database);
     savedTemplateStore = createSavedTemplateStore(database);
+    apiTokenStore = createApiTokenStore(database);
     analyticsStore = createAnalyticsStore(database);
     logger.info("web data: postgres");
   } else {
@@ -98,6 +104,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     auditStore = new InMemoryAuditStore();
     baselineStore = new InMemoryConfigBaselineStore();
     savedTemplateStore = new InMemorySavedTemplateStore();
+    apiTokenStore = new InMemoryApiTokenStore();
   }
 
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
@@ -172,6 +179,8 @@ export function createWebRuntime(env: Env): WebRuntime {
     secureCookies,
     databaseMode: database ? "postgres" : "memory",
     rateLimiter: new RateLimiter(DEFAULT_RATE_LIMITS),
+    apiTokens: new ApiTokenService(apiTokenStore),
+    audit: auditStore,
   });
 
   return {

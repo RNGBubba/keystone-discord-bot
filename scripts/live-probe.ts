@@ -19,6 +19,7 @@ import { loadEnv } from "@keystone/config";
 import { ModuleRegistry, SettingsService, createLogger } from "@keystone/kernel";
 import {
   createAnalyticsStore,
+  createApiTokenStore,
   createAuditStore,
   createCaseStore,
   createCommunityStore,
@@ -51,8 +52,9 @@ import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
 import { createWebRuntime } from "../apps/web/src/runtime";
 import { GuildAccessService } from "../apps/web/src/access";
+import { ApiTokenService } from "../apps/web/src/api-tokens";
 import { AuthService } from "../apps/web/src/auth";
-import { SecretBox } from "../apps/web/src/crypto";
+import { SecretBox, sha256 } from "../apps/web/src/crypto";
 import { DashboardService } from "../apps/web/src/overview";
 import { createWebHandler } from "../apps/web/src/server";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "../apps/web/src/rate-limit";
@@ -606,6 +608,7 @@ async function main(): Promise<void> {
     const savedTemplateStore = createSavedTemplateStore(database);
     const analyticsStore = createAnalyticsStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
+    const apiTokens = new ApiTokenService(createApiTokenStore(database));
     const probeOAuth = new WebProbeOAuth();
     let authClock = Date.now();
     const auth = new AuthService({
@@ -640,6 +643,7 @@ async function main(): Promise<void> {
       dashboard: { max: 1_000, windowMs: 60_000 },
       write: { max: 1_000, windowMs: 60_000 },
       api: { max: 1_000, windowMs: 60_000 },
+      apiToken: { max: 1_000, windowMs: 60_000 },
     };
     const serverDeps = {
       auth,
@@ -648,6 +652,8 @@ async function main(): Promise<void> {
       logger,
       secureCookies: false,
       databaseMode: "postgres" as const,
+      apiTokens,
+      audit: auditStore,
     };
     const handler = createWebHandler({
       ...serverDeps,
@@ -1428,6 +1434,220 @@ async function main(): Promise<void> {
         features: ["operations.dashboard-analytics"],
       });
 
+      // --- Scoped API tokens: issue, authorize, limit, revoke -----------------
+      await database.runner.exec(
+        `DELETE FROM api_tokens WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');`,
+      );
+
+      const tokensPath = `/dashboard/guilds/${WEB_GUILD}/tokens`;
+      const tokenListPage = await fetch(`${base}${tokensPath}`, { headers: { cookie } });
+      assert(tokenListPage.status === 200, `the token page returned ${tokenListPage.status}`);
+      const tokenListHtml = await tokenListPage.text();
+      assert(tokenListHtml.includes("No tokens have been issued"), "the empty token page is not honest");
+
+      const tokenForm = new URLSearchParams({
+        csrf,
+        name: "probe automation",
+        expiresInDays: "30",
+      });
+      tokenForm.append("scope", "guild:read");
+      const issuedResponse = await fetch(`${base}${tokensPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: tokenForm.toString(),
+      });
+      assert(issuedResponse.status === 200, `token issue returned ${issuedResponse.status}`);
+      const issuedHtml = await issuedResponse.text();
+      const secret = /<pre>(keystone_[A-Za-z0-9_-]+)<\/pre>/.exec(issuedHtml)?.[1];
+      assert(secret !== undefined, "the issued token secret was not shown once");
+
+      const tokenRows = await database.runner.query<{
+        id: string;
+        token_hash: string;
+        scopes: unknown;
+        last_used_at: Date | null;
+      }>(
+        `SELECT id, token_hash, scopes, last_used_at FROM api_tokens WHERE guild_id = '${WEB_GUILD}'`,
+      );
+      assert(tokenRows.length === 1, `expected one token row, saw ${tokenRows.length}`);
+      const tokenRow = tokenRows[0]!;
+      assert(
+        tokenRow.token_hash === sha256(secret),
+        "the stored token hash does not match the secret",
+      );
+      const plaintextRows = await database.runner.query<{ hits: string }>(
+        `SELECT count(*)::text AS hits FROM api_tokens WHERE token_hash = '${secret.replaceAll("'", "''")}'`,
+      );
+      assert(plaintextRows[0]?.hits === "0", "the plaintext token secret is in the database");
+      assert(!JSON.stringify(tokenRow).includes(secret), "the token row leaked the secret");
+
+      const listedAfterIssue = await fetch(`${base}${tokensPath}`, { headers: { cookie } });
+      const listedHtml = await listedAfterIssue.text();
+      assert(!listedHtml.includes(secret), "the token list repeated the one-time secret");
+      assert(listedHtml.includes("probe automation"), "the issued token is not listed");
+      assert(listedHtml.includes("guild:read"), "the issued token does not show its scope");
+
+      const bearer = { authorization: `Bearer ${secret}` };
+      const anonymousMe = await fetch(`${base}/api/v1/me`);
+      assert(anonymousMe.status === 401, `anonymous /api/v1/me returned ${anonymousMe.status}`);
+      const bogusMe = await fetch(`${base}/api/v1/me`, {
+        headers: { authorization: "Bearer keystone_not-a-real-secret-value" },
+      });
+      assert(bogusMe.status === 401, `a bogus bearer returned ${bogusMe.status}`);
+
+      const tokenIdentity = await fetch(`${base}/api/v1/me`, { headers: bearer });
+      assert(tokenIdentity.status === 200, `token /api/v1/me returned ${tokenIdentity.status}`);
+      const identity = (await tokenIdentity.json()) as {
+        token?: { id: string; guildId: string; scopes: string[] };
+      };
+      assert(identity.token?.id === tokenRow.id, "the token identity names a different row");
+      assert(identity.token?.guildId === WEB_GUILD, "the token identity names a different guild");
+      assert(
+        identity.token?.scopes.length === 1 && identity.token.scopes[0] === "guild:read",
+        "the token identity does not echo its scopes",
+      );
+
+      const tokenOverview = await fetch(`${base}/api/v1/guilds/${WEB_GUILD}/overview`, {
+        headers: bearer,
+      });
+      assert(
+        tokenOverview.status === 200,
+        `the guild:read token could not use the session overview handler (${tokenOverview.status})`,
+      );
+      const tokenGuilds = await fetch(`${base}/api/v1/guilds`, { headers: bearer });
+      assert(tokenGuilds.status === 200, `the token guild list returned ${tokenGuilds.status}`);
+      const tokenGuildList = (await tokenGuilds.json()) as { guilds: { id: string }[] };
+      assert(
+        tokenGuildList.guilds.length === 1 && tokenGuildList.guilds[0]?.id === WEB_GUILD,
+        "the token guild list did not stay inside its guild",
+      );
+
+      const wrongScope = await fetch(`${base}/api/v1/guilds/${WEB_GUILD}/analytics`, {
+        headers: bearer,
+      });
+      assert(wrongScope.status === 403, `a wrong-scope call returned ${wrongScope.status}`);
+      const wrongScopeBody = (await wrongScope.json()) as { error?: { code?: string } };
+      assert(
+        wrongScopeBody.error?.code === "token_scope_forbidden",
+        "the wrong-scope refusal did not name the scope",
+      );
+      const foreignGuild = await fetch(`${base}/api/v1/guilds/${WEB_GUILD_B}/overview`, {
+        headers: bearer,
+      });
+      assert(foreignGuild.status === 403, `a foreign-guild call returned ${foreignGuild.status}`);
+
+      const usedRows = await database.runner.query<{ last_used_at: Date | null }>(
+        `SELECT last_used_at FROM api_tokens WHERE id = '${tokenRow.id}'`,
+      );
+      assert(usedRows[0]?.last_used_at !== null, "the token's first use was not recorded");
+
+      // A tight per-token window on a second handler: 429, then recovery in the
+      // next fixed window without waiting on the wall clock.
+      let tokenClock = Date.now();
+      const tokenLimited = createServer(
+        createWebHandler({
+          ...serverDeps,
+          rateLimiter: new RateLimiter(
+            { ...generousLimits, apiToken: { max: 2, windowMs: 1_500 } },
+            () => tokenClock,
+          ),
+        }),
+      );
+      await new Promise<void>((resolve, reject) => {
+        tokenLimited.once("error", reject);
+        tokenLimited.listen(0, "127.0.0.1", () => resolve());
+      });
+      try {
+        const limitedAddress = tokenLimited.address();
+        assert(
+          limitedAddress !== null && typeof limitedAddress === "object",
+          "the token-limited server has no port",
+        );
+        const limitedBase = `http://127.0.0.1:${limitedAddress.port}`;
+        for (let index = 0; index < 2; index += 1) {
+          assert(
+            (await fetch(`${limitedBase}/api/v1/me`, { headers: bearer })).status === 200,
+            "the per-token limit fired early",
+          );
+        }
+        const limited = await fetch(`${limitedBase}/api/v1/me`, { headers: bearer });
+        assert(limited.status === 429, `a spent per-token window returned ${limited.status}`);
+        assert(limited.headers.get("retry-after") === "2", "the 429 had no Retry-After");
+        tokenClock += 1_500;
+        assert(
+          (await fetch(`${limitedBase}/api/v1/me`, { headers: bearer })).status === 200,
+          "the per-token window did not recover",
+        );
+      } finally {
+        tokenLimited.closeAllConnections();
+        await new Promise<void>((resolve) => tokenLimited.close(() => resolve()));
+      }
+
+      const specResponse = await fetch(`${base}/api/v1/openapi.json`);
+      assert(specResponse.status === 200, `the OpenAPI document returned ${specResponse.status}`);
+      const spec = (await specResponse.json()) as {
+        openapi: string;
+        paths: Record<string, Record<string, { security?: unknown[]; "x-keystone-scopes"?: string[] }>>;
+      };
+      assert(spec.openapi === "3.1.0", `the OpenAPI version is ${spec.openapi}`);
+      const analyticsOperation = spec.paths["/api/v1/guilds/{guildId}/analytics"]?.get;
+      assert(analyticsOperation !== undefined, "the document omits the analytics route");
+      assert(
+        analyticsOperation.security?.length === 2,
+        "the document does not name both principals",
+      );
+      assert(
+        JSON.stringify(analyticsOperation["x-keystone-scopes"]) === JSON.stringify(["analytics:read"]),
+        "the document does not name the route's scope",
+      );
+
+      const revokeResponse = await fetch(`${base}${tokensPath}/${tokenRow.id}/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf }).toString(),
+      });
+      assert(revokeResponse.status === 302, `token revoke returned ${revokeResponse.status}`);
+      assert(
+        (await fetch(`${base}/api/v1/me`, { headers: bearer })).status === 401,
+        "the revoked token still works",
+      );
+      const duplicateRevoke = await fetch(`${base}${tokensPath}/${tokenRow.id}/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf }).toString(),
+      });
+      assert(duplicateRevoke.status === 404, `a second revoke returned ${duplicateRevoke.status}`);
+
+      const tokenAudit = await auditStore.list(WEB_GUILD, 20);
+      const issueRow = tokenAudit.find(
+        (row) => row.action === "api_token.issue" && row.targetId === tokenRow.id,
+      );
+      const revokeRow = tokenAudit.find(
+        (row) => row.action === "api_token.revoke" && row.targetId === tokenRow.id,
+      );
+      assert(issueRow?.actorId === WEB_USER, "the issue audit row has the wrong actor");
+      assert(
+        (issueRow?.data as { source?: string } | undefined)?.source === "dashboard",
+        "the issue audit row has no dashboard source",
+      );
+      assert(revokeRow?.actorId === WEB_USER, "the revoke audit row has the wrong actor");
+      assert(
+        tokenAudit.filter((row) => row.action === "api_token.revoke" && row.targetId === tokenRow.id)
+          .length === 1,
+        "the duplicate revoke wrote a second audit row",
+      );
+
+      record({
+        id: "web-api-tokens",
+        status: "pass",
+        detail:
+          "real local HTTP on Postgres: an owner issued a guild:read token from the dashboard, the secret was shown once and only its SHA-256 hash reached Postgres; the token authorized the existing overview and guild-list handlers and returned its own identity at /api/v1/me while a foreign-guild call and a wrong-scope analytics call were 403 and anonymous/bogus bearers were 401; the token's first use was stamped; a tight per-token window returned 429 + Retry-After and recovered in the next window; revoke then returned 401, a second revoke wrote no row and exactly one api_token.issue and one api_token.revoke dashboard audit row named the owner; /api/v1/openapi.json was served from the route table. OAuth exchange used a fake port",
+        features: ["operations.scoped-api-tokens"],
+      });
+
       // --- Session hardening: owners, limits, rotation and revocation ---------
       probeOAuth.userId = WEB_NORMAL_USER;
       const normal = await signIn();
@@ -1480,6 +1700,7 @@ async function main(): Promise<void> {
         dashboard: { max: 2, windowMs: 1_500 },
         write: { max: 2, windowMs: 1_500 },
         api: { max: 2, windowMs: 1_500 },
+        apiToken: { max: 2, windowMs: 1_500 },
       };
       const limited = createServer(
         createWebHandler({
@@ -1655,6 +1876,7 @@ async function main(): Promise<void> {
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM web_sessions WHERE user_id IN ('${WEB_USER}', '${WEB_NORMAL_USER}');
+    DELETE FROM api_tokens WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM job_receipts
       WHERE idempotency_key LIKE 'live-probe-%'
          OR idempotency_key = '${temporaryKey}';

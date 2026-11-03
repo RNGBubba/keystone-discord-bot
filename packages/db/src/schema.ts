@@ -600,6 +600,32 @@ export const backups = pgTable("backups", {
   createdAt: createdAt(),
 });
 
+/**
+ * Scoped public API tokens. Only the SHA-256 hash is stored; the `keystone_…`
+ * secret is shown once at issue time. `guild_id` is the token's ceiling and
+ * `scopes` is the JSON subset of `API_SCOPES` the token may exercise.
+ */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    guildId: text("guild_id").notNull(),
+    guildName: text("guild_name").notNull(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    scopes: jsonValue("scopes").notNull(),
+    createdBy: text("created_by"),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("api_tokens_hash_idx").on(table.tokenHash),
+    index("api_tokens_guild_created_idx").on(table.guildId, table.createdAt),
+  ],
+);
+
 export const webSessions = pgTable(
   "web_sessions",
   {
@@ -627,6 +653,7 @@ export const schema = {
   auditEvents,
   configBaselines,
   configTemplates,
+  apiTokens,
   communityRecords,
   aiDocuments,
   aiUsage,

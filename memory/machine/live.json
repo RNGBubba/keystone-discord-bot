@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T06:13:37.995Z",
+  "generatedAt": "2026-11-03T06:37:34.726Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -12,7 +12,7 @@
       "reachable": true,
       "version": "16.15",
       "migrations": {
-        "applied": 17,
+        "applied": 18,
         "pending": 0,
         "upToDate": true
       }
@@ -25,7 +25,7 @@
     {
       "id": "postgres-migrations",
       "status": "pass",
-      "detail": "17 migrations applied, 0 pending on Postgres 16.15",
+      "detail": "18 migrations applied, 0 pending on Postgres 16.15",
       "features": []
     },
     {
@@ -39,7 +39,7 @@
     {
       "id": "redis-shared-cooldown",
       "status": "pass",
-      "detail": "two clients: first allowed, second refused with 1999ms remaining",
+      "detail": "two clients: first allowed, second refused with 1998ms remaining",
       "features": []
     },
     {
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1234ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1145ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 58b82caee28f… matched after import 9892b24a",
+      "detail": "bundle checksum 96847c5f8304… matched after import 39cbbec7",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -154,6 +154,14 @@
       "detail": "real local HTTP on Postgres: seeded 7 audit rows, 3 cases, 2 invite joins, 3 tickets and 3 command runs in the real tables, then the dashboard API and page matched every aggregate (7 logged events, 2 active cases, 3 cases opened, 2 invite joins/1 retained, 3 command runs/2 ok/1 blocked/200ms avg, 2 open tickets, 120-minute average close and 1 SLA breach); the source table counts matched; an empty guild said no rows instead of inventing activity; days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange itself used a fake port",
       "features": [
         "operations.dashboard-analytics"
+      ]
+    },
+    {
+      "id": "web-api-tokens",
+      "status": "pass",
+      "detail": "real local HTTP on Postgres: an owner issued a guild:read token from the dashboard, the secret was shown once and only its SHA-256 hash reached Postgres; the token authorized the existing overview and guild-list handlers and returned its own identity at /api/v1/me while a foreign-guild call and a wrong-scope analytics call were 403 and anonymous/bogus bearers were 401; the token's first use was stamped; a tight per-token window returned 429 + Retry-After and recovered in the next window; revoke then returned 401, a second revoke wrote no row and exactly one api_token.issue and one api_token.revoke dashboard audit row named the owner; /api/v1/openapi.json was served from the route table. OAuth exchange used a fake port",
+      "features": [
+        "operations.scoped-api-tokens"
       ]
     },
     {

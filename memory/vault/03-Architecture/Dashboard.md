@@ -33,10 +33,16 @@ remains a later option, not a requirement for the P6 settings surface.
 | `GET /dashboard/guilds/:id/config/drift` | session + guild authz | Baseline vs live settings, plus the import form |
 | `POST /dashboard/guilds/:id/config/import/preview` | session + guild authz + CSRF | Validate a multipart bundle, schema-check every module and show the exact diff; no writes |
 | `POST /dashboard/guilds/:id/config/import/apply` | session + guild authz + CSRF | Revalidate the previewed bundle, check its fingerprint, write through `SettingsService`, store the baseline |
-| `GET /api/v1/me` | session | The signed-in user; never a token |
-| `GET /api/v1/guilds` | session | Manageable guilds only |
-| `GET /api/v1/guilds/:id/overview` | session + guild authz | Counts, module settings, latest import |
-| `PATCH /api/v1/guilds/:id/settings/:module` | session + guild authz + CSRF | Update one module; JSON body |
+| `GET /dashboard/guilds/:id/analytics` | session + guild authz | Bounded aggregates over the existing ledgers, with source row counts |
+| `GET /dashboard/guilds/:id/tokens` | session + guild authz | Issue a scoped token; list name, scopes, status, last use and expiry |
+| `POST /dashboard/guilds/:id/tokens` | session + guild authz + CSRF | Mint a `keystone_…` secret; shown once, only its hash stored, audited |
+| `POST /dashboard/guilds/:id/tokens/:id/revoke` | session + guild authz + CSRF | Revoke one active token; a second revoke is `404` and writes no row |
+| `GET /api/v1/openapi.json` | public | OpenAPI 3.1, generated from the operation table the drift test checks |
+| `GET /api/v1/me` | session or bearer | The signed-in user, or the token's own identity |
+| `GET /api/v1/guilds` | session or bearer | Manageable guilds, or the one guild the token is bound to |
+| `GET /api/v1/guilds/:id/overview` | session or bearer + guild authz | Counts, module settings, latest import |
+| `GET /api/v1/guilds/:id/analytics` | session or bearer + guild authz | Aggregates over the existing ledgers; `days=1..90` |
+| `PATCH /api/v1/guilds/:id/settings/:module` | session + guild authz + CSRF, or bearer + `settings:write` | Update one module; JSON body |
 
 Every response carries `X-Content-Type-Options`, `Referrer-Policy`,
 `X-Frame-Options`, `Cross-Origin-Opener-Policy` and a restrictive CSP.
@@ -57,10 +63,40 @@ second, even if Discord is down. The browser session is the thing under our
 control; remote revocation is best effort and is reported, never assumed.
 
 `RateLimiter` is a fixed window keyed by signed-in user or socket address, in
-`auth`, `dashboard`, `write` and `api` classes. `server.ts` applies it after the
-session is resolved and before routing; a refusal is `429` with `Retry-After`.
-`/healthz` is exempt. There is one map because `apps/web` is one process; a
-multi-process deployment would need a shared counter, which is not claimed.
+`auth`, `dashboard`, `write`, `api` and `apiToken` classes. `server.ts` applies
+it after the session is resolved and before routing; a refusal is `429` with
+`Retry-After`. A request carrying an `Authorization` header is bucketed by
+`token:<id>` when the secret is valid, and by socket address when it is not, so
+guessing secrets cannot mint a fresh budget per attempt. `/healthz` is exempt.
+There is one map because `apps/web` is one process; a multi-process deployment
+would need a shared counter, which is not claimed.
+
+## Scoped API tokens
+
+A token is a second principal, not a second API. `request-context.ts` resolves
+`Authorization: Bearer keystone_…` once into `ctx.bearerPresent` and
+`ctx.apiToken`; `authorization.ts` then has one guild check for both principals:
+`authorizeApiGuild` verifies that the token's guild matches the URL, that the
+token carries the route's scope and that the bot is still in the guild, and
+returns the same `DiscordGuild` a session gets. A token write is audited as
+`token:<id>` with source `api`; a session write is audited as the user with
+source `dashboard` or `api` and still needs CSRF, because a cookie can be forged
+by a cross-site form and a bearer header cannot.
+
+The secret is minted in `ApiTokenService.issue`, returned once to the creation
+response and never stored. `api_tokens` (migration 0018) keeps the SHA-256 hash,
+the guild, the scopes, `created_at`, `last_used_at`, `expires_at` and
+`revoked_at`; a revoked row is retained so the audit trail can still name it.
+`scopes` is JSONB filtered through `isApiScope` on read, so an out-of-band edit
+cannot smuggle a scope the code does not know. Issue and revoke go through the
+same `requireSettingsWrite` gate as a settings change and append one
+`api_token.issue` / `api_token.revoke` row with `source: "dashboard"`.
+
+`apps/web/src/openapi.ts` is the operation table; `GET /api/v1/openapi.json`
+renders it. `openapi.test.ts` walks the table and the registered `/api/v1`
+routes in both directions with sample paths, so a new route without an operation
+fails, and it checks that every scoped operation names a real `API_SCOPES` value
+and both security schemes.
 
 `WEB_OWNER_IDS` is the only instance-wide allow-list. Guild Administrator or
 Manage Server never implies it. The owner console exposes deployment mode and a
@@ -260,9 +296,12 @@ as well; the URL id alone is never enough.
 | `apps/web/src/routes/index.ts` | Ordered route table, the shared guild/module patterns and matching |
 | `apps/web/src/routes/auth.ts` | Health, login, callback, logout and landing handlers |
 | `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, saved-template CRUD/preview/apply, config export/import/drift, overview and settings editor/form handlers |
-| `apps/web/src/routes/api.ts` | `/api/v1` reads, settings `PATCH` and the API 404 |
-| `apps/web/src/request-context.ts` | Web dependencies, cookie parsing and the one session lookup per request |
-| `apps/web/src/authorization.ts` | Session check, guild authorization and the one settings-write/CSRF gate |
+| `apps/web/src/routes/api.ts` | `/api/v1` reads, settings `PATCH`, OpenAPI and the API 404 |
+| `apps/web/src/routes/tokens.ts` | Token page, issue and revoke through the guild write gate |
+| `apps/web/src/api-tokens.ts` | Secret minting, hashing, scope rules, bearer resolution and revocation |
+| `apps/web/src/openapi.ts` | The operation table and the OpenAPI 3.1 renderer |
+| `apps/web/src/request-context.ts` | Web dependencies, cookie parsing, one session and one bearer lookup per request |
+| `apps/web/src/authorization.ts` | Session/bearer principal, guild authorization and the one settings-write/CSRF gate |
 | `apps/web/src/http.ts` | Response helpers, security headers, body parsing and JSON/form settings parsing |
 | `apps/web/src/render.ts` | Layout, escaping, the fleet/preview pages and every HTML renderer |
 | `apps/web/src/runtime.ts` | Composition root: Postgres or memory, OAuth or degraded |
@@ -270,12 +309,14 @@ as well; the URL id alone is never enough.
 | `packages/kernel/src/audit.ts` | `AuditStore`, in-memory adapter and the settings diff |
 | `packages/kernel/src/baselines.ts` | `ConfigBaselineStore` and its in-memory adapter |
 | `packages/kernel/src/saved-templates.ts` | `SavedTemplateStore`, in-memory adapter and name-taken error |
+| `packages/kernel/src/api-tokens.ts` | `ApiTokenStore`, scopes, active rules and in-memory adapter |
 | `packages/kernel/src/settings.ts` | Schema validation, optional clear, audit append |
 | `packages/db/src/web-session-store.ts` | Drizzle session adapter |
 | `packages/db/src/web-dashboard-store.ts` | Guild-scoped aggregate read model |
 | `packages/db/src/audit-store.ts` | Drizzle `audit_events` adapter |
 | `packages/db/src/config-baseline-store.ts` | Drizzle `config_baselines` adapter |
 | `packages/db/src/config-template-store.ts` | Drizzle `config_templates` adapter |
+| `packages/db/src/api-token-store.ts` | Drizzle `api_tokens` adapter |
 | `packages/module-catalog` | The one module list shared with the bot |
 
 The kernel owns the contracts; `packages/db` owns SQL; `apps/web` owns HTTP and
@@ -323,8 +364,8 @@ server or a browser.
   session cookie; it does not extend the Discord grant. No refresh token is
   stored until refresh and single-flight exist, so the session re-authenticates
   when its access token expires.
-- Public API tokens (`keystone_…`), scopes, per-token rate limits,
-  `Idempotency-Key`, webhooks and an OpenAPI document.
+- Webhook subscriptions and signed delivery, and `Idempotency-Key` replay on the
+  token principal.
 - Live OAuth against Discord and live Discord token revocation. The local probe
   drives a real Postgres session and asserts revocation at the port, but it fakes
   the OAuth code exchange, so neither is claimed.

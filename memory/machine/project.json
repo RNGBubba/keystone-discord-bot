@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P6",
-  "lastPass": "journal/2026-11-03-pass-54.md",
-  "nextAction": "pass-55 — P6 public API v1: hashed scoped tokens, OpenAPI, Idempotency-Key, webhooks and per-token rate limits. Live Discord OAuth remains blocked without real credentials; P7 interaction UI needs a human client.",
+  "lastPass": "journal/2026-11-03-pass-55.md",
+  "nextAction": "pass-56 — finish the P6 API block with webhooks and Idempotency-Key replay on the token principal just shipped. Live Discord OAuth remains blocked without real credentials; P7 interaction UI needs a human client.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 540
+    "tests": 553
   },
   "modules": [
     {

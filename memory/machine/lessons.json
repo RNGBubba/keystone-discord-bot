@@ -149,11 +149,11 @@
       ],
       "facts": [
         {
-          "text": "17 migrations",
+          "text": "18 migrations",
           "source": "migrations"
         },
         {
-          "text": "19 live checks",
+          "text": "20 live checks",
           "source": "liveChecks"
         }
       ]

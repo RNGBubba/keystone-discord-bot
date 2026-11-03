@@ -1,4 +1,8 @@
-import type { AnalyticsSnapshot, AuditEventRecord } from "@keystone/kernel";
+import type {
+  AnalyticsSnapshot,
+  ApiTokenRecord,
+  AuditEventRecord,
+} from "@keystone/kernel";
 import type {
   DashboardModule,
   DashboardView,
@@ -145,6 +149,10 @@ export function renderOverview(
      <div class="panel"><h2>Analytics</h2>
        <p class="muted">See retained activity for this server: logged events, moderation cases, invite joins, command runs and tickets. Every figure names its source table; nothing here writes.</p>
        <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/analytics">Open analytics</a></p>
+     </div>
+     <div class="panel"><h2>API tokens</h2>
+       <p class="muted">Issue a guild-scoped <code>keystone_…</code> token for automation. The secret is shown once; only its hash is stored, and every route checks the token's guild and scopes.</p>
+       <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/tokens">Manage API tokens</a></p>
      </div>
      <div class="panel"><h2>Portability</h2>${latest}</div>
      <div class="panel"><h2>Config export, import and drift</h2>
@@ -842,6 +850,8 @@ function auditAction(record: AuditEventRecord): string {
   if (record.action === "template.create") return "Template created";
   if (record.action === "template.update") return "Template updated";
   if (record.action === "template.delete") return "Template deleted";
+  if (record.action === "api_token.issue") return "API token issued";
+  if (record.action === "api_token.revoke") return "API token revoked";
   return record.action;
 }
 
@@ -907,6 +917,77 @@ export function renderSettingsEditor(
        </form>
      </div>
      ${renderAudit(options.history ?? [])}
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface ApiTokenRenderOptions {
+  readonly issued?: { readonly secret: string; readonly record: ApiTokenRecord };
+  readonly revoked?: boolean;
+}
+
+function tokenStatus(record: ApiTokenRecord): string {
+  if (record.revokedAt) return "revoked";
+  if (record.expiresAt && Date.parse(record.expiresAt) <= Date.now()) return "expired";
+  return "active";
+}
+
+export function renderApiTokens(
+  username: string,
+  guild: DiscordGuild,
+  tokens: readonly ApiTokenRecord[],
+  csrfToken: string,
+  options: ApiTokenRenderOptions = {},
+): string {
+  const base = `/dashboard/guilds/${encodePathSegment(guild.id)}`;
+  const issued = options.issued
+    ? `<div class="notice">Token <strong>${escapeHtml(options.issued.record.name)}</strong> created. Copy it now; this is the only time it is shown.</div>
+       <pre>${escapeHtml(options.issued.secret)}</pre>
+       <p class="muted">Only its SHA-256 hash is stored. A lost token must be revoked and reissued.</p>`
+    : "";
+  const revoked = options.revoked
+    ? `<div class="notice">Token revoked. Requests using it now return 401.</div>`
+    : "";
+  const rows = tokens
+    .map((token) => {
+      const status = tokenStatus(token);
+      return `<tr>
+        <td>${escapeHtml(token.name)}</td>
+        <td>${token.scopes.map((scope) => `<code>${escapeHtml(scope)}</code>`).join(" ")}</td>
+        <td>${escapeHtml(status)}</td>
+        <td>${escapeHtml(token.lastUsedAt ?? "never")}</td>
+        <td>${escapeHtml(token.expiresAt ?? "never")}</td>
+        <td>${
+          status === "active"
+            ? `<form method="post" action="${base}/tokens/${encodePathSegment(token.id)}/revoke"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Revoke</button></form>`
+            : ""
+        }</td>
+      </tr>`;
+    })
+    .join("");
+  return layout(
+    "API tokens",
+    `<p><a href="${base}">← Back to ${escapeHtml(guild.name)}</a></p>
+     <h1>API tokens</h1>
+     <p class="muted">Tokens are scoped to <strong>${escapeHtml(guild.name)}</strong> and a subset of three API scopes. The secret is shown once; only a SHA-256 hash is stored. Revocation takes effect on the next request.</p>
+     ${issued}${revoked}
+     <div class="panel"><h2>Create a token</h2>
+       <form method="post" action="${base}/tokens">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="token-name">Name</label><input id="token-name" name="name" type="text" maxlength="80" required></div>
+         <fieldset><legend>Scopes</legend>
+           <div class="field check"><input id="scope-guild" name="scope" type="checkbox" value="guild:read" checked><label for="scope-guild">guild:read — guild list, overview and module settings</label></div>
+           <div class="field check"><input id="scope-analytics" name="scope" type="checkbox" value="analytics:read"><label for="scope-analytics">analytics:read — bounded analytics aggregates</label></div>
+           <div class="field check"><input id="scope-settings" name="scope" type="checkbox" value="settings:write"><label for="scope-settings">settings:write — module settings PATCH</label></div>
+         </fieldset>
+         <div class="field"><label for="token-days">Lifetime (days)</label><input id="token-days" name="expiresInDays" type="number" min="1" max="365" value="30" required><small>1–365 days.</small></div>
+         <p><button type="submit">Create token</button></p>
+       </form>
+     </div>
+     <div class="panel"><h2>Issued tokens</h2>
+       ${tokens.length === 0 ? `<p class="muted">No tokens have been issued for this server.</p>` : `<table><thead><tr><th>Name</th><th>Scopes</th><th>Status</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}
+     </div>
      ${logoutForm(csrfToken)}`,
     username,
   );

@@ -136,8 +136,14 @@ before a UI framework was added; settings writes followed through the same gate.
   write and API route classes; and `WEB_OWNER_IDS` for the instance console and
   its sign-out-every-session action (pass 54). Live Discord revocation and live
   OAuth remain open; the probe asserts revocation at the fake port.
-- [ ] Public API v1: hashed scoped tokens, OpenAPI, `Idempotency-Key`, webhooks,
-  per-token rate limits.
+- [x] Scoped API tokens: one `ApiTokenStore` port (in-memory + Drizzle,
+  migration 0018), a `keystone_…` secret shown once and stored only as its
+  SHA-256 hash, a guild- and scope-bound bearer that authorizes the existing
+  `/api/v1` handlers, per-token fixed windows, audited issue/revoke and an
+  OpenAPI 3.1 document generated from a table the route-drift test checks (pass
+  55).
+- [ ] Public API v1 remainder: webhook subscriptions and signed delivery, and
+  `Idempotency-Key` replay on the token principal.
 
 **Exit demo:** two guilds and two users; user A cannot read/write guild B through
 the UI or API. Every setting is editable. A template applies with a preview. A

@@ -3,13 +3,14 @@ import * as api from "./api";
 import * as auth from "./auth";
 import * as dashboard from "./dashboard";
 import * as instance from "./instance";
+import * as tokens from "./tokens";
 
 export type RouteHandler = (
   ctx: RouteContext,
   params: readonly string[],
 ) => Promise<boolean>;
 
-interface Route {
+export interface Route {
   readonly pattern: RegExp;
   readonly methods?: readonly string[];
   readonly handler: RouteHandler;
@@ -18,9 +19,10 @@ interface Route {
 const GUILD_ID = String.raw`(\d{15,20})`;
 const MODULE_ID = String.raw`([a-z][a-z0-9-]{1,31})`;
 const TEMPLATE_ID = String.raw`([0-9a-fA-F-]{36})`;
+const TOKEN_ID = TEMPLATE_ID;
 const exact = (path: string): RegExp => new RegExp(`^${path}$`);
 
-const routes: readonly Route[] = [
+export const ROUTES: readonly Route[] = [
   { pattern: exact("/healthz"), methods: ["GET"], handler: auth.health },
   { pattern: exact("/login"), methods: ["GET"], handler: auth.login },
   { pattern: exact("/auth/callback"), methods: ["GET"], handler: auth.oauthCallback },
@@ -113,6 +115,22 @@ const routes: readonly Route[] = [
     methods: ["POST"],
     handler: dashboard.templateApply,
   },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/tokens`),
+    methods: ["GET"],
+    handler: tokens.tokensPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/tokens`),
+    methods: ["POST"],
+    handler: tokens.tokenCreate,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/tokens/${TOKEN_ID}/revoke`),
+    methods: ["POST"],
+    handler: tokens.tokenRevoke,
+  },
+  { pattern: exact("/api/v1/openapi.json"), methods: ["GET"], handler: api.openapi },
   { pattern: exact("/api/v1/me"), methods: ["GET"], handler: api.me },
   { pattern: exact("/api/v1/guilds"), methods: ["GET"], handler: api.guilds },
   {
@@ -139,7 +157,7 @@ const routes: readonly Route[] = [
  * page does that after preserving its authorization-before-fallthrough order.
  */
 export async function dispatchRoutes(ctx: RouteContext): Promise<boolean> {
-  for (const route of routes) {
+  for (const route of ROUTES) {
     if (route.methods && !route.methods.includes(ctx.method)) continue;
     const match = route.pattern.exec(ctx.path);
     if (!match) continue;

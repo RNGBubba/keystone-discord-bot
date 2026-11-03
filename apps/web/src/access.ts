@@ -57,6 +57,11 @@ export class GuildAccessService {
     return selected;
   }
 
+  /** Bot membership only. Used by token auth, which has no OAuth user grant. */
+  async botInGuild(guildId: string): Promise<boolean> {
+    return this.oauth.botInGuild(guildId);
+  }
+
   async authorize(accessToken: string, guildId: string): Promise<DiscordGuild> {
     const [guild] = await this.authorizeMany(accessToken, [guildId]);
     if (!guild) {

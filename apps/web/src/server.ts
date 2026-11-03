@@ -52,9 +52,15 @@ async function handle(
 
   // Limits run after the session is resolved so a signed-in user is budgeted
   // by account, while an anonymous request falls back to its socket address.
-  const limitClass = rateLimitClassFor(ctx.method, ctx.path);
+  let limitClass = rateLimitClassFor(ctx.method, ctx.path);
   if (limitClass) {
-    const identity = ctx.session ? `user:${ctx.session.userId}` : `ip:${clientAddress(req)}`;
+    let identity = ctx.session ? `user:${ctx.session.userId}` : `ip:${clientAddress(req)}`;
+    if (ctx.bearerPresent && ctx.path.startsWith("/api/")) {
+      // A bearer token gets its own bucket. An unknown token is bucketed by
+      // address so guessing secrets cannot mint a fresh budget per attempt.
+      limitClass = "apiToken";
+      identity = ctx.apiToken ? `token:${ctx.apiToken.id}` : `ip:${clientAddress(req)}`;
+    }
     const decision = deps.rateLimiter.check(limitClass, identity);
     if (!decision.allowed) {
       res.setHeader("Retry-After", String(decision.retryAfterSeconds));

@@ -1965,6 +1965,39 @@
           ]
         },
         {
+          "id": "operations.scoped-api-tokens",
+          "name": "Scoped API tokens",
+          "competitors": {
+            "mee6": "❌",
+            "dyno": "❔",
+            "carl": "❌",
+            "ticket-tool": "💰",
+            "wick-security": "❔"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "One `ApiTokenStore` port with in-memory and Drizzle adapters (migration 0018). A `keystone_…` secret is shown once by the dashboard and only its SHA-256 hash is stored; a token is bound to one guild and a subset of guild:read, analytics:read and settings:write. Bearer authentication feeds the same `/api/v1` handlers as a session, checks guild and scope per route and gives each token its own fixed window. Issue and revoke pass the guild write gate and append one api_token.issue/api_token.revoke dashboard audit row. `/api/v1/openapi.json` is generated from an operation table that a route-drift test checks both ways. Live 2026-11-03 over real local HTTP on Postgres.",
+          "evidence": [
+            "packages/kernel/src/api-tokens.ts",
+            "packages/db/src/api-token-store.ts",
+            "packages/db/src/migrations/0018-api-tokens.ts",
+            "packages/db/src/web-store.test.ts",
+            "apps/web/src/api-tokens.ts",
+            "apps/web/src/api-tokens.test.ts",
+            "apps/web/src/openapi.ts",
+            "apps/web/src/openapi.test.ts",
+            "apps/web/src/authorization.ts",
+            "apps/web/src/routes/tokens.ts",
+            "apps/web/src/web.test.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-api-tokens"
+          ]
+        },
+        {
           "id": "operations.public-api-webhooks",
           "name": "Public API / webhooks",
           "competitors": {
@@ -1977,9 +2010,9 @@
           "phase": "P6",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Read-only /api/v1 exists; scoped tokens, webhooks and idempotency are pending",
+          "note": "The token half is shipped as `operations.scoped-api-tokens`; webhook delivery and `Idempotency-Key` remain",
           "liveVerified": false,
-          "openReason": "OAuth-session reads and settings writes are built; public token issuance, scopes, per-token rate limits, Idempotency-Key, webhooks and OpenAPI are not."
+          "openReason": "Session and bearer-token reads/writes, scopes, per-token limits and the generated OpenAPI document are built; webhook subscriptions and delivery, signed payloads and Idempotency-Key replay are not."
         },
         {
           "id": "operations.i18n",

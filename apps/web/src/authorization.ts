@@ -1,5 +1,5 @@
-import type { WebSession } from "@keystone/kernel";
-import type { WebServerDeps } from "./request-context";
+import type { ApiScope, ApiTokenRecord, WebSession } from "@keystone/kernel";
+import type { RouteContext, WebServerDeps } from "./request-context";
 import { HttpError } from "./http-error";
 import type { DiscordGuild } from "./oauth";
 
@@ -8,9 +8,80 @@ export interface AuthorizedGuild {
   readonly guild: DiscordGuild;
 }
 
+export interface AuthorizedApiGuild {
+  readonly guild: DiscordGuild;
+  readonly session?: WebSession;
+  readonly token?: ApiTokenRecord;
+}
+
 export function requireSession(session: WebSession | undefined): WebSession {
   if (!session) throw new HttpError(401, "Sign in with Discord first.", "unauthenticated");
   return session;
+}
+
+/**
+ * API authentication is one of two principals, not two handlers.
+ *
+ * A bearer token must remain inside its guild and its scopes, and the bot must
+ * still be in the guild. A session falls through to the existing two-check
+ * guild gate. The caller gets the same `DiscordGuild` shape either way, so the
+ * route does not fork its read or write path.
+ */
+export async function authorizeApiGuild(
+  deps: WebServerDeps,
+  ctx: RouteContext,
+  guildId: string,
+  scope: ApiScope,
+): Promise<AuthorizedApiGuild> {
+  if (!ctx.bearerPresent) {
+    const authorized = await authorizeGuild(deps, ctx.session, guildId);
+    return { guild: authorized.guild, session: authorized.session };
+  }
+
+  const token = ctx.apiToken;
+  if (!token) {
+    throw new HttpError(401, "The API token is invalid, expired or revoked.", "token_invalid");
+  }
+  if (token.guildId !== guildId) {
+    throw new HttpError(
+      403,
+      "This token is scoped to a different guild.",
+      "token_guild_forbidden",
+    );
+  }
+  if (!token.scopes.includes(scope)) {
+    throw new HttpError(
+      403,
+      `This token does not include the ${scope} scope.`,
+      "token_scope_forbidden",
+    );
+  }
+  if (!(await deps.access.botInGuild(guildId))) {
+    throw new HttpError(403, "Keystone is not in that guild.", "bot_not_in_guild");
+  }
+  return {
+    guild: {
+      id: guildId,
+      name: token.guildName,
+      icon: null,
+      owner: false,
+      permissions: "0",
+    },
+    token,
+  };
+}
+
+/** A valid token principal, or the signed-in session. */
+export function requireApiPrincipal(
+  ctx: RouteContext,
+): { readonly kind: "token"; readonly token: ApiTokenRecord } | { readonly kind: "session"; readonly session: WebSession } {
+  if (ctx.bearerPresent) {
+    if (!ctx.apiToken) {
+      throw new HttpError(401, "The API token is invalid, expired or revoked.", "token_invalid");
+    }
+    return { kind: "token", token: ctx.apiToken };
+  }
+  return { kind: "session", session: requireSession(ctx.session) };
 }
 
 /**

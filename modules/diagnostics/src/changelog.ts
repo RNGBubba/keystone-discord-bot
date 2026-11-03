@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-55",
+    date: "2026-11-03",
+    summary:
+      "P6 scoped API tokens: issue a guild-bound keystone_… token with guild:read, analytics:read or settings:write, use it on the existing /api/v1 routes, and revoke it; the secret is shown once, only its hash is stored, every call is scope-checked and rate-limited, and the OpenAPI document is generated from the routes.",
+    journal: "memory/journal/2026-11-03-pass-55.md",
+  },
+  {
     pass: "pass-54",
     date: "2026-11-03",
     summary:

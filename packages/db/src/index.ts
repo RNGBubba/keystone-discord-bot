@@ -14,6 +14,7 @@ export * from "./health";
 export * from "./factories";
 export * from "./portability-store";
 export * from "./web-session-store";
+export * from "./api-token-store";
 export * from "./web-dashboard-store";
 export * from "./invite-store";
 export * from "./logging-store";

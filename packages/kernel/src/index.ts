@@ -24,4 +24,5 @@ export * from "./saved-templates";
 export * from "./config";
 export * from "./telemetry";
 export * from "./web";
+export * from "./api-tokens";
 export * from "./dispatch";

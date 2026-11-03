@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  InMemoryApiTokenStore,
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
@@ -19,6 +20,7 @@ import {
 } from "@keystone/kernel";
 import { modules } from "@keystone/module-catalog";
 import { GuildAccessService, canManageGuild } from "./access";
+import { ApiTokenService } from "./api-tokens";
 import { AuthService } from "./auth";
 import { SecretBox, sha256 } from "./crypto";
 import { createWebHandler } from "./server";
@@ -169,6 +171,7 @@ interface Harness {
   baselines: InMemoryConfigBaselineStore;
   savedTemplates: InMemorySavedTemplateStore;
   analytics: FixedAnalyticsStore;
+  apiTokens: ApiTokenService;
   close(): Promise<void>;
 }
 
@@ -189,6 +192,7 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
   const baselines = new InMemoryConfigBaselineStore();
   const savedTemplates = new InMemorySavedTemplateStore();
   const analytics = new FixedAnalyticsStore();
+  const apiTokens = new ApiTokenService(new InMemoryApiTokenStore());
   const auth = new AuthService({
     oauth,
     sessions,
@@ -220,6 +224,8 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     secureCookies: false,
     databaseMode: "memory",
     rateLimiter: options.rateLimiter ?? new RateLimiter(DEFAULT_RATE_LIMITS),
+    apiTokens,
+    audit,
   });
   const server = createServer(handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -235,6 +241,7 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     baselines,
     savedTemplates,
     analytics,
+    apiTokens,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1619,6 +1626,221 @@ describe("P6 session hardening", () => {
       expect((await fetch(`${anonymous.base}/dashboard/instance`)).status).toBe(401);
     } finally {
       await anonymous.close();
+    }
+  });
+});
+
+describe("P6 scoped API tokens", () => {
+  async function issueToken(
+    test: Harness,
+    cookie: string,
+    csrf: string,
+    scopes: readonly string[],
+    guildId = GUILD_A,
+  ): Promise<{ secret: string; id: string; html: string; status: number }> {
+    const form = new URLSearchParams({ csrf, name: "deploy", expiresInDays: "30" });
+    for (const scope of scopes) form.append("scope", scope);
+    const response = await postSettingsForm(
+      test,
+      cookie,
+      `/dashboard/guilds/${guildId}/tokens`,
+      form,
+    );
+    const html = await response.text();
+    const secret = /<pre>(keystone_[A-Za-z0-9_-]+)<\/pre>/.exec(html)?.[1] ?? "";
+    const [record] = await test.apiTokens.list(guildId);
+    return { secret, id: record?.id ?? "", html, status: response.status };
+  }
+
+  it("issues one-show secrets, authorizes the same API handler and audits issue/revoke", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+
+      const anonymous = await fetch(`${test.base}/api/v1/me`);
+      expect(anonymous.status).toBe(401);
+
+      const issued = await issueToken(test, cookie, csrf, ["guild:read"]);
+      expect(issued.status).toBe(200);
+      expect(issued.secret).toMatch(/^keystone_/);
+      expect(issued.html).toContain("only time it is shown");
+
+      // Only the hash is stored; the page and the record never repeat the secret.
+      const [record] = await test.apiTokens.list(GUILD_A);
+      expect(record?.tokenHash).toBe(sha256(issued.secret));
+      expect(JSON.stringify(record)).not.toContain(issued.secret);
+      const page = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/tokens`, {
+        headers: { cookie },
+      });
+      expect(await page.text()).not.toContain(issued.secret);
+
+      expect(
+        (await fetch(`${test.base}/api/v1/me`, {
+          headers: { authorization: `Bearer ${issued.secret}` },
+        }).then((response) => response.json())) as Record<string, unknown>,
+      ).toMatchObject({ token: { guildId: GUILD_A, scopes: ["guild:read"] } });
+
+      const overview = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/overview`, {
+        headers: { authorization: `Bearer ${issued.secret}` },
+      });
+      expect(overview.status).toBe(200);
+
+      const wrongScope = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/analytics`, {
+        headers: { authorization: `Bearer ${issued.secret}` },
+      });
+      expect(wrongScope.status).toBe(403);
+      expect(await wrongScope.json()).toMatchObject({
+        error: { code: "token_scope_forbidden" },
+      });
+
+      const foreignGuild = await fetch(`${test.base}/api/v1/guilds/${GUILD_D}/overview`, {
+        headers: { authorization: `Bearer ${issued.secret}` },
+      });
+      expect(foreignGuild.status).toBe(403);
+      expect(await foreignGuild.json()).toMatchObject({
+        error: { code: "token_guild_forbidden" },
+      });
+
+      const invalid = await fetch(`${test.base}/api/v1/me`, {
+        headers: { authorization: "Bearer keystone_not-a-real-secret-value-here" },
+      });
+      expect(invalid.status).toBe(401);
+
+      expect(test.audit.records(GUILD_A)).toMatchObject([
+        {
+          actorId: USER,
+          action: "api_token.issue",
+          targetId: issued.id,
+          data: { source: "dashboard", name: "deploy", scopes: ["guild:read"] },
+        },
+      ]);
+
+      const revoked = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/tokens/${issued.id}/revoke`,
+        new URLSearchParams({ csrf }),
+      );
+      expect(revoked.status).toBe(302);
+      expect(
+        (await fetch(`${test.base}/api/v1/me`, {
+          headers: { authorization: `Bearer ${issued.secret}` },
+        })).status,
+      ).toBe(401);
+      expect(test.audit.records(GUILD_A).map((entry) => entry.action)).toEqual([
+        "api_token.issue",
+        "api_token.revoke",
+      ]);
+
+      // A second revoke finds no active row and is refused rather than audited twice.
+      const again = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/tokens/${issued.id}/revoke`,
+        new URLSearchParams({ csrf }),
+      );
+      expect(again.status).toBe(404);
+      expect(test.audit.records(GUILD_A)).toHaveLength(2);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("lets a settings:write token use the session write handler without CSRF", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const issued = await issueToken(test, cookie, csrf, ["settings:write"]);
+      expect(issued.status).toBe(200);
+
+      const readOnly = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/overview`, {
+        headers: { authorization: `Bearer ${issued.secret}` },
+      });
+      expect(readOnly.status).toBe(403);
+      expect(await readOnly.json()).toMatchObject({
+        error: { code: "token_scope_forbidden" },
+      });
+
+      const patched = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/settings/ai`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${issued.secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ monthlyBudgetUsd: 5 }),
+      });
+      expect(patched.status).toBe(200);
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 5 });
+      expect(
+        test.audit.records(GUILD_A).find((entry) => entry.action === "settings.update"),
+      ).toMatchObject({
+        actorId: `token:${issued.id}`,
+        action: "settings.update",
+        data: { moduleId: "ai", source: "api" },
+      });
+
+      const invalid = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/settings/ai`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${issued.secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ monthlyBudgetUsd: 5_000 }),
+      });
+      expect(invalid.status).toBe(400);
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 5 });
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("gives each bearer token its own fixed window", async () => {
+    let clock = 1_000_000;
+    const test = await harness({
+      rateLimiter: new RateLimiter(
+        { ...DEFAULT_RATE_LIMITS, apiToken: { max: 2, windowMs: 60_000 } },
+        () => clock,
+      ),
+    });
+    try {
+      const { cookie, csrf } = await login(test);
+      const first = await issueToken(test, cookie, csrf, ["guild:read"]);
+      const second = await issueToken(test, cookie, csrf, ["guild:read"]);
+      const call = (secret: string): Promise<Response> =>
+        fetch(`${test.base}/api/v1/me`, { headers: { authorization: `Bearer ${secret}` } });
+
+      expect((await call(first.secret)).status).toBe(200);
+      expect((await call(first.secret)).status).toBe(200);
+      const limited = await call(first.secret);
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("60");
+      // The other token has its own bucket.
+      expect((await call(second.secret)).status).toBe(200);
+
+      clock += 60_000;
+      expect((await call(first.secret)).status).toBe(200);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("refuses unknown scopes and lifetimes at issuance, before storing a row", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const badScope = await issueToken(test, cookie, csrf, ["guild:admin"]);
+      expect(badScope.status).toBe(400);
+      const badDays = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/tokens`,
+        new URLSearchParams({ csrf, name: "deploy", expiresInDays: "0", scope: "guild:read" }),
+      );
+      expect(badDays.status).toBe(400);
+      expect(await test.apiTokens.list(GUILD_A)).toEqual([]);
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+    } finally {
+      await test.close();
     }
   });
 });

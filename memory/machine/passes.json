@@ -713,6 +713,21 @@
       }
     },
     {
+      "id": "pass-55",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 scoped API tokens: one `ApiTokenStore` port (in-memory + Drizzle, migration 0018) behind a `keystone_…` secret that is shown once and stored only as a SHA-256 hash. A token is bound to one guild and a subset of guild:read, analytics:read and settings:write; `authorizeApiGuild` lets it feed the existing `/api/v1` handlers while checking guild, scope and bot membership, and a session still needs CSRF while a token does not. Issue and revoke use the guild write gate and append one dashboard audit row each. A per-token fixed window (60/min) buckets by token id or address; `/api/v1/openapi.json` is generated from an operation table that a test walks against the route registry in both directions. Tests 553 / 82 files; live probe 20/20, adding web-api-tokens over real local HTTP and Postgres: the secret never reached a column, the token read the existing handlers, foreign-guild and wrong-scope calls were 403, anonymous/bogus bearers 401, the per-token window returned 429 + Retry-After then recovered, revoke returned 401 and audited exactly once.",
+      "journal": "journal/2026-11-03-pass-55.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "553",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "20/20",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
       "id": "pass-54",
       "date": "2026-11-03",
       "phase": "P6",
