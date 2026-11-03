@@ -29,11 +29,12 @@ describe("community context menu", () => {
   it("reads the selected member's real level and XP rows", async () => {
     const { interaction, ctx } = await context();
     await rankCard.execute(ctx);
-    const embed = interaction.lastReply?.embeds?.[0];
-    expect(embed?.title).toBe("<@author-1>");
-    expect(embed?.description).toContain("Level **4**");
-    expect(embed?.description).toContain("**400 XP**");
-    expect(embed?.description).toContain("rank **#1**");
+    const card = JSON.stringify(interaction.lastReply?.v2);
+    expect(card).toContain("<@author-1>");
+    expect(card).toContain("Level **4**");
+    expect(card).toContain("**400 XP**");
+    expect(card).toContain("rank **#1**");
+    expect(interaction.lastReply?.embeds).toBeUndefined();
   });
 
   it("does not send a message or mutate XP", async () => {

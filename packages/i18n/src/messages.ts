@@ -40,6 +40,23 @@ export const en = {
   "form.review.pending": (count: number, key: string, lines: string) =>
     `${count} pending application${count === 1 ? "" : "s"} for \`${key}\`:\n${lines}\nDecide with \`/form review submission:<id> decision:accept|deny\`.`,
 
+  // The rank card, shared by `/rank view` and the user context menu.
+  "rank.line": (level: number, xp: number, rank?: number) =>
+    `Level **${level}** · **${xp} XP**${rank ? ` · rank **#${rank}**` : ""}`,
+  "rank.footer": () => "Rank card · levels are stored XP rows, not an image render.",
+
+  // The ticket panel and the button it posts.
+  "ticket.panel.title": () => "Support tickets",
+  "ticket.panel.description": () =>
+    "Open a private thread with the support team. One ticket per open issue.",
+  "ticket.panel.open": () => "Open a ticket",
+  "ticket.panel.wrongGuild": () => "That panel belongs to another server.",
+  "ticket.open.reply": (channelId: string) => `Ticket opened in <#${channelId}>.`,
+  "ticket.open.subject": () => "Support request",
+  "ticket.open.noChannel": () => "Open a ticket from a server channel.",
+  "ticket.open.tooMany": (count: number, max: number) =>
+    `You already have ${count} open ticket${count === 1 ? "" : "s"} (limit ${max}). Close one before opening another.`,
+
   // Command descriptions. The command name is an invocation identifier and is
   // deliberately not translated; the displayed description is.
   "command.ping.description": () => "Check that Keystone is awake.",

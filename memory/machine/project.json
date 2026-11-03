@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P7",
-  "lastPass": "journal/2026-11-03-pass-59.md",
-  "nextAction": "P7 i18n is in repo as a framework-free packages/i18n: typed keys whose arguments come from the English catalog, setup.locale as the one per-guild locale through the setup schema, Discord command descriptions derived from the same catalog, and an English-then-sentence fallback that never shows a raw key. en and de cover the form panel, its modal/review receipts and the shared component refusals. The rest of P7 is the embeds that have not moved onto packages/ui (rank card, welcome/goodbye, ticket panel) and translating the remaining module copy; a live gateway click, right-click or modal submit still needs a human Discord client. P8 playback needs a Lavalink node, and P9/P10 need outside input.",
+  "lastPass": "journal/2026-11-03-pass-60.md",
+  "nextAction": "P7's remaining community button ids (role, roles select, giveaway, suggestion, poll) still use the old unsigned format and their own listener, and the command replies/descriptions outside the migrated form/community panels are still English. A live gateway click, right-click, modal submit or member join still needs a human Discord client. P8 playback needs a Lavalink node; P9/P10 need outside input.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 620
+    "tests": 623
   },
   "modules": [
     {

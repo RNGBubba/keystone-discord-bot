@@ -50,7 +50,8 @@ describe("community commands", () => {
   it("renders a rank view and a leaderboard", async () => {
     const { ctx, interaction } = context({ action: "view" });
     await rank.execute(ctx);
-    expect(interaction.lastReply?.embeds?.[0]?.description).toContain("Level **0**");
+    expect(JSON.stringify(interaction.lastReply?.v2)).toContain("Level **0**");
+    expect(interaction.lastReply?.embeds).toBeUndefined();
   });
 
   it("requires ManageGuild to configure rewards or a ticket panel", async () => {

@@ -37,6 +37,22 @@ export const de: Catalog = {
   "form.review.pending": (count, key, lines) =>
     `${count} offene Bewerbung${count === 1 ? "" : "en"} für \`${key}\`:\n${lines}\nEntscheide mit \`/form review submission:<id> decision:accept|deny\`.`,
 
+  "rank.line": (level, xp, rank) =>
+    `Level **${level}** · **${xp} XP**${rank ? ` · Rang **#${rank}**` : ""}`,
+  "rank.footer": () =>
+    "Rangkarte · Level sind gespeicherte XP-Zeilen, kein Bild-Rendering.",
+
+  "ticket.panel.title": () => "Support-Tickets",
+  "ticket.panel.description": () =>
+    "Öffne einen privaten Thread mit dem Support-Team. Ein Ticket pro offenem Anliegen.",
+  "ticket.panel.open": () => "Ticket öffnen",
+  "ticket.panel.wrongGuild": () => "Dieses Panel gehört zu einem anderen Server.",
+  "ticket.open.reply": (channelId) => `Ticket in <#${channelId}> geöffnet.`,
+  "ticket.open.subject": () => "Support-Anfrage",
+  "ticket.open.noChannel": () => "Öffne ein Ticket aus einem Server-Kanal.",
+  "ticket.open.tooMany": (count, max) =>
+    `Du hast bereits ${count} offene${count === 1 ? "s" : ""} Ticket${count === 1 ? "" : "s"} (Limit ${max}). Schließe eines, bevor du ein neues öffnest.`,
+
   "command.ping.description": () => "Prüft, ob Keystone erreichbar ist.",
   "command.about.description": () =>
     "Zeigt, was Keystone ist und wie dieser Server eingerichtet ist.",

@@ -231,6 +231,11 @@ async function main(): Promise<void> {
       settings: runtime.settings.forModule("moderation"),
       moderation: runtime.moderation,
     },
+    community: {
+      store: runtime.community.store,
+      actions: runtime.community.actions,
+      settings: runtime.settings.forModule("community"),
+    },
     config: runtime.settings,
     logger: logger.child("components"),
   });

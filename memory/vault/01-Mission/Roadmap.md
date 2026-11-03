@@ -257,10 +257,13 @@ update, with DM/thread relay deferred and named. The ledger is now **20 roots /
 planned names across 14 built roots. Every recorded plan name is registered. The
 rest of this phase is open.
 
-- `packages/ui` (shipped in pass 58): Components V2 budgeter (40 components,
-  ~4,000 text), typed layout primitives, defer-then-edit through the command,
-  and modal Label text inputs. File Upload, Radio and Checkbox builders are not
-  built yet.
+- `packages/ui` (shipped in pass 58; community panels migrated in pass 60):
+  Components V2 budgeter (40 components, ~4,000 text), typed layout primitives,
+  defer-then-edit through the command, and modal Label text inputs. The form
+  panel, the rank card, the ticket panel and the welcome/goodbye greetings use
+  it. File Upload, Radio and Checkbox builders are not built yet, and the older
+  community button ids (`role`, `roles`, `giveaway`, `suggest`, `poll`) still
+  use their own unsigned listener.
 - New domains: role persistence; plus YouTube/Twitch/RSS feeds, join-gate
   expiry, case export and `command_usage` retention. Invites, the link,
   profanity and zalgo filters, auto-responders, analytics and the four context
@@ -278,9 +281,9 @@ rest of this phase is open.
   the English catalog, `setup.locale` as the one per-guild locale through the
   setup schema, Discord command descriptions derived from the same catalog, and
   an English-then-sentence fallback that never shows a raw key. `en` and a
-  hand-written `de` cover the form panel, its component replies and the shared
-  refusals; no machine translation. Translating the remaining modules and
-  migrating the remaining embeds is open.
+  hand-written `de` cover the form panel, the rank card, the ticket panel
+  chrome and the shared refusals; no machine translation. Translating the
+  remaining modules is open.
 - AI invisible features: automod triage, semantic search, summaries; pgvector
   ANN benchmark remains a gate.
 

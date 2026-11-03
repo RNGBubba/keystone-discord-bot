@@ -181,6 +181,11 @@ export interface CommunityMessage {
   readonly content?: string;
   readonly embeds?: import("./types").EmbedPayload[];
   readonly components?: import("./types").ActionRow[];
+  /**
+   * Components V2 layout. Mutually exclusive with `content` and `embeds`;
+   * the Discord adapter sets `MessageFlags.IsComponentsV2` for this shape.
+   */
+  readonly v2?: readonly import("./types").V2Component[];
   readonly ephemeral?: boolean;
   /** Optional mention policy; auto-responders use `{ parse: [] }`. */
   readonly allowedMentions?: { readonly parse: readonly string[] };

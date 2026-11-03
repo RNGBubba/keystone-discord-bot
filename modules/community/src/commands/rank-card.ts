@@ -5,7 +5,9 @@ import {
   requireGuild,
   type CommandContext,
 } from "@keystone/kernel";
+import { guildLocale } from "@keystone/i18n";
 import { LevelingService } from "../progress";
+import { rankPanel } from "../panels";
 import { port, settingsFor } from "./helpers";
 
 /**
@@ -26,16 +28,17 @@ export const rankCard = defineCommand({
     const settings = await settingsFor(ctx);
     const leveling = new LevelingService(store, actions, settings, ctx.now);
     const result = await leveling.rank(guildId, target);
-    const rank = result.rank ? ` · rank **#${result.rank}**` : "";
+    const locale = await guildLocale(ctx.config, guildId);
     await ctx.interaction.reply({
-      embeds: [
+      v2: rankPanel(
         {
-          title: `<@${target}>`,
-          description: `Level **${result.profile.level}** · **${result.profile.xp} XP**${rank}`,
-          color: 0x5865f2,
-          footer: { text: "Rank card · levels are stored XP rows, not an image render." },
+          userId: target,
+          level: result.profile.level,
+          xp: result.profile.xp,
+          rank: result.rank,
         },
-      ],
+        locale,
+      ),
     });
   },
   help: {

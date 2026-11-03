@@ -1,5 +1,6 @@
 import {
   ChannelType,
+  MessageFlags,
   type Client,
   type Guild,
   type TextChannel,
@@ -11,7 +12,7 @@ import type {
   CommunityActionResult,
   CommunityMessage,
 } from "@keystone/kernel";
-import { toComponents } from "./adapt";
+import { toComponents, toV2Components } from "./adapt";
 import { resolveChannel } from "./channels";
 
 /**
@@ -234,6 +235,15 @@ export function createDiscordCommunityActions(client: Client): CommunityActions 
 }
 
 function toPayload(message: CommunityMessage) {
+  if (message.v2) {
+    // V2 is exclusive: Discord rejects a message that also carries content,
+    // embeds or legacy action rows.
+    return {
+      components: toV2Components(message.v2),
+      flags: MessageFlags.IsComponentsV2,
+      allowedMentions: message.allowedMentions,
+    } as never;
+  }
   return {
     content: message.content,
     embeds: message.embeds,

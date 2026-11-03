@@ -6,6 +6,7 @@ import type {
   CommunityStore,
   EmbedPayload,
 } from "@keystone/kernel";
+import { greetingPanel } from "./panels";
 import type { CommunitySettings } from "./settings";
 
 function row(buttons: ActionRow["components"]): ActionRow {
@@ -48,7 +49,7 @@ export class WelcomeService {
     let sent = false;
     if (config.channelId) {
       const result = await this.actions.sendMessage(guildId, config.channelId, {
-        content: text,
+        v2: greetingPanel(text),
       });
       sent = result.ok;
     }
@@ -99,7 +100,9 @@ export class WelcomeService {
       .replaceAll("{user}", `<@${userId}>`)
       .replaceAll("{server}", serverName)
       .slice(0, 1_500);
-    const result = await this.actions.sendMessage(guildId, config.channelId, { content: text });
+    const result = await this.actions.sendMessage(guildId, config.channelId, {
+      v2: greetingPanel(text),
+    });
     return { sent: result.ok };
   }
 

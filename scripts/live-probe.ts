@@ -23,6 +23,8 @@ import {
   createComponentSigner,
   createLogger,
   createSilentLogger,
+  type CommunityActions,
+  type CommunityMessage,
   type ComponentInteractionLike,
   type ModalSpec,
   type ReplyInput,
@@ -57,7 +59,13 @@ import {
 } from "../modules/moderation/src/index";
 import {
   ContentService,
+  LevelingService,
+  TICKET_PANEL_TTL_MS,
+  TicketService,
+  WelcomeService,
   communitySettingsSchema,
+  rankPanel,
+  ticketPanel,
 } from "../modules/community/src/index";
 import { PortabilityService } from "@keystone/importer";
 import { FormService, form, formPanel, formSettingsSchema } from "@keystone/module-forms";
@@ -69,7 +77,7 @@ import {
   resolveMessage,
   t,
 } from "@keystone/i18n";
-import { createFormRouter } from "../apps/bot/src/components";
+import { createComponentRouter } from "../apps/bot/src/components";
 import { asComponentInteraction, buildCommandJson, toV2Components } from "../apps/bot/src/adapt";
 import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
@@ -2475,7 +2483,7 @@ async function main(): Promise<void> {
       "a missing key reached the user as a raw identifier",
     );
 
-    const router: ComponentRouter = createFormRouter({
+    const router: ComponentRouter = createComponentRouter({
       signer,
       forms: formStore,
       formSettings: {
@@ -2485,6 +2493,13 @@ async function main(): Promise<void> {
       moderation: {
         settings: { get: async () => ({}), update: async () => ({}) },
         moderation: {} as never,
+      },
+      // The form block exercises only form routes; the community check below
+      // builds its own router with the real ticket deps.
+      community: {
+        store: {} as never,
+        actions: {} as never,
+        settings: { get: async () => ({}), update: async () => ({}) },
       },
       logger: createSilentLogger(),
       now: () => now,
@@ -2677,6 +2692,304 @@ async function main(): Promise<void> {
     });
   }
 
+  // --- Community panels: rank card, greetings and tickets --------------------
+  {
+    const now = Date.now();
+    const signer = createComponentSigner("live-probe-community-secret");
+    const registry = new ModuleRegistry().registerAll(modules);
+    const settings = new SettingsService(createSettingsRepository(database), registry);
+    await settings.update(
+      GUILD,
+      "setup",
+      { locale: "de" },
+      { actorId: "live-probe-operator", source: "command" },
+    );
+    const german = await guildLocale(settings, GUILD);
+    assert(german === "de", `the community probe locale read back as ${german}`);
+    const germanDispatch = {
+      locale: german,
+      messages: {
+        expired: t("de", "component.expired"),
+        noPermission: t("de", "component.noPermission"),
+        guildOnly: t("de", "component.guildOnly"),
+      },
+    };
+
+    await database.runner.exec(`
+      DELETE FROM tickets WHERE guild_id = '${GUILD}';
+      DELETE FROM levels WHERE guild_id = '${GUILD}';
+      DELETE FROM xp_events WHERE guild_id = '${GUILD}';
+    `);
+    const communityStore = createCommunityStore(database);
+    const communitySettings = communitySettingsSchema.parse({});
+
+    const sent: CommunityMessage[] = [];
+    const communityActions = {
+      async sendMessage(_guildId: string, _channelId: string, message: CommunityMessage) {
+        sent.push(message);
+        return { ok: true, id: `probe-message-${sent.length}` };
+      },
+      async createThread() {
+        return { ok: true, id: "probe-ticket-thread" };
+      },
+      async addRole() {
+        return { ok: true };
+      },
+      async isBot() {
+        return false;
+      },
+    } as unknown as CommunityActions;
+
+    // The rank card renders the values LevelingService just projected, and the
+    // same numbers are read back from Postgres rather than trusted from memory.
+    const leveling = new LevelingService(
+      communityStore,
+      communityActions,
+      communitySettings,
+      () => now,
+      () => 0,
+    );
+    const awarded = await leveling.awardMessageXp(GUILD, "probe-member", "probe-rank-message");
+    assert(awarded.awarded > 0, "the rank probe did not award XP");
+    const ranked = await leveling.rank(GUILD, "probe-member");
+    const [storedLevel] = await database.runner.query<{ xp: string; level: number }>(
+      `SELECT xp::text AS xp, level FROM levels
+        WHERE guild_id = '${GUILD}' AND user_id = 'probe-member'`,
+    );
+    assert(storedLevel !== undefined, "the rank card has no stored level row");
+    assert(
+      Number(storedLevel.xp) === ranked.profile.xp && storedLevel.level === ranked.profile.level,
+      "the rank card values do not match the stored row",
+    );
+    const cardData = {
+      userId: "probe-member",
+      level: ranked.profile.level,
+      xp: ranked.profile.xp,
+      rank: ranked.rank,
+    };
+    const germanCard = JSON.stringify(rankPanel(cardData, german));
+    assert(
+      germanCard.includes(`Level **${cardData.level}**`) &&
+        germanCard.includes(`**${cardData.xp} XP**`) &&
+        germanCard.includes("Rang **#1**") &&
+        germanCard.includes("Rangkarte"),
+      "the German rank card did not render the stored numbers",
+    );
+    const englishCard = JSON.stringify(rankPanel(cardData, "en"));
+    assert(
+      englishCard.includes("rank **#1**") && englishCard.includes("Rank card"),
+      "the English rank card did not render the stored numbers",
+    );
+
+    // Greetings keep the operator's {user}/{server} substitution and now render
+    // through the typed layout instead of a bare content string.
+    const greetings = communitySettingsSchema.parse({
+      welcome: {
+        enabled: true,
+        channelId: "probe-welcome",
+        message: "Welcome {user} to {server}!",
+      },
+      goodbye: {
+        enabled: true,
+        channelId: "probe-goodbye",
+        message: "Goodbye {user} from {server}.",
+      },
+    });
+    const welcome = new WelcomeService(communityActions, greetings, communityStore, () => now);
+    assert(
+      (await welcome.handleJoin(GUILD, "probe-joiner", "Keystone Live")).sent,
+      "the welcome message was not sent",
+    );
+    const welcomeMessage = sent.at(-1);
+    const welcomeText = JSON.stringify(welcomeMessage?.v2);
+    assert(
+      welcomeText.includes("<@probe-joiner>") &&
+        welcomeText.includes("Keystone Live") &&
+        welcomeMessage?.content === undefined,
+      "the welcome substitution did not render through the V2 layout",
+    );
+    assert(
+      (await welcome.handleLeave(GUILD, "probe-leaver", "Keystone Live")).sent,
+      "the goodbye message was not sent",
+    );
+    const goodbyeMessage = sent.at(-1);
+    assert(
+      JSON.stringify(goodbyeMessage?.v2).includes("Goodbye <@probe-leaver> from Keystone Live") &&
+        goodbyeMessage?.content === undefined,
+      "the goodbye substitution did not render through the V2 layout",
+    );
+
+    // The ticket panel carries a signed guild-bound id. Pressing it through the
+    // shared router writes one real ticket row.
+    const ticketOpen = signer.sign(
+      { namespace: "ticket", action: "open", payload: GUILD, ttlMs: TICKET_PANEL_TTL_MS },
+      now,
+    );
+    const posted = await new TicketService(
+      communityStore,
+      communityActions,
+      communitySettings,
+      () => now,
+    ).panel(GUILD, "probe-support", ticketOpen, undefined, german);
+    assert(posted.messageId.length > 0, "the ticket panel was not posted");
+    const panelMessage = sent.at(-1);
+    const panelV2 = JSON.stringify(panelMessage?.v2);
+    assert(
+      panelV2.includes(ticketOpen) &&
+        panelV2.includes("Ticket öffnen") &&
+        panelV2.includes("Support-Tickets") &&
+        panelMessage?.embeds === undefined,
+      "the German ticket panel did not render as a V2 container",
+    );
+
+    const router: ComponentRouter = createComponentRouter({
+      signer,
+      forms: createFormStore(database),
+      formSettings: {
+        get: async () => formSettingsSchema.parse({}),
+        update: async () => formSettingsSchema.parse({}),
+      },
+      moderation: {
+        settings: { get: async () => ({}), update: async () => ({}) },
+        moderation: {} as never,
+      },
+      community: {
+        store: communityStore,
+        actions: communityActions,
+        settings: { get: async () => communitySettings, update: async () => communitySettings },
+      },
+      config: settings,
+      logger: createSilentLogger(),
+      now: () => now,
+    });
+
+    interface Clicked {
+      replies: ReplyInput[];
+    }
+    const click = (customId: string, permissions: string[] = []) => {
+      const captured: Clicked = { replies: [] };
+      const interaction = {
+        customId,
+        guildId: GUILD,
+        channelId: "probe-support",
+        user: { id: "probe-ticket-requester" },
+        memberPermissions: { toArray: () => permissions },
+        replied: false,
+        deferred: false,
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        reply: async (input: ReplyInput) => {
+          captured.replies.push(input);
+        },
+        update: async () => undefined,
+        deferReply: async () => undefined,
+        editReply: async () => undefined,
+        followUp: async () => undefined,
+      };
+      return {
+        captured,
+        like: asComponentInteraction(
+          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
+        ),
+      };
+    };
+
+    const open = click(ticketOpen);
+    assert(
+      await router.dispatch(open.like, signer, now, germanDispatch),
+      "the signed ticket button was not routed",
+    );
+    assert(
+      String(open.captured.replies[0]?.content).includes(
+        "Ticket in <#probe-ticket-thread> geöffnet",
+      ),
+      "the ticket button did not render its German reply",
+    );
+    const tickets = await communityStore.listTickets(GUILD, { limit: 10 });
+    assert(tickets.length === 1, `the ticket button wrote ${tickets.length} rows`);
+    assert(tickets[0]?.openerId === "probe-ticket-requester", "the ticket opener is wrong");
+    const [storedTickets] = await database.runner.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM tickets
+        WHERE guild_id = '${GUILD}' AND state = 'open'`,
+    );
+    assert(storedTickets?.count === "1", "the ticket row did not reach Postgres");
+
+    // The pre-pass unsigned id is refused by the router and no longer has a
+    // handler of its own, so it cannot open a second ticket.
+    const legacy = click("keystone:ticket:open");
+    assert(
+      (await router.dispatch(legacy.like, signer, now)) === false,
+      "the router accepted the legacy ticket id",
+    );
+    assert(legacy.captured.replies.length === 0, "the legacy id produced a reply");
+    assert(
+      (await communityStore.listTickets(GUILD, { limit: 10 })).length === 1,
+      "the legacy id opened a second ticket",
+    );
+
+    const expiredId = signer.sign(
+      { namespace: "ticket", action: "open", payload: GUILD, ttlMs: 1_000 },
+      now,
+    );
+    const expired = click(expiredId);
+    await router.dispatch(expired.like, signer, now + 1_000, germanDispatch);
+    assert(
+      String(expired.captured.replies[0]?.content).includes("abgelaufen"),
+      "an expired ticket panel was not refused in German",
+    );
+
+    const copiedId = signer.sign(
+      { namespace: "ticket", action: "open", payload: "other-guild", ttlMs: TICKET_PANEL_TTL_MS },
+      now,
+    );
+    const copied = click(copiedId);
+    await router.dispatch(copied.like, signer, now, germanDispatch);
+    assert(
+      String(copied.captured.replies[0]?.content).includes("anderen Server"),
+      "a ticket id copied from another guild was not refused",
+    );
+
+    // Ticket opening is deliberately permission-free; the shared permission
+    // gate is exercised with a staff-only form route instead.
+    const staffId = signer.sign(
+      { namespace: "form", action: "review", payload: "probe", ttlMs: 15 * 60_000 },
+      now,
+    );
+    const member = click(staffId);
+    await router.dispatch(member.like, signer, now, germanDispatch);
+    assert(
+      String(member.captured.replies[0]?.content).includes("Berechtigung"),
+      "a member reached a permission-gated route",
+    );
+
+    await settings.reset(GUILD, "setup", {
+      actorId: "live-probe-operator",
+      source: "command",
+    });
+    const cleared = await guildLocale(settings, GUILD);
+    assert(cleared === "en", `clearing the locale left ${cleared}`);
+    const englishExpired = click(expiredId);
+    await router.dispatch(englishExpired.like, signer, now + 1_000, { locale: cleared });
+    assert(
+      String(englishExpired.captured.replies[0]?.content).includes("expired"),
+      "the default locale did not render the English refusal",
+    );
+
+    record({
+      id: "web-community-panels",
+      status: "pass",
+      detail:
+        "real discord.js adapter + typed V2 builders on Postgres: the rank card rendered Level/XP/rank from the same LevelingService projection and the stored levels row, in German (Rang/Rangkarte) and English; welcome and goodbye kept their {user}/{server} substitution and rendered as V2 text with no legacy content; the ticket panel posted a signed guild-bound id (German title, description and button, no embed), and pressing it through the shared router wrote exactly one open tickets row and replied in German; the legacy keystone:ticket:open id was unhandled and produced no reply or row, and expired, cross-guild and permission-gated ids were refused. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click is not claimed",
+      features: [
+        "community.rank-card",
+        "community.welcome-goodbye",
+        "tickets.panels",
+        "operations.i18n",
+      ],
+    });
+  }
+
   // --- Cleanup ---------------------------------------------------------------
   await database.runner.exec(`
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
@@ -2701,6 +3014,9 @@ async function main(): Promise<void> {
     DELETE FROM form_submissions WHERE guild_id LIKE 'live-probe%';
     DELETE FROM forms WHERE guild_id LIKE 'live-probe%';
     DELETE FROM community_records WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM tickets WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM levels WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM xp_events WHERE guild_id LIKE 'live-probe%';
     DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id LIKE 'live-probe%');
     DELETE FROM cases WHERE guild_id LIKE 'live-probe%';
     DELETE FROM case_counters WHERE guild_id LIKE 'live-probe%';

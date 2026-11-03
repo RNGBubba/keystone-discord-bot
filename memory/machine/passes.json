@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-03T08:45:00.000Z",
+  "updatedAt": "2026-11-03T09:10:00.000Z",
   "passes": [
     {
       "id": "pass-01",
@@ -798,6 +798,21 @@
         "tests": "620",
         "budget": "20/100 roots · 141 subcommands · 4 context menus",
         "live": "24/24",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
+      "id": "pass-60",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "P7 community panels migrated onto the typed UI layer. `/rank view` and the Rank card user menu now share one `rankPanel` V2 builder over the same `LevelingService` rows, with the line and footer from `packages/i18n` (en/de); both inline embeds are gone. The ticket panel is a `ticketPanel` V2 container whose Open button carries a signed, guild-bound, 30-day `ticket:open` id; `createFormRouter` became `createComponentRouter` and hosts that route, which parses the community settings and calls the same `TicketService.open`. The legacy `keystone:ticket:open` branch was deleted from `community-events.ts`, so an old panel is unhandled; expired, copied-guild and permission-gated ids are refused before a row exists. Welcome and goodbye were plain content, not embeds: their channel sends now render through `greetingPanel` as V2 text with the operator's `{user}`/`{server}` substitution, while the welcome DM stays content; guild-authored text is deliberately not translated. The community port gained an optional `v2` tree, converted by the discord.js adapter with IsComponentsV2 and never mixed with content or embeds. Tests 623 / 91 files; live probe 25/25, adding web-community-panels on Postgres: German and English rank cards matched the stored levels row, both greetings substituted into V2, one signed ticket press wrote exactly one open tickets row, and the legacy/expired/copied ids produced no row. A live gateway click or member join is not claimed; the remaining legacy community button ids and untranslated command replies are named as next.",
+      "journal": "journal/2026-11-03-pass-60.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "623",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "25/25",
         "memory": "current",
         "build": "pass"
       }

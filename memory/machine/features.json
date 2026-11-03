@@ -923,13 +923,19 @@
           "phase": "P7",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Text welcome with placeholder substitution, an immediate or delayed autorole and an optional DM; a member leave sends the configured goodbye text to one channel with no role or DM branch. `/tools welcome | goodbye`. The V2 layer exists (pass 58); a richer panel is not built yet.",
+          "note": "Operator-authored welcome and goodbye text keeps its `{user}` and `{server}` substitution, an immediate or delayed autorole and an optional DM; goodbye has no role or DM branch. The channel message now renders through `greetingPanel` as a V2 container, while the DM stays plain content. The text is not translated because it belongs to the guild; the catalog has no key for it. `/tools welcome | goodbye`. Live 2026-11-03: the probe substituted both placeholders and rendered the V2 text; a gateway member join is adapter-tested, not claimed live.",
           "evidence": [
+            "modules/community/src/panels.ts",
+            "modules/community/src/engagement.ts",
             "modules/community/src/community.test.ts",
             "modules/community/src/commands.test.ts",
-            "apps/bot/src/community-events.test.ts"
+            "apps/bot/src/community-events.test.ts",
+            "scripts/live-probe.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-panels"
+          ]
         },
         {
           "id": "community.autorole",
@@ -1135,11 +1141,19 @@
           "phase": "P7",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "User context menu reads the same XP projection as /rank view; the card is an embed, not an image render.",
+          "note": "User context menu reads the same XP projection as /rank view; `/rank view` and the card share one `rankPanel` V2 builder, so the numbers are the same service rows and the card is not an image render. The title is the member mention, and the line/footer come from `packages/i18n`. Live 2026-11-03: the probe read the level row back from Postgres and rendered the German and English cards from the real builder. A gateway right-click is not claimed.",
           "evidence": [
-            "modules/community/src/context.test.ts"
+            "modules/community/src/panels.ts",
+            "modules/community/src/commands/rank-card.ts",
+            "modules/community/src/commands/rank.ts",
+            "modules/community/src/context.test.ts",
+            "apps/bot/src/adapt.test.ts",
+            "scripts/live-probe.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-panels"
+          ]
         }
       ]
     },
@@ -1160,11 +1174,20 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Thread/embed ticket panels today; the V2 form panel shipped in pass 58, while the ticket panel is not migrated yet.",
+          "note": "The ticket panel is a `ticketPanel` V2 container with a signed, guild-bound, 30-day id; pressing it goes through the shared component router into the same `TicketService.open` the command uses. The legacy unsigned `keystone:ticket:open` id is no longer handled, and an expired or copied id is refused before a row is written. Live 2026-11-03 on Postgres: the German panel rendered, one press wrote exactly one open ticket, and the legacy/expired/copied ids produced no ticket.",
           "evidence": [
-            "modules/community/src/commands.test.ts"
+            "modules/community/src/panels.ts",
+            "modules/community/src/tickets.ts",
+            "modules/community/src/commands/ticket.ts",
+            "apps/bot/src/components.ts",
+            "apps/bot/src/components.test.ts",
+            "apps/bot/src/community-events.test.ts",
+            "scripts/live-probe.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-panels"
+          ]
         },
         {
           "id": "tickets.thread-based-tickets",

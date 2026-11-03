@@ -165,10 +165,13 @@ describe("P3 community", () => {
 
     const result = await service.handleJoin(guild, user, "Keystone Test");
     expect(result).toEqual({ sent: true, roleAdded: true, dmSent: true });
-    expect(actions.sent[0]?.message.content).toContain("<@user-a>");
-    expect(actions.sent[0]?.message.content).toContain("Keystone Test");
+    const welcome = JSON.stringify(actions.sent[0]?.message.v2);
+    expect(welcome).toContain("<@user-a>");
+    expect(welcome).toContain("Keystone Test");
+    expect(actions.sent[0]?.message.content).toBeUndefined();
     expect(actions.roleCalls[0]?.roleId).toBe("member-role");
     expect(actions.dms[0]?.userId).toBe(user);
+    expect(actions.dms[0]?.message.content).toContain("Keystone Test");
   });
 
   it("sends goodbye text with the same placeholders and nothing else", async () => {
@@ -186,9 +189,10 @@ describe("P3 community", () => {
 
     expect(await service.handleLeave(guild, user, "Keystone Test")).toEqual({ sent: true });
     expect(actions.sent[0]?.channelId).toBe("farewell-channel");
-    expect(actions.sent[0]?.message.content).toBe(
+    expect(JSON.stringify(actions.sent[0]?.message.v2)).toContain(
       "Goodbye <@user-a>; Keystone Test will miss you.",
     );
+    expect(actions.sent[0]?.message.content).toBeUndefined();
     // A departed member cannot receive a DM and a role grant would race the
     // gateway's own member removal, so goodbye has neither branch.
     expect(actions.dms).toHaveLength(0);
@@ -322,11 +326,12 @@ describe("P3 tickets and content", () => {
     const clock = nowAt();
     const service = new TicketService(store, actions, settings(), clock.now);
 
-    const panel = await service.panel(guild, "support", "Need help?");
+    const panel = await service.panel(guild, "support", "k1:signed:open", "Need help?");
     expect(panel.messageId).toBe("msg-1");
-    expect(firstRow(actions.sent[0]!.message)?.components[0]?.customId).toBe(
-      "keystone:ticket:open",
-    );
+    const posted = JSON.stringify(actions.sent[0]?.message.v2);
+    expect(posted).toContain("k1:signed:open");
+    expect(posted).toContain("Open a ticket");
+    expect(actions.sent[0]?.message.embeds).toBeUndefined();
 
     const ticket = await service.open(guild, user, "support", "Broken rank");
     expect(ticket.channelId).toBe("thread-2");

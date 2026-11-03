@@ -2,6 +2,8 @@ import { Events, type Client } from "discord.js";
 import {
   ComponentRouter,
   UserError,
+  type CommunityActions,
+  type CommunityStore,
   type ComponentInteractionLike,
   type ComponentSigner,
   type ConfigPort,
@@ -19,6 +21,7 @@ import {
   modalAnswers,
   modalFits,
 } from "@keystone/module-forms";
+import { TicketService, communitySettingsSchema } from "@keystone/module-community";
 import { asComponentInteraction } from "./adapt";
 import { handleModerationButton } from "./moderation-buttons";
 
@@ -31,6 +34,12 @@ export interface ComponentRuntimeDeps {
     readonly settings: ModuleSettings;
     readonly moderation: ModerationPort;
   };
+  /** Ticket panel writes and reads through the same community port as `/ticket`. */
+  readonly community: {
+    readonly store: CommunityStore;
+    readonly actions: CommunityActions;
+    readonly settings: ModuleSettings;
+  };
   /** Reads the setup module's per-guild locale; absent means English. */
   readonly config?: ConfigPort;
   readonly logger: Logger;
@@ -39,11 +48,11 @@ export interface ComponentRuntimeDeps {
 }
 
 /**
- * The form panel routes. The module owns the copy, the modal shape and the
- * submission rules; this file only connects an interaction to them, so the
- * command path and the button path end in the same FormService call.
+ * Every signed component route. The module owns the copy, the modal shape and
+ * the write rules; this file only connects an interaction to them, so the
+ * command path and the button path end in the same service call.
  */
-export function createFormRouter(deps: ComponentRuntimeDeps): ComponentRouter {
+export function createComponentRouter(deps: ComponentRuntimeDeps): ComponentRouter {
   const now = (): number => deps.now?.() ?? Date.now();
 
   const service = async (guildId: string): Promise<FormService> => {
@@ -155,6 +164,40 @@ export function createFormRouter(deps: ComponentRuntimeDeps): ComponentRouter {
           ephemeral: true,
         });
       },
+    })
+    .register({
+      namespace: "ticket",
+      action: "open",
+      kind: "button",
+      guildOnly: true,
+      async handle({ interaction, payload, locale }) {
+        if (!interaction.guildId) return;
+        if (payload !== interaction.guildId) {
+          throw new UserError(t(locale, "ticket.panel.wrongGuild"));
+        }
+        if (!interaction.channelId) {
+          throw new UserError(t(locale, "ticket.open.noChannel"));
+        }
+        const settings = communitySettingsSchema.parse(
+          await deps.community.settings.get(interaction.guildId),
+        );
+        const ticket = await new TicketService(
+          deps.community.store,
+          deps.community.actions,
+          settings,
+          now,
+        ).open(
+          interaction.guildId,
+          interaction.userId,
+          interaction.channelId,
+          t(locale, "ticket.open.subject"),
+          locale,
+        );
+        await interaction.reply({
+          content: t(locale, "ticket.open.reply", ticket.channelId),
+          ephemeral: true,
+        });
+      },
     });
 }
 
@@ -169,7 +212,7 @@ function isModerationButton(customId: string): boolean {
  * the guild and the route's permission before any handler runs.
  */
 export function registerComponentInteractions(client: Client, deps: ComponentRuntimeDeps): void {
-  const router = createFormRouter(deps);
+  const router = createComponentRouter(deps);
 
   client.on(Events.InteractionCreate, (interaction) => {
     if (

@@ -53,16 +53,29 @@ command tests.
 
 P7 added a user context menu in pass 33. **Rank card** is an application command
 of type 2 that reads the same `LevelingService.rank` projection as `/rank view`
-and replies with an embed, not an image. This build has no image renderer, and
-the embed footer says `levels are stored XP rows, not an image render`. The menu
-is guild-only, has a 3-second cooldown and adds no store. Discord reports it
-registered; the MCP cannot right-click, so invocation is covered by the command
-test rather than a live click.
+and replies with a `rankPanel` Components V2 container, not an image and no
+longer an embed. The menu is guild-only, has a 3-second cooldown and adds no
+store. Pass 60 gave the card and `/rank view` the same builder and moved the
+line and footer into `packages/i18n` (German/English); `context.test.ts` and the
+live probe assert the same stored `levels` row. Discord reports it registered;
+the MCP cannot right-click, so invocation is covered by the command test rather
+than a live click.
+
+Pass 60 moved the ticket panel onto the same layer. `ticketPanel` posts a V2
+container whose Open button carries a signed, guild-bound, 30-day id; the press
+is handled by the shared component router in `apps/bot/src/components.ts` and
+calls the same `TicketService.open`. The legacy `keystone:ticket:open` branch was
+deleted from `community-events.ts`, so an old panel is unhandled rather than
+silently served; expired, copied and permission-gated ids are refused before a
+row is written. The welcome and goodbye channel messages now render through
+`greetingPanel` as V2 text; they keep the operator's `{user}`/`{server}`
+substitution and are deliberately not translated because the text belongs to
+the guild.
 
 ## Verified
 
 ```text
-pnpm check                            exit 0 · 620 tests / 91 files
+pnpm check                            exit 0 · 623 tests / 91 files
   responder.test.ts                   5 tests (auto-responder service)
   community.test.ts                  15 tests (including timer delivery, a concurrent claim and goodbye)
   extras.test.ts                      7 tests
@@ -74,7 +87,7 @@ pnpm check                            exit 0 · 620 tests / 91 files
   packages/db/src/community.test.ts   6 tests (incl. responder reopen and delivery claim)
   packages/db/src/economy.test.ts     2 tests
 pnpm budget                           20/100 roots · 141 subcommands · 161 actions · 4 context menus, status OK
-pnpm memory:check                     current (pass 46)
+pnpm memory:check                     current (pass 60)
 ```
 
 Feature proofs (P3 plus the P4 economy hardening):
@@ -196,8 +209,10 @@ No document claims a live Discord run for a row marked “staging”.
 - Temp voice cleans up when the owner leaves and the room is empty; an
   administrative orphan cleanup pass is not built.
 - Birthdays use one guild timezone and support month/day only, not birth years.
-- Goodbye is text-only and has no V2 panel; YouTube/Twitch-specific feed
-  adapters are not built.
+- Welcome and goodbye render as a V2 text container with the operator's
+  substituted text; they are not translated, because translating guild-authored
+  copy would be inventing prose. YouTube/Twitch-specific feed adapters are not
+  built.
 - Auto-responder regex is operator-owned and compiled as-is; there is no ReDoS
   sandbox or safe-pattern linter beyond the trigger length cap. The feature is
   admin-only and disabled by default.

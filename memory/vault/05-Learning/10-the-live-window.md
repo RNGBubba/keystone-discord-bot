@@ -37,7 +37,7 @@ with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 24 live checks against 20
+into the Live-Window page. The last recorded run is 25 live checks against 20
 migrations. The HTTP checks drive real local HTTP on Postgres: the schema form
 path (login, session, CSRF, save, reject), the fleet template path (list,
 preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
@@ -52,8 +52,13 @@ console 401/403/200, owner revocation, every limited class returning 429 then
 recovering, the rotated cookie replaying as 401, and logout revoking at the
 OAuth port), and the token path (a one-shot secret, hash-only storage, the same
 handlers under a bearer, scope and guild refusals, a per-token 429 then recovery,
-revocation, and one audit row per issue/revoke). The numbers are checked against
-the report, not typed by hand.
+revocation, and one audit row per issue/revoke), the component path (a signed
+V2 form panel and modal submit through the real discord.js adapter, an expired
+id, a member refused and a manager shown the queue, with a German run), and the
+community path (the rank card against the stored levels row, the greeting
+substitutions as V2 text, and a signed ticket press that writes one open ticket
+while the legacy id is unhandled). The numbers are checked against the report,
+not typed by hand.
 
 The evidence levels are intentionally separate:
 

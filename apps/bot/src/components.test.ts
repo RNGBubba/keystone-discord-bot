@@ -16,7 +16,9 @@ import {
   formModal,
   formPanel,
 } from "@keystone/module-forms";
-import { createFormRouter, type ComponentRuntimeDeps } from "./components";
+import { InMemoryCommunityStore, communitySettingsSchema } from "@keystone/module-community";
+import { RecordingCommunityActions } from "@keystone/module-community/testing";
+import { createComponentRouter, type ComponentRuntimeDeps } from "./components";
 
 const NOW = 1_800_000_000_000;
 const GUILD = "g1";
@@ -78,18 +80,29 @@ async function fixture(fieldSpec = "why:Why join, tz:Timezone") {
     update: async () => ({ ...formDefaultSettings }),
   };
   const signer: ComponentSigner = createComponentSigner("bot-test-secret");
+  const communityStore = new InMemoryCommunityStore();
+  const communityActions = new RecordingCommunityActions();
+  const communitySettings = {
+    get: async () => communitySettingsSchema.parse({}),
+    update: async () => communitySettingsSchema.parse({}),
+  };
   const deps: ComponentRuntimeDeps = {
     signer,
     forms: store,
     formSettings: settings,
     moderation: { settings, moderation: {} as ModerationPort },
+    community: {
+      store: communityStore,
+      actions: communityActions,
+      settings: communitySettings,
+    },
     logger: createSilentLogger(),
     now: () => NOW,
   };
-  const router = createFormRouter(deps);
+  const router = createComponentRouter(deps);
   const signed = (action: string, payload: string, ttlMs = 15 * 60_000): string =>
     signer.sign({ namespace: "form", action, payload, ttlMs }, NOW);
-  return { store, service, form, router, signer, signed };
+  return { store, service, form, router, signer, signed, communityStore, communityActions };
 }
 
 describe("form panel components", () => {
@@ -214,5 +227,56 @@ describe("form panel components", () => {
   it("builds a modal only for forms that fit and refuses an empty one", () => {
     const form = { key: "x", name: "X", fields: [] } as unknown as Parameters<typeof formModal>[0];
     expect(() => formModal(form, "form-submit-x")).toThrow(/no fields/);
+  });
+});
+
+describe("ticket panel components", () => {
+  const ticketId = (
+    signer: ComponentSigner,
+    payload = GUILD,
+    ttlMs = 30 * 24 * 60 * 60_000,
+  ): string => signer.sign({ namespace: "ticket", action: "open", payload, ttlMs }, NOW);
+
+  it("opens a ticket from a signed panel button and ignores the legacy id", async () => {
+    const { router, signer, communityStore, communityActions } = await fixture();
+    const open = new FakeComponent({ customId: ticketId(signer), userId: "member-1" });
+    expect(await router.dispatch(open, signer, NOW)).toBe(true);
+    expect(open.replies[0]?.content).toMatch(/Ticket opened in <#thread-1>/);
+    expect(await communityStore.listTickets(GUILD, { limit: 10 })).toMatchObject([
+      { openerId: "member-1", state: "open", subject: "Support request" },
+    ]);
+    expect(communityActions.threads).toHaveLength(1);
+
+    // The old unsigned id is no longer handled anywhere. It must not open a
+    // second ticket or produce a reply that makes it look alive.
+    const legacy = new FakeComponent({ customId: "keystone:ticket:open" });
+    expect(await router.dispatch(legacy, signer, NOW)).toBe(false);
+    expect(legacy.replies).toHaveLength(0);
+    expect(await communityStore.listTickets(GUILD, { limit: 10 })).toHaveLength(1);
+  });
+
+  it("refuses an expired, copied or unauthorized id before creating a row", async () => {
+    const { router, signer, communityStore } = await fixture();
+    const expired = new FakeComponent({ customId: ticketId(signer, GUILD, 1_000) });
+    await router.dispatch(expired, signer, NOW + 1_000);
+    expect(expired.replies[0]?.content).toMatch(/expired/);
+
+    const copied = new FakeComponent({ customId: ticketId(signer, "other-guild") });
+    await router.dispatch(copied, signer, NOW);
+    expect(copied.replies[0]?.content).toMatch(/another server/);
+
+    // The route permission gate is shared: a staff-only form button pressed by
+    // a member never reaches its handler.
+    const member = new FakeComponent({
+      customId: signer.sign(
+        { namespace: "form", action: "review", payload: "staff", ttlMs: 15 * 60_000 },
+        NOW,
+      ),
+      permissions: [],
+    });
+    await router.dispatch(member, signer, NOW);
+    expect(member.replies[0]?.content).toMatch(/permission/);
+
+    expect(await communityStore.listTickets(GUILD, { limit: 10 })).toHaveLength(0);
   });
 });

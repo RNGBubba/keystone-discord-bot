@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-60",
+    date: "2026-11-03",
+    summary:
+      "P7 community panels: the rank card and ticket panel are typed V2 surfaces, the ticket button is signed and guild-bound (an old or copied panel cannot open a ticket), and welcome/goodbye render their substituted text through the same layer.",
+    journal: "memory/journal/2026-11-03-pass-60.md",
+  },
+  {
     pass: "pass-59",
     date: "2026-11-03",
     summary:

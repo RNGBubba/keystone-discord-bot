@@ -1,4 +1,6 @@
 import { defineCommand, UserError, type CommandContext, type CommandOption } from "@keystone/kernel";
+import { guildLocale, t } from "@keystone/i18n";
+import { TICKET_PANEL_TTL_MS } from "../panels";
 import { TicketService } from "../tickets";
 import { channelId, port, requirePermission, settingsFor, text, userId } from "./helpers";
 
@@ -44,7 +46,21 @@ export const ticket = defineCommand({
       requirePermission(ctx, "ManageGuild");
       const parent = channelId(ctx, "channel");
       if (!parent) throw new UserError("Choose a channel for the panel.");
-      const result = await service.panel(guildId, parent, text(ctx, "title"));
+      const signer = ctx.componentSigner;
+      if (!signer) throw new UserError("Interactive panels are not configured on this bot.");
+      const locale = await guildLocale(ctx.config, guildId);
+      const openCustomId = signer.sign(
+        {
+          namespace: "ticket",
+          action: "open",
+          // The guild id travels in the signature, so a copied panel cannot
+          // open a ticket in a different server.
+          payload: guildId,
+          ttlMs: TICKET_PANEL_TTL_MS,
+        },
+        ctx.now(),
+      );
+      const result = await service.panel(guildId, parent, openCustomId, text(ctx, "title"), locale);
       await ctx.interaction.reply({ content: `Ticket panel posted (${result.messageId}).`, ephemeral: true });
       return;
     }
@@ -52,14 +68,16 @@ export const ticket = defineCommand({
     if (selected === "open") {
       const parent = ctx.interaction.channelId;
       if (!parent) throw new UserError("Open a ticket from a normal channel, not a DM.");
+      const locale = await guildLocale(ctx.config, guildId);
       const record = await service.open(
         guildId,
         ctx.userId,
         parent,
-        text(ctx, "subject") ?? "Support request",
+        text(ctx, "subject") ?? t(locale, "ticket.open.subject"),
+        locale,
       );
       await ctx.interaction.reply({
-        content: `Ticket opened in <#${record.channelId}>.`,
+        content: t(locale, "ticket.open.reply", record.channelId),
         ephemeral: true,
       });
       return;

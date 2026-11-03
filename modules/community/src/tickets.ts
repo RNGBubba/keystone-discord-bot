@@ -1,5 +1,7 @@
 import { UserError } from "@keystone/kernel";
 import type { CommunityActions, CommunityStore, TicketRecord } from "@keystone/kernel";
+import { DEFAULT_LOCALE, t } from "@keystone/i18n";
+import { ticketPanel } from "./panels";
 import type { CommunitySettings } from "./settings";
 
 export interface TicketStats {
@@ -17,33 +19,20 @@ export class TicketService {
     private readonly now: () => number = Date.now,
   ) {}
 
+  /**
+   * Post the public panel. The button id is signed by the bot and passed in; a
+   * panel is a message, so the only way to keep an old one from opening a
+   * ticket is the signature's expiry, checked by the shared router.
+   */
   async panel(
     guildId: string,
     channelId: string,
-    title = "Support tickets",
+    openCustomId: string,
+    title?: string,
+    locale: string = DEFAULT_LOCALE,
   ): Promise<{ messageId: string }> {
     const result = await this.actions.sendMessage(guildId, channelId, {
-      embeds: [
-        {
-          title: title.slice(0, 256),
-          description:
-            "Open a private thread with the support team. One ticket per open issue.",
-          color: 0x5865f2,
-        },
-      ],
-      components: [
-        {
-          type: "action-row",
-          components: [
-            {
-              type: "button",
-              customId: "keystone:ticket:open",
-              label: "Open a ticket",
-              style: "primary",
-            },
-          ],
-        },
-      ],
+      v2: ticketPanel({ openCustomId, title }, locale),
     });
     if (!result.ok || !result.id) throw new Error(result.detail ?? "Could not post ticket panel");
     return { messageId: result.id };
@@ -54,6 +43,7 @@ export class TicketService {
     openerId: string,
     parentChannelId: string,
     subject: string,
+    locale: string = DEFAULT_LOCALE,
   ): Promise<TicketRecord> {
     const open = (await this.store.listTickets(guildId, {
       openerId,
@@ -61,7 +51,7 @@ export class TicketService {
     })).filter((ticket) => ticket.state !== "closed");
     if (open.length >= this.settings.tickets.maxOpenPerUser) {
       throw new UserError(
-        `You already have ${open.length} open ticket(s). Close one before opening another.`,
+        t(locale, "ticket.open.tooMany", open.length, this.settings.tickets.maxOpenPerUser),
       );
     }
 

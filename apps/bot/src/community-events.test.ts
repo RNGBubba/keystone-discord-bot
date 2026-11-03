@@ -104,9 +104,27 @@ describe("community event adapter", () => {
     });
 
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
-    expect(sendMessage).toHaveBeenCalledWith("dev-guild", "farewell", {
-      content: "Bye <@leaver-1> from Keystone",
+    const farewell = sendMessage.mock.calls[0]?.[2] as { v2?: unknown; content?: string };
+    expect(JSON.stringify(farewell.v2)).toContain("Bye <@leaver-1> from Keystone");
+    expect(farewell.content).toBeUndefined();
+    stop();
+  });
+
+  it("no longer handles the legacy ticket button id", async () => {
+    const { client, sendMessage, stop } = await setup();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    client.emit(Events.InteractionCreate, {
+      guildId: "dev-guild",
+      customId: "keystone:ticket:open",
+      channelId: "support",
+      user: { id: "member-1" },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      reply,
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reply).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
     stop();
   });
 

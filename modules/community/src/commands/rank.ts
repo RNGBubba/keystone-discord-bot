@@ -1,5 +1,7 @@
 import { defineCommand, UserError, type CommandContext, type CommandOption } from "@keystone/kernel";
+import { guildLocale } from "@keystone/i18n";
 import { EconomyService, LevelingService } from "../progress";
+import { rankPanel } from "../panels";
 import { SeasonService } from "../extras";
 import { action, integer, port, requirePermission, settingsFor, text, userId } from "./helpers";
 
@@ -51,16 +53,17 @@ export const rank = defineCommand({
     if (selected === "view") {
       const target = userId(ctx, "user") ?? ctx.userId;
       const result = await leveling.rank(guildId, target);
+      const locale = await guildLocale(ctx.config, guildId);
       await ctx.interaction.reply({
-        embeds: [
+        v2: rankPanel(
           {
-            title: `<@${target}>`,
-            description: `Level **${result.profile.level}** · **${result.profile.xp} XP**${
-              result.rank ? ` · rank **#${result.rank}**` : ""
-            }`,
-            color: 0x5865f2,
+            userId: target,
+            level: result.profile.level,
+            xp: result.profile.xp,
+            rank: result.rank,
           },
-        ],
+          locale,
+        ),
       });
       return;
     }

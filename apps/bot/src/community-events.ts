@@ -260,22 +260,6 @@ export function registerCommunityEvents(
           return;
         }
 
-        if (customId === "keystone:ticket:open") {
-          const { TicketService } = await import("@keystone/module-community");
-          const parent = interaction.channelId;
-          if (!parent) throw new Error("No parent channel.");
-          const record = await new TicketService(
-            port.store,
-            port.actions,
-            current,
-          ).open(interaction.guildId as string, interaction.user.id, parent, "Support request");
-          await interaction.reply({
-            content: `Ticket opened in <#${record.channelId}>.`,
-            ephemeral: true,
-          });
-          return;
-        }
-
         if (customId.startsWith("keystone:poll:")) {
           const [, , pollId, rawIndex] = customId.split(":");
           if (!pollId || rawIndex === undefined) return;

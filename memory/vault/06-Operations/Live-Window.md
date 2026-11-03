@@ -6,7 +6,7 @@
 > A passing local suite does not prove a service; this page records the last
 > `pnpm probe:live` run against the configured Postgres and Redis.
 
-Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T08:44:39.234Z.
+Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T09:01:55.189Z.
 
 | Service | Result |
 | --- | --- |
@@ -20,14 +20,14 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T08:44:39.23
 | --- | --- | --- | --- |
 | postgres-migrations | pass | 20 migrations applied, 0 pending on Postgres 16.15 |  |
 | postgres-settings-restart | pass | one settings row written, pool closed and reopened, same value read back | operations.in-bot-config |
-| redis-shared-cooldown | pass | two clients: first allowed, second refused with 1999ms remaining |  |
+| redis-shared-cooldown | pass | two clients: first allowed, second refused with 1998ms remaining |  |
 | bullmq-job-idempotency | pass | two enqueues with one idempotency key produced one handler call and a completed Postgres receipt |  |
-| bullmq-delayed-timer | pass | one delayed job fired once after 1142ms and wrote a completed receipt |  |
+| bullmq-delayed-timer | pass | one delayed job fired once after 1105ms and wrote a completed receipt |  |
 | temporary-moderation-expiry | pass | a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event |  |
 | panic-snapshot-persistence | pass | a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only |  |
 | content-timer-delivery | pass | a real community record delivered a reminder and a scheduled message once, and two concurrent claims produced exactly one send |  |
 | portability-dry-run | pass | dry run reported 1 added / 0 changed / 0 removed setting(s) | portability.dry-run-import-diff |
-| portability-import-verify | pass | bundle checksum 1c45a077f008… matched after import f5d5935e | portability.restore-and-config-hash, security.backup-restore |
+| portability-import-verify | pass | bundle checksum 6302d6055e6b… matched after import 94da1dcf | portability.restore-and-config-hash, security.backup-restore |
 | portability-rollback | pass | the applied import restored its pre-import backup; the destination has no settings rows | portability.rollback-window, security.backup-restore |
 | portability-deletion-receipt | pass | deletion receipt retained 1 setting(s) and the guild row is gone | portability.deletion-receipt |
 | web-health-postgres | pass | /healthz returned 200 with database=postgres on an ephemeral port |  |
@@ -42,6 +42,7 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T08:44:39.23
 | web-session-idle-refresh | pass | real local HTTP on Postgres: a session inside the 5-minute idle window was accepted and its last_seen_at moved with the request; the same session past the window returned 401 and its row was deleted; an expired Discord access token was refreshed exactly once for two concurrent requests, the rotated sealed refresh token and new access expiry were persisted, and restoring the spent refresh token made the next request 401 and deleted the session | operations.dashboard-session-hardening |
 | web-session-hardening | pass | real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the sealed refresh grant and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed | operations.dashboard-session-hardening |
 | web-component-panels | pass | real discord.js adapter + signed component router on Postgres: with setup.locale=de the form panel, the Apply modal receipt, the missing-field refusal, the expired-id refusal, the member permission refusal and the staff pending list all rendered in German; the valid submit still wrote exactly one form_submissions row and the missing-field submit wrote none; the setup schema rejected locale=xx and left the effective locale at de; a partial German catalog fell back to English and a key no catalog has returned a sentence, not the key; clearing the setting restored English for the same panel and refusal; the form command carried its German description from the same catalog. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed | forms.application-forms, operations.i18n |
+| web-community-panels | pass | real discord.js adapter + typed V2 builders on Postgres: the rank card rendered Level/XP/rank from the same LevelingService projection and the stored levels row, in German (Rang/Rangkarte) and English; welcome and goodbye kept their {user}/{server} substitution and rendered as V2 text with no legacy content; the ticket panel posted a signed guild-bound id (German title, description and button, no embed), and pressing it through the shared router wrote exactly one open tickets row and replied in German; the legacy keystone:ticket:open id was unhandled and produced no reply or row, and expired, cross-guild and permission-gated ids were refused. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click is not claimed | community.rank-card, community.welcome-goodbye, tickets.panels, operations.i18n |
 
 ## Rules
 

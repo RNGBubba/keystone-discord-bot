@@ -104,7 +104,7 @@ box means the code and its tests exist, not that a live guild has run it.
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Welcome / goodbye | P7 | ✅ in repo | `modules/community/src/community.test.ts`, `modules/community/src/commands.test.ts`, `apps/bot/src/community-events.test.ts` · live unverified |
+| Welcome / goodbye | P7 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/engagement.ts`, `modules/community/src/community.test.ts`, `modules/community/src/commands.test.ts`, `apps/bot/src/community-events.test.ts`, `scripts/live-probe.ts` · live verified |
 | Autorole | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Reaction roles | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Starboard | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
@@ -115,13 +115,13 @@ box means the code and its tests exist, not that a live guild has run it.
 | Temp voice | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Stat channels | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Social feeds | P7 | ◐ open | RSS ships; YouTube/Twitch-specific feeds are named as open in the P3 status. · `modules/community/src/extras.test.ts` |
-| Rank card menu | P7 | ✅ in repo | `modules/community/src/context.test.ts` · live unverified |
+| Rank card menu | P7 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/commands/rank-card.ts`, `modules/community/src/commands/rank.ts`, `modules/community/src/context.test.ts`, `apps/bot/src/adapt.test.ts`, `scripts/live-probe.ts` · live verified |
 
 ## Tickets
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Panels | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
+| Panels | P3 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/tickets.ts`, `modules/community/src/commands/ticket.ts`, `apps/bot/src/components.ts`, `apps/bot/src/components.test.ts`, `apps/bot/src/community-events.test.ts`, `scripts/live-probe.ts` · live verified |
 | Thread-based tickets | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
 | Claiming | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
 | Transcripts | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |

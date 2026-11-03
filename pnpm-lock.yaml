@@ -362,9 +362,15 @@ importers:
 
   modules/community:
     dependencies:
+      '@keystone/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@keystone/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@keystone/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       zod:
         specifier: ^3.25.0
         version: 3.25.76
