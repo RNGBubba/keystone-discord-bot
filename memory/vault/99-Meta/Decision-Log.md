@@ -156,6 +156,15 @@ including the small calls that did not deserve an ADR.
 | 87 | Every accepted settings update/reset appends one `audit_events` row through the kernel `AuditStore` with actor, surface and dotted-path diff; a no-op or rejected write appends nothing | [[Dashboard]], `packages/kernel/src/audit.ts` |
 | 88 | Credential-shaped setting keys are matched by suffix (`token`, `secret`, `password`, `apiKey`), not any key containing `token`; the over-broad filter hid `maxOutputTokens` | [[Dashboard]] |
 
+## 2026-11-03 — P6 fleet view and config templates
+
+| # | Decision | Where |
+| --- | --- | --- |
+| 89 | A fleet preview/apply authorizes every selected guild through one `authorizeMany` call (OAuth manage permission + bot membership); body guild ids are never trusted | [[ADR-0016-dashboard-foundation]], [[Dashboard]] |
+| 90 | Templates are built-in partial patches, deep-merged over current settings and parsed by each module's own schema; there is no template table and no second settings schema | [[Dashboard]], `apps/web/src/templates.ts` |
+| 91 | Apply is bound to a SHA-256 fingerprint of the template id, targets and before/after leaves; a missing preview is `400` and a stale one is `409` before any write | [[Dashboard]] |
+| 92 | Custom saved templates, a template editor and JSON fleet endpoints are later P6 work, not part of this slice | [[Dashboard]] |
+
 ## How to add a decision
 
 1. If it changes the contract, write an ADR with **Alternatives**.

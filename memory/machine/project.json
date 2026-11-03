@@ -4,10 +4,10 @@
   "tagline": "An open-source, teach-by-default all-in-one Discord bot.",
   "mission": "vault/01-Mission/Mission.md",
   "northStar": "vault/01-Mission/North-Star.md",
-  "updatedAt": "2026-11-02",
+  "updatedAt": "2026-11-03",
   "phase": "P6",
-  "lastPass": "journal/2026-11-02-pass-49.md",
-  "nextAction": "pass-50 — continue P6 after the schema-widget slice: fleet view and templates with preview, then session rotation/revocation and rate limits; the live Discord OAuth round trip is still the missing dashboard proof",
+  "lastPass": "journal/2026-11-03-pass-50.md",
+  "nextAction": "pass-51 — finish P6: custom saved templates, import/export/drift surfaces and analytics aggregates, then session refresh/revocation, rate limits, owners[] and public API tokens; the live Discord OAuth round trip is still open",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 488
+    "tests": 502
   },
   "modules": [
     {

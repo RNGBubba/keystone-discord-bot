@@ -57,6 +57,7 @@ import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
 const root = path.resolve(import.meta.dirname, "..");
 const GUILD = "live-probe";
 const WEB_GUILD = "999999999999999999";
+const WEB_GUILD_B = "888888888888888888";
 const WEB_USER = "live-probe-web-user";
 const QUEUE = "keystone-live-probe";
 const DELAYED_QUEUE = "keystone-live-probe-delayed";
@@ -111,7 +112,10 @@ class WebProbeOAuth implements DiscordOAuth {
   }
 
   async fetchGuilds(): Promise<DiscordGuild[]> {
-    return [{ id: WEB_GUILD, name: "Live probe web", icon: null, owner: true, permissions: "0" }];
+    return [
+      { id: WEB_GUILD, name: "Live probe web", icon: null, owner: true, permissions: "0" },
+      { id: WEB_GUILD_B, name: "Live probe web two", icon: null, owner: true, permissions: "0" },
+    ];
   }
 
   async botInGuild(): Promise<boolean> {
@@ -734,6 +738,116 @@ async function main(): Promise<void> {
           "operations.settings-audit-trail",
         ],
       });
+
+      // --- Fleet view + template preview/apply over the same real HTTP stack ---
+      const fleet = await fetch(`${base}/dashboard/fleet`, { headers: { cookie } });
+      assert(fleet.status === 200, `fleet page returned ${fleet.status}`);
+      const fleetHtml = await fleet.text();
+      assert(fleetHtml.includes("Live probe web two"), "the fleet page does not list the second guild");
+      assert(fleetHtml.includes("Strict moderation"), "the fleet page has no templates");
+
+      const fleetForm = (fingerprint?: string): URLSearchParams => {
+        const form = new URLSearchParams({ csrf, template: "strict-moderation" });
+        form.append("guild", WEB_GUILD);
+        form.append("guild", WEB_GUILD_B);
+        if (fingerprint) form.set("fingerprint", fingerprint);
+        return form;
+      };
+
+      const preview = await fetch(`${base}/dashboard/fleet/preview`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: fleetForm().toString(),
+      });
+      assert(preview.status === 200, `fleet preview returned ${preview.status}`);
+      const previewHtml = await preview.text();
+      assert(previewHtml.includes("Nothing has been written yet"), "the preview does not promise no writes");
+      assert(previewHtml.includes("Automod · Links"), "the preview does not label the changed path");
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(previewHtml)?.[1];
+      assert(fingerprint !== undefined, "the preview has no fingerprint");
+      assert(
+        (await settings.get(WEB_GUILD, "moderation")).dryRun === true,
+        "the preview wrote moderation settings",
+      );
+      assert((await auditStore.list(WEB_GUILD, 10)).length === 1, "the preview wrote an audit row");
+      assert(
+        (await auditStore.list(WEB_GUILD_B, 10)).length === 0,
+        "the preview wrote an audit row in the second guild",
+      );
+
+      const stale = await fetch(`${base}/dashboard/fleet/apply`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: fleetForm("0".repeat(64)).toString(),
+      });
+      assert(stale.status === 409, `a stale apply returned ${stale.status}`);
+      assert(
+        (await settings.get(WEB_GUILD, "moderation")).dryRun === true,
+        "a stale apply changed moderation settings",
+      );
+      assert(
+        (await auditStore.list(WEB_GUILD_B, 10)).length === 0,
+        "a stale apply wrote an audit row",
+      );
+
+      const applied = await fetch(`${base}/dashboard/fleet/apply`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: fleetForm(fingerprint).toString(),
+      });
+      assert(applied.status === 302, `fleet apply returned ${applied.status}`);
+      assert(
+        (applied.headers.get("location") ?? "") === "/dashboard/fleet?applied=2&failed=0",
+        `fleet apply redirected to ${String(applied.headers.get("location"))}`,
+      );
+
+      for (const guildId of [WEB_GUILD, WEB_GUILD_B]) {
+        const stored = await settings.get(guildId, "moderation");
+        assert(stored.dryRun === false, `apply left dryRun on in ${guildId}`);
+        assert(
+          (stored.automod as Record<string, unknown>).links === "delete",
+          `apply left links off in ${guildId}`,
+        );
+        const rows = await auditStore.list(guildId, 10);
+        const row = rows[0];
+        assert(row !== undefined, `apply wrote no audit row in ${guildId}`);
+        assert(row.actorId === WEB_USER, `the fleet audit row in ${guildId} has the wrong actor`);
+        assert(
+          (row.data as { source?: string } | undefined)?.source === "dashboard",
+          `the fleet audit row in ${guildId} does not name the dashboard`,
+        );
+        assert(
+          JSON.stringify((row.data as { changes?: unknown } | undefined)?.changes).includes(
+            "automod.links",
+          ),
+          `the fleet audit row in ${guildId} does not name the changed setting`,
+        );
+      }
+      assert(
+        (await auditStore.list(WEB_GUILD, 10)).length === 2,
+        "the first guild should have one widget row and one fleet row",
+      );
+      assert(
+        (await auditStore.list(WEB_GUILD_B, 10)).length === 1,
+        "the second guild should have exactly one fleet row",
+      );
+
+      const fleetAfter = await fetch(`${base}/dashboard/fleet?applied=2&failed=0`, {
+        headers: { cookie },
+      });
+      assert(fleetAfter.status === 200, `fleet result page returned ${fleetAfter.status}`);
+      assert((await fleetAfter.text()).includes("Template applied"), "the fleet page has no success notice");
+
+      record({
+        id: "web-fleet-templates",
+        status: "pass",
+        detail:
+          "real local HTTP fleet page on Postgres listed both guilds; the strict-moderation preview showed the diff without writing; a wrong fingerprint was refused at 409; the previewed plan then wrote one moderation row and one dashboard audit row per guild; OAuth exchange itself used a fake port",
+        features: ["operations.multi-server-fleet", "operations.config-templates"],
+      });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -744,7 +858,9 @@ async function main(): Promise<void> {
   await database.runner.exec(`
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD}';
+    DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
+    DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';
     DELETE FROM job_receipts
       WHERE idempotency_key LIKE 'live-probe-%'

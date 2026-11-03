@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-02",
+  "updatedAt": "2026-11-03",
   "note": "Prose that answers to machine truth. memory:check scans these documents for current-tense counts and for capability claims with no code behind them. Historical statements are allowed when they name a pass or use past tense; a current marker (now, current, today) is never excused.",
   "governed": {
     "files": [

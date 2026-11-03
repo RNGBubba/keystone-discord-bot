@@ -126,8 +126,9 @@ before a UI framework was added; settings writes followed through the same gate.
 - [x] Settings audit trail: every accepted update/reset appends one
   `audit_events` row with actor, surface and dotted-path diff; the settings page
   renders the newest rows (pass 49).
-- [ ] Fleet view and templates with an explicit preview; import/export/drift
-  surfaces; analytics aggregates.
+- [x] Fleet view and built-in config templates with an explicit schema-validated
+  preview, per-guild authorization and fingerprint-gated apply (pass 50).
+- [ ] Custom saved templates; import/export/drift surfaces; analytics aggregates.
 - [ ] Session refresh/rotation and Discord token revocation on logout; per-route
   rate limits; `owners[]` for instance-wide actions.
 - [ ] Public API v1: hashed scoped tokens, OpenAPI, `Idempotency-Key`, webhooks,

@@ -161,11 +161,14 @@ https://github.com/RNGBubba/keystone-discord-bot
   from the live registry; `pnpm commands:catalog` writes [[Command-Catalog]] and
   `pnpm commands:doctor` checks the live shape. A human slash or right-click
   invocation remains the unobserved surface.
-- Phase **P6** foundation in repo: Discord OAuth2/PKCE, opaque Postgres-backed
-  sessions, BigInt per-guild authorization with a bot-membership check, a
-  server-rendered dashboard, `/api/v1` reads and schema-validated module settings
-  writes from the HTML form and a CSRF-protected `PATCH`. Field widgets, fleet
-  actions and scoped API tokens are still open. See [[Dashboard]] and
+- Phase **P6** in repo: Discord OAuth2/PKCE, opaque Postgres-backed sessions,
+  BigInt per-guild authorization with a bot-membership check, a server-rendered
+  dashboard, `/api/v1` reads, schema-validated module settings writes from the
+  HTML form and a CSRF-protected `PATCH`, schema-generated widgets and an audit
+  row per accepted change (pass 49), plus a fleet view and three built-in
+  templates that preview a schema-validated diff and apply only the previewed
+  plan (pass 50). Custom saved templates, live Discord OAuth, token
+  refresh/revocation and scoped API tokens remain open. See [[Dashboard]] and
   [[ADR-0016-dashboard-foundation]].
 - Phase **P5** complete in-repo: versioned export/restore with checksum
   verification, 24-hour rollback, deletion receipts, file level importers,
@@ -185,7 +188,7 @@ https://github.com/RNGBubba/keystone-discord-bot
   stopped, leaving one bot and one reply per command. The `.env` points at
   localhost Postgres/Redis; pass 44 started the compose services and applied the
   13 migrations then in the ledger, pass 45 added `0014_case_expiry`, and
-  `pnpm probe:live` now passes 14/14, so the SQL window is open. See
+  `pnpm probe:live` now passes 15/15, so the SQL window is open. See
   [[06-Operations/Live-Window|Live window]].
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus

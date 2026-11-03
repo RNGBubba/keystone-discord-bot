@@ -30,7 +30,7 @@ pnpm vitest run modules/modmail packages/db/src/modmail-store.test.ts
   ✓ modules/modmail/src/modmail.test.ts (6 tests)
   ✓ packages/db/src/modmail-store.test.ts (4 tests)
 
-pnpm test                          # 488 tests / 73 files
+pnpm test                          # 502 tests / 74 files
 pnpm budget                        # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
 pnpm commands:doctor               # Registry 20 roots · 141 subcommands · 4 context menus
 ```

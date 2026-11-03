@@ -39,6 +39,36 @@ export function requireCsrf(
 }
 
 /**
+ * Session + CSRF for a fleet action that has no single guild to authorize yet.
+ *
+ * The HTML fleet form carries its token in the body, so the body must be parsed
+ * before the token can be checked. The caller still has to authorize every
+ * selected guild through `authorizeFleet` before reading or writing settings.
+ */
+export async function requireSessionWrite(
+  deps: WebServerDeps,
+  session: WebSession | undefined,
+  readCsrfToken: () => Promise<string | undefined> | string | undefined,
+): Promise<WebSession> {
+  const active = requireSession(session);
+  requireCsrf(deps, active, await readCsrfToken());
+  return active;
+}
+
+/**
+ * Authorize a multi-guild selection. The URL or body guild ids are never
+ * trusted; `GuildAccessService.authorizeMany` checks each against the OAuth
+ * guild list and bot membership.
+ */
+export async function authorizeFleet(
+  deps: WebServerDeps,
+  session: WebSession,
+  guildIds: readonly string[],
+): Promise<DiscordGuild[]> {
+  return deps.access.authorizeMany(deps.auth.accessToken(session), guildIds);
+}
+
+/**
  * The single gate for a guild settings write.
  *
  * The callback lets each surface choose where its token comes from without

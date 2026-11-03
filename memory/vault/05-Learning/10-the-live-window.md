@@ -37,10 +37,11 @@ with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 14 live checks against 14
-migrations; the newest check drives the real login, session, CSRF and
-schema-generated form path on local HTTP and Postgres, then rejects a value the
-schema refuses. The numbers are checked against the report, not typed by hand.
+into the Live-Window page. The last recorded run is 15 live checks against 14
+migrations. The newest two drive real local HTTP on Postgres: the schema form
+path (login, session, CSRF, save, reject), then the fleet template path (list,
+preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
+guild). The numbers are checked against the report, not typed by hand.
 
 The evidence levels are intentionally separate:
 

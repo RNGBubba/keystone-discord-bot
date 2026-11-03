@@ -70,9 +70,10 @@ server-rendered app generates them from the module schema.
 
 **Costs and limits**
 
-- Plain HTML is intentionally minimal. Settings forms are now generated from
-  each module's schema (pass 49); modal editing, fleet actions and templates are
-  still open.
+- Plain HTML is intentionally minimal. Settings forms are generated from each
+  module's schema (pass 49) and the fleet view applies built-in templates (pass
+  50); modal editing, custom saved templates and bulk actions beyond templates
+  are still open.
 - No token refresh yet: a session that outlives the Discord access token needs a
   re-login. The unused refresh-token and rotation columns were removed in pass
   20 rather than storing a credential no code uses. Rotation/refresh is a P6
@@ -99,9 +100,15 @@ server-rendered app generates them from the module schema.
   appends one audit row, and a rejected value re-renders at `400` without a
   write or an audit row — proved over real local HTTP and in the Postgres live
   check `web-schema-widgets`.
+- (pass 50) The fleet view lists the manageable guilds; a two-guild template
+  preview shows a schema-validated diff without writing, a wrong fingerprint is
+  refused at `409`, and the previewed plan writes one moderation row and one
+  dashboard audit row per guild — proved over real local HTTP and in the
+  Postgres live check `web-fleet-templates`.
 
-The live OAuth round trip and a Postgres-backed session are the next proof, not a
-claim of this pass.
+The live OAuth round trip is still the next proof. A Postgres-backed session is
+exercised by the live probe, but its OAuth exchange is a fake port, not a Discord
+login.
 
 ## Follow-up (pass 18)
 
@@ -126,3 +133,15 @@ The write path also appends one `audit_events` row per accepted update/reset,
 through `AuditStore`, with the actor, surface and dotted-path diff. Rejected and
 no-op writes append nothing. The settings page renders the newest rows. See
 [[Dashboard]].
+
+## Follow-up (pass 50) — fleet view and built-in templates
+
+`/dashboard/fleet` lists the manageable guilds and their enabled modules. A
+selection can be previewed against a built-in template: the patch is deep-merged
+over current settings, parsed by the module schema and diffed; nothing is
+written. Apply is bound to a SHA-256 fingerprint of the displayed plan and
+re-authorizes every selected guild through `authorizeMany` before calling
+`SettingsService.update` per module. A stale or missing preview is refused, and
+each accepted write is audited as a normal dashboard settings change. There is
+no template table, no custom template editor and no JSON fleet API yet; those
+remain later P6 work.

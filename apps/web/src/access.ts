@@ -34,14 +34,33 @@ export class GuildAccessService {
     return guilds.filter(canManageGuild);
   }
 
-  async authorize(accessToken: string, guildId: string): Promise<DiscordGuild> {
+  /**
+   * Authorize every selected guild with the same two checks as one guild.
+   *
+   * A fleet action must not trust the ids in the request: the OAuth guild list
+   * is fetched once, every id is looked up in it, and bot membership is checked
+   * per guild. This is the one place a multi-guild selection is authorized.
+   */
+  async authorizeMany(accessToken: string, guildIds: readonly string[]): Promise<DiscordGuild[]> {
     const guilds = await this.oauth.fetchGuilds(accessToken);
-    const guild = guilds.find((candidate) => candidate.id === guildId);
-    if (!guild || !canManageGuild(guild)) {
-      throw new HttpError(403, "You do not have permission to manage that guild.", "guild_forbidden");
+    const selected: DiscordGuild[] = [];
+    for (const guildId of guildIds) {
+      const guild = guilds.find((candidate) => candidate.id === guildId);
+      if (!guild || !canManageGuild(guild)) {
+        throw new HttpError(403, "You do not have permission to manage that guild.", "guild_forbidden");
+      }
+      if (!(await this.oauth.botInGuild(guildId))) {
+        throw new HttpError(403, "Keystone is not in that guild.", "bot_not_in_guild");
+      }
+      selected.push(guild);
     }
-    if (!(await this.oauth.botInGuild(guildId))) {
-      throw new HttpError(403, "Keystone is not in that guild.", "bot_not_in_guild");
+    return selected;
+  }
+
+  async authorize(accessToken: string, guildId: string): Promise<DiscordGuild> {
+    const [guild] = await this.authorizeMany(accessToken, [guildId]);
+    if (!guild) {
+      throw new HttpError(403, "You do not have permission to manage that guild.", "guild_forbidden");
     }
     return guild;
   }

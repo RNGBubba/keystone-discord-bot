@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-02",
+  "updatedAt": "2026-11-03",
   "source": "memory/vault/01-Mission/Parity-Matrix.md",
   "domains": [
     {
@@ -1719,9 +1719,9 @@
           "phase": "P6",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Auth, schema-generated settings widgets and the audit trail are in repo; fleet actions, templates and a live Discord OAuth round trip are pending",
+          "note": "Auth, schema-generated settings widgets, the audit trail, the fleet view and built-in templates are in repo; a live Discord OAuth round trip is pending",
           "liveVerified": false,
-          "openReason": "Login, sessions, guild reads, schema-generated settings forms and audited writes are built; fleet actions, config templates and a live OAuth round trip are not."
+          "openReason": "Login, sessions, guild reads, schema-generated forms, audited writes, the fleet view and built-in templates are built; a live Discord OAuth round trip is not."
         },
         {
           "id": "operations.dashboard-auth-foundation",
@@ -1831,11 +1831,20 @@
             "wick-security": "❔"
           },
           "phase": "P6",
-          "status": "open",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "The guild list is per-guild authorized; bulk fleet actions and templates are pending",
-          "liveVerified": false,
-          "openReason": "A user sees every guild they can manage, but there is no fleet action surface, template application or cross-guild write path yet."
+          "note": "The fleet page lists every guild the signed-in user can manage with its enabled modules. A multi-guild template preview/apply re-authorizes each selected guild (permission and bot membership), then reuses SettingsService and the audit ledger. Live 2026-11-03 over real local HTTP on Postgres with two guilds.",
+          "evidence": [
+            "apps/web/src/web.test.ts",
+            "apps/web/src/overview.ts",
+            "apps/web/src/authorization.ts",
+            "apps/web/src/render.ts",
+            "memory/vault/03-Architecture/Dashboard.md"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-fleet-templates"
+          ]
         },
         {
           "id": "operations.config-templates",
@@ -1848,10 +1857,20 @@
             "wick-security": "❔"
           },
           "phase": "P6",
-          "status": "planned",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Apply to N guilds",
-          "liveVerified": false
+          "note": "Three built-in templates (alert-first moderation, strict moderation, quiet optional modules) preview a schema-validated per-guild diff. Apply is bound to a SHA-256 fingerprint of the displayed plan, refuses a stale or missing preview, and writes through SettingsService with one dashboard audit row per module. Custom saved templates are not built.",
+          "evidence": [
+            "apps/web/src/templates.ts",
+            "apps/web/src/templates.test.ts",
+            "apps/web/src/web.test.ts",
+            "apps/web/src/render.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-fleet-templates"
+          ]
         },
         {
           "id": "operations.public-api-webhooks",

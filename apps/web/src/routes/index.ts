@@ -25,6 +25,17 @@ const routes: readonly Route[] = [
   { pattern: exact("/logout"), methods: ["POST"], handler: auth.logout },
   { pattern: exact("/"), methods: ["GET"], handler: auth.landing },
   { pattern: exact("/dashboard"), methods: ["GET"], handler: dashboard.dashboardList },
+  { pattern: exact("/dashboard/fleet"), methods: ["GET"], handler: dashboard.fleet },
+  {
+    pattern: exact("/dashboard/fleet/preview"),
+    methods: ["POST"],
+    handler: dashboard.fleetPreview,
+  },
+  {
+    pattern: exact("/dashboard/fleet/apply"),
+    methods: ["POST"],
+    handler: dashboard.fleetApply,
+  },
   {
     pattern: exact(`/dashboard/guilds/${GUILD_ID}`),
     methods: ["GET"],

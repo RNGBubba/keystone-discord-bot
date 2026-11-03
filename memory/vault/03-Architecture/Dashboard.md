@@ -21,6 +21,9 @@ remains a later option, not a requirement for the P6 settings surface.
 | `GET /auth/callback` | state cookie | Validates `state` and `iss`, exchanges the code, creates the session |
 | `POST /logout` | session + CSRF | Deletes the server-side session and clears cookies |
 | `GET /dashboard` | session | Guilds the user can manage |
+| `GET /dashboard/fleet` | session | Fleet table: each manageable guild and its enabled modules |
+| `POST /dashboard/fleet/preview` | session + CSRF + per-guild authz | Schema-validated template diff across selected guilds; no writes |
+| `POST /dashboard/fleet/apply` | session + CSRF + per-guild authz | Apply the previewed plan; one audited settings write per module |
 | `GET /dashboard/guilds/:id` | session + guild authz | Overview page |
 | `GET /dashboard/guilds/:id/settings/:module` | session + guild authz | Schema-generated settings widgets plus the module audit trail |
 | `POST /dashboard/guilds/:id/settings/:module` | session + guild authz + CSRF | Parse named widgets, save through the module schema, re-render field errors on rejection |
@@ -53,6 +56,17 @@ DashboardService.update(guild, module, patch, { actorId, source })
   │  SettingsService.update → Zod parse → repository.set → audit.append
   ▼
 HTML or JSON; no Discord token in either
+
+fleet: GuildAccessService.authorizeMany(token, :guildIds)
+  │  one OAuth guild fetch, then permission + bot membership per guild
+  ▼
+DashboardService.previewTemplate(guilds, template)
+  │  deep merge → module schema → diff (no writes) → fingerprint
+  ▼
+DashboardService.applyTemplate(guilds, template, fingerprint)
+  │  recompute + fingerprint check → SettingsService.update per module → audit
+  ▼
+redirect to /dashboard/fleet; no parallel writer
 ```
 
 Both branches use the same `GuildAccessService.authorize()` result. There is no
@@ -82,6 +96,36 @@ The HTML form is one model, not one renderer per module:
 no-op or rejected write writes nothing. The settings page reads the newest rows
 through `DashboardService.history` and renders them as the audit trail.
 
+## Fleet templates
+
+`/dashboard/fleet` lists the same manageable guilds as `/dashboard`, with the
+enabled modules from `SettingsService`. It is a read-only overview; selecting
+guilds leads to a preview, not a write.
+
+`apps/web/src/templates.ts` defines three built-in templates as partial patches
+per module. The preview:
+
+1. calls `GuildAccessService.authorizeMany`, which fetches the OAuth guild list
+   once and checks permission **and** bot membership for every selected guild;
+2. deep-merges each patch over the guild's current settings (records merge,
+   arrays replace);
+3. parses the result with the module's own Zod schema and diffs with
+   `diffSettings`;
+4. hashes the template id, each target and each before/after leaf into a
+   SHA-256 fingerprint.
+
+The apply form carries that fingerprint with the exact guild selection. Apply
+recomputes the plan, returns `400` for a missing fingerprint, `400` if the plan
+has schema issues and `409` if the fingerprint does not match, then calls
+`SettingsService.update` for each changed module with the dashboard actor. A
+stale preview is therefore refused rather than applied, and a direct bulk POST
+without a preview cannot reach the writer. Each accepted module write appends
+one dashboard audit row. There is no template table and no second schema.
+
+The preview uses `labelFor` from the schema form, so labels match the per-guild
+editor. Templates never contain channel or role ids; destinations remain
+guild-specific.
+
 The guild list is fetched from Discord on each request, so a demotion or removal
 takes effect immediately. There is no browser-held permission cache. A
 sub-resource in a later write route must be checked against the authorized guild
@@ -96,16 +140,17 @@ as well; the URL id alone is never enough.
 | `apps/web/src/auth.ts` | OAuth completion, opaque sessions, CSRF |
 | `apps/web/src/access.ts` | BigInt permissions and the bot-membership check |
 | `apps/web/src/settings-form.ts` | Zod-to-widget model, named-field parser, field-level validation error |
+| `apps/web/src/templates.ts` | Built-in template patches, deep merge, preview fingerprint |
 | `apps/web/src/overview.ts` | View composition, editor/history, settings update and schema-error mapping; filters credential-shaped settings |
 | `apps/web/src/server.ts` | Error boundary, request context, route dispatch and the final method/404 fallback |
 | `apps/web/src/routes/index.ts` | Ordered route table, the shared guild/module patterns and matching |
 | `apps/web/src/routes/auth.ts` | Health, login, callback, logout and landing handlers |
-| `apps/web/src/routes/dashboard.ts` | Guild list, overview and settings editor/form handlers |
+| `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, overview and settings editor/form handlers |
 | `apps/web/src/routes/api.ts` | `/api/v1` reads, settings `PATCH` and the API 404 |
 | `apps/web/src/request-context.ts` | Web dependencies, cookie parsing and the one session lookup per request |
 | `apps/web/src/authorization.ts` | Session check, guild authorization and the one settings-write/CSRF gate |
 | `apps/web/src/http.ts` | Response helpers, security headers, body parsing and JSON/form settings parsing |
-| `apps/web/src/render.ts` | Layout, escaping and every HTML page renderer |
+| `apps/web/src/render.ts` | Layout, escaping, the fleet/preview pages and every HTML renderer |
 | `apps/web/src/runtime.ts` | Composition root: Postgres or memory, OAuth or degraded |
 | `packages/kernel/src/web.ts` | `SessionStore`, `DashboardStore`, `WebSession` |
 | `packages/kernel/src/audit.ts` | `AuditStore`, in-memory adapter and the settings diff |
@@ -155,7 +200,7 @@ server or a browser.
 
 ## Deliberately not done yet
 
-- A fleet view with bulk actions and templates.
+- Custom saved templates and bulk actions beyond the three built-ins.
 - Token refresh/rotation, Discord token revocation on logout, idle timeout.
   No refresh token is stored until that path exists; the session re-authenticates
   when its access token expires.

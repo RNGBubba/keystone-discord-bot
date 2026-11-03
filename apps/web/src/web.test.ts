@@ -23,6 +23,7 @@ import type { DiscordGuild, DiscordOAuth } from "./oauth";
 const GUILD_A = "111111111111111111";
 const GUILD_B = "222222222222222222";
 const GUILD_C = "333333333333333333";
+const GUILD_D = "555555555555555555";
 const GUILD_Z = "999999999999999999";
 const USER = "444444444444444444";
 const ACCESS_TOKEN = "discord-access-token-should-never-reach-browser";
@@ -33,8 +34,9 @@ class FakeOAuth implements DiscordOAuth {
     { id: GUILD_A, name: "Alpha <script>alert(1)</script>", icon: null, owner: false, permissions: String(1n << 5n) },
     { id: GUILD_B, name: "Beta", icon: null, owner: false, permissions: "0" },
     { id: GUILD_C, name: "Gamma", icon: null, owner: true, permissions: "0" },
+    { id: GUILD_D, name: "Delta", icon: null, owner: true, permissions: "0" },
   ];
-  readonly botGuilds = new Set([GUILD_A, GUILD_B]);
+  readonly botGuilds = new Set([GUILD_A, GUILD_B, GUILD_D]);
 
   authorizationUrl(input: { state: string }): string {
     return `https://discord.test/oauth?state=${encodeURIComponent(input.state)}`;
@@ -258,7 +260,7 @@ describe("P6 web auth and authorization", () => {
       const guilds = await fetch(`${test.base}/api/v1/guilds`, { headers: { cookie } });
       expect(guilds.status).toBe(200);
       const guildBody = (await guilds.json()) as { guilds: Array<{ id: string; name: string }> };
-      expect(guildBody.guilds.map((guild) => guild.id)).toEqual([GUILD_A, GUILD_C]);
+      expect(guildBody.guilds.map((guild) => guild.id)).toEqual([GUILD_A, GUILD_C, GUILD_D]);
       expect(guildBody.guilds.map((guild) => guild.id)).not.toContain(GUILD_B);
 
       const dashboard = await fetch(`${test.base}/dashboard`, { headers: { cookie } });
@@ -472,6 +474,180 @@ describe("P6 web auth and authorization", () => {
       expect(malformed.status).toBe(400);
       expect(await malformed.text()).toContain("Enter a valid number.");
       expect(await test.settings.get(GUILD_A, "ai")).toEqual(before);
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("lists manageable guilds and built-in templates on the fleet page", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const fleet = await fetch(`${test.base}/dashboard/fleet`, { headers: { cookie } });
+      expect(fleet.status).toBe(200);
+      const page = await fleet.text();
+      expect(page).toContain("Alpha");
+      expect(page).toContain("Gamma");
+      expect(page).toContain("Delta");
+      expect(page).not.toContain("Beta");
+      expect(page).toContain("Strict moderation");
+      expect(page).toContain('action="/dashboard/fleet/preview"');
+      expect(page).toContain('name="guild"');
+      expect(page).toContain('name="template"');
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("previews a template diff, refuses a stale apply, then writes and audits each guild", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const selection = new URLSearchParams({ csrf, template: "strict-moderation" });
+      selection.append("guild", GUILD_A);
+      selection.append("guild", GUILD_D);
+
+      const preview = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/preview",
+        selection,
+      );
+      expect(preview.status).toBe(200);
+      const previewHtml = await preview.text();
+      expect(previewHtml).toContain("Nothing has been written yet");
+      expect(previewHtml).toContain("Automod · Links");
+      expect(previewHtml).toContain("off");
+      expect(previewHtml).toContain("delete");
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(previewHtml)?.[1];
+      expect(fingerprint).toBeTruthy();
+
+      expect(await test.settings.get(GUILD_A, "moderation")).toMatchObject({ dryRun: true });
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+      expect(test.audit.records(GUILD_D)).toEqual([]);
+
+      const stale = new URLSearchParams(selection);
+      stale.set("fingerprint", "0".repeat(64));
+      const refused = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/apply",
+        stale,
+      );
+      expect(refused.status).toBe(409);
+      expect(await test.settings.get(GUILD_A, "moderation")).toMatchObject({ dryRun: true });
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+
+      const apply = new URLSearchParams(selection);
+      apply.set("fingerprint", fingerprint as string);
+      const applied = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/apply",
+        apply,
+      );
+      expect(applied.status).toBe(302);
+      expect(applied.headers.get("location")).toBe("/dashboard/fleet?applied=2&failed=0");
+
+      for (const guildId of [GUILD_A, GUILD_D]) {
+        const stored = await test.settings.get(guildId, "moderation");
+        expect(stored).toMatchObject({ dryRun: false });
+        expect((stored.automod as Record<string, unknown>).links).toBe("delete");
+        expect(test.audit.records(guildId)).toMatchObject([
+          {
+            actorId: USER,
+            action: "settings.update",
+            targetId: "moderation",
+            data: { source: "dashboard" },
+          },
+        ]);
+      }
+
+      const after = await fetch(`${test.base}/dashboard/fleet?applied=2&failed=0`, {
+        headers: { cookie },
+      });
+      expect(after.status).toBe(200);
+      expect(await after.text()).toContain("Template applied");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("refuses a fleet preview for a non-admin guild and a guild without the bot", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      for (const guildId of [GUILD_B, GUILD_C]) {
+        const form = new URLSearchParams({ csrf, template: "strict-moderation" });
+        form.append("guild", guildId);
+        const response = await postSettingsForm(
+          test,
+          cookie,
+          "/dashboard/fleet/preview",
+          form,
+        );
+        expect(response.status).toBe(403);
+      }
+      expect(test.audit.records(GUILD_B)).toEqual([]);
+      expect(test.audit.records(GUILD_C)).toEqual([]);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("invalidates a fleet preview when a setting changes before apply", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const selection = new URLSearchParams({ csrf, template: "strict-moderation" });
+      selection.append("guild", GUILD_A);
+      const preview = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/preview",
+        selection,
+      );
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(
+        await preview.text(),
+      )?.[1];
+      expect(fingerprint).toBeTruthy();
+
+      await test.settings.update(GUILD_A, "moderation", {
+        automod: { links: "delete" },
+      });
+      expect(test.audit.records(GUILD_A)).toHaveLength(1);
+
+      const apply = new URLSearchParams(selection);
+      apply.set("fingerprint", fingerprint as string);
+      const stale = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/apply",
+        apply,
+      );
+      expect(stale.status).toBe(409);
+      expect(await test.settings.get(GUILD_A, "moderation")).toMatchObject({ dryRun: true });
+      expect(test.audit.records(GUILD_A)).toHaveLength(1);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("requires CSRF for a fleet preview and writes nothing without it", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const form = new URLSearchParams({ template: "strict-moderation" });
+      form.append("guild", GUILD_A);
+      const response = await postSettingsForm(
+        test,
+        cookie,
+        "/dashboard/fleet/preview",
+        form,
+      );
+      expect(response.status).toBe(403);
+      expect(await test.settings.get(GUILD_A, "moderation")).toMatchObject({ dryRun: true });
       expect(test.audit.records(GUILD_A)).toEqual([]);
     } finally {
       await test.close();

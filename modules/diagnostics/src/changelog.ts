@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-50",
+    date: "2026-11-03",
+    summary:
+      "P6 fleet view: three built-in templates preview a schema-validated diff across the servers you manage, and apply only the previewed plan through the audited settings path.",
+    journal: "memory/journal/2026-11-03-pass-50.md",
+  },
+  {
     pass: "pass-49",
     date: "2026-11-02",
     summary:

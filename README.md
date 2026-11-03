@@ -13,10 +13,12 @@ tickets, economy and AI all stand on.
 **Status:** P0–P5 are complete in-repo. P6's **authorization and settings-write
 foundation** is now in repo: Discord OAuth2/PKCE login, opaque Postgres-backed
 sessions, per-guild BigInt authorization, schema-generated settings widgets,
-audited settings writes from the dashboard and a `PATCH /api/v1` route. The
-dashboard stays the existing framework-free `apps/web` HTML app; a Next.js shell
-is not built and is not required for this slice. Fleet actions, templates, scoped
-API tokens and webhooks are the remaining P6 work. P7 now has invite tracking as
+audited settings writes from the dashboard and a `PATCH /api/v1` route, plus a
+fleet view with three built-in config templates that preview a per-guild diff
+and apply only the previewed plan. The dashboard stays the existing
+framework-free `apps/web` HTML app; a Next.js shell is not built and is not
+required for this slice. Custom saved templates, scoped API tokens and webhooks
+are the remaining P6 work. P7 now has invite tracking as
 a sixth module (attribution, a joins/retention leaderboard and advisory
 suspicious-join flags), audit logging as a seventh module (five event kinds, one
 operator channel and a retained ledger), link/profanity/zalgo content filters,
@@ -42,7 +44,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**488 tests across 73 files** without a Discord token, database or network.
+**502 tests across 74 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -56,7 +58,7 @@ exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
 human client is still the next live check. Pass 44 opened the live SQL window.
 Since then Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and
-Redis, all 14 migrations are applied, and `pnpm probe:live` is 14/14 — settings survive a
+Redis, all 14 migrations are applied, and `pnpm probe:live` is 15/15 — settings survive a
 pool restart, cooldowns are shared through Redis, a BullMQ job runs once with a
 Postgres receipt, a delayed timer fires after its delay, a real case expires
 through `TemporaryActionService`, a reminder/scheduled record delivers once, a
@@ -380,6 +382,9 @@ GET /healthz                              public, no secrets
 GET /login                                OAuth2 code + PKCE; 503 without OAuth config
 GET /auth/callback                        state + iss validation, then a session
 GET /dashboard                            servers the user can manage
+GET /dashboard/fleet                      fleet table with enabled modules per server
+POST /dashboard/fleet/preview             schema-validated template diff; no writes
+POST /dashboard/fleet/apply               apply the previewed plan; audited per module
 GET /dashboard/guilds/:id                 guild overview
 GET /dashboard/guilds/:id/settings/:module  schema-generated widgets + module audit trail
 POST /dashboard/guilds/:id/settings/:module  save named widgets (CSRF + module schema)
@@ -417,10 +422,21 @@ form carries the same token in a hidden field. A missing token is `403`.
 Every accepted settings update or reset also appends one `audit_events` row with
 the actor, surface (`command`, `dashboard` or `api`), module and dotted-path
 before/after diff; a rejected or no-op write appends nothing. The settings page
-shows the newest rows for that module. This is still not the P6 exit demo: the
-fleet view/templates, token refresh and revocation, public scoped API tokens,
-per-token rate limits, `Idempotency-Key`, webhooks, OpenAPI, and a live OAuth
-round trip against Discord remain open. See
+shows the newest rows for that module.
+
+The **fleet view** lists the servers the signed-in user can manage. Three
+built-in templates (alert-first moderation, strict moderation and quiet optional
+modules) can be previewed across a multi-server selection. The preview deep-merges
+each patch over current settings, parses the result with the module's own schema
+and shows the exact before/after diff; nothing is written. Apply is bound to a
+SHA-256 fingerprint of that plan, re-authorizes every selected server, refuses a
+missing or stale preview (`400`/`409`) and then writes through
+`SettingsService.update`, with one audit row per changed module. Templates never
+contain channel or role ids, and custom saved templates are not built.
+
+This is still not the P6 exit demo: custom saved templates, token refresh and
+revocation, public scoped API tokens, per-token rate limits, `Idempotency-Key`,
+webhooks, OpenAPI, and a live OAuth round trip against Discord remain open. See
 [Dashboard](memory/vault/03-Architecture/Dashboard.md) and
 [ADR-0016](memory/vault/03-Architecture/ADR/ADR-0016-dashboard-foundation.md).
 
@@ -536,10 +552,10 @@ Everything below is free. No feature is moved behind a paywall.
 
 ### Planned (honest roadmap)
 
-- **P6 remaining:** fleet view/templates, token refresh/revocation, scoped
+- **P6 remaining:** custom saved templates, token refresh/revocation, scoped
   public API tokens, per-token rate limits, idempotency, webhooks and OpenAPI.
-  Schema-driven settings widgets and the settings audit trail are in repo; the
-  framework-free `apps/web` carrier is deliberate for now.
+  Schema-driven widgets, the audit trail, the fleet view and built-in templates
+  are in repo; the framework-free `apps/web` carrier is deliberate for now.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail` and the four context menus are done; the
@@ -564,7 +580,7 @@ See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
 | P4 AI + economy | Done | Provider, caps, RAG, chat, explanations, summaries |
 | P4.5 Platform hardening | Done | Channel resolver, intents, capability report |
 | P5 Portability | Done | Export/restore/rollback, importers, drift |
-| P6 Dashboard + API | **In progress** | OAuth/PKCE sessions, per-guild authz, schema-generated settings widgets, audited settings writes and `/api/v1` |
+| P6 Dashboard + API | **In progress** | OAuth/PKCE sessions, per-guild authz, schema-generated settings widgets, audited settings writes, `/api/v1`, fleet view and previewed built-in templates |
 | P7 Command tree | Done | 20 roots · 141 real subcommands; `/help`; generated catalog; shape-aware sync and doctor |
 | P7 Context menus | Done | 4 menus (2 user, 2 message) registered in Discord; report opens a real case, case history and rank card read existing rows, explain uses the capped AI path; invocation is human-only |
 | P7 Slash harness | Harness done | Synthetic nested `/mod ban` through the real adapter + dispatch; gateway `InteractionCreate` still human-only |
@@ -834,7 +850,12 @@ schema, saved `monthlyBudgetUsd=9` through the form, read the one `audit_events`
 row naming the dashboard actor and source, and then posted `5000`: the response
 was `400`, the field and value were preserved, the stored value stayed `9` and no
 second audit row was written. The same check is recorded as `web-schema-widgets`.
-A live Discord OAuth login is still not claimed.
+A second check, `web-fleet-templates`, loaded `/dashboard/fleet` with the same
+real session and CSRF, listed two Postgres-backed guilds, previewed strict
+moderation across both without writing, got `409` for a wrong fingerprint, then
+applied the previewed plan: `302` to `?applied=2&failed=0`, one moderation write
+and one dashboard audit row per guild. A live Discord OAuth login is still not
+claimed.
 
 Still open and not claimed as done:
 
@@ -849,9 +870,9 @@ Still open and not claimed as done:
 - MEE6 import is file-based, not a live fetch.
 - Forms modal input is not implemented; `/form submit` takes the validated
   `answers` option. Forms are not yet part of the `/export guild` bundle.
-- Live Discord OAuth, fleet actions, config templates and scoped API tokens are
-  the remaining P6 work. The Postgres session path is live-proven locally, but
-  the Discord login that creates it is not.
+- Live Discord OAuth, custom saved templates and scoped API tokens are the
+  remaining P6 work. The Postgres session path is live-proven locally, but the
+  Discord login that creates it is not.
 
 ## How to add stuff
 

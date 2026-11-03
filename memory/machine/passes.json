@@ -651,6 +651,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-50",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 fleet view and config templates: /dashboard/fleet lists the guilds the signed-in user can manage with their enabled modules, and three built-in templates (alert-first moderation, strict moderation, quiet optional modules) can be previewed against a multi-guild selection. The preview deep-merges each template patch over the current settings, parses the result with the module's own Zod schema, and diffs it with the audit helper; nothing is written. Apply is bound to a SHA-256 fingerprint of the displayed plan, refuses a stale or missing preview at 409/400, and re-authorizes every selected guild (permission + bot membership) before calling SettingsService.update. Each accepted module write appends one dashboard audit row. The carrier remains the framework-free apps/web HTML app; no Next.js shell, second settings schema or template table was added. Tests 502 / 74 files; live probe 15/15, adding web-fleet-templates: two guilds on Postgres, preview diff, wrong-fingerprint refusal, one moderation write and one dashboard audit row per guild; OAuth exchange used a fake port, so live Discord OAuth remains open.",
+      "journal": "journal/2026-11-03-pass-50.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "502",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "15/15",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

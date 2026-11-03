@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-02",
+  "updatedAt": "2026-11-03",
   "target": 14,
   "lessons": [
     {
@@ -122,7 +122,7 @@
       "proofCommands": ["pnpm probe:live"],
       "facts": [
         { "text": "14 migrations", "source": "migrations" },
-        { "text": "14 live checks", "source": "liveChecks" }
+        { "text": "15 live checks", "source": "liveChecks" }
       ]
     },
     {

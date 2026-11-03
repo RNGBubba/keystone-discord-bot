@@ -1,8 +1,9 @@
 import type { AuditEventRecord } from "@keystone/kernel";
-import type { DashboardModule, DashboardView } from "./overview";
+import type { DashboardModule, DashboardView, FleetView } from "./overview";
 import type { DiscordGuild } from "./oauth";
 import { encodePathSegment } from "./http";
-import type { SettingsField, SettingsFormModel, SettingsGroup } from "./settings-form";
+import { labelFor, type SettingsField, type SettingsFormModel, type SettingsGroup } from "./settings-form";
+import type { ConfigTemplate, TemplatePlan } from "./templates";
 
 function escapeHtml(value: string): string {
   return value
@@ -88,6 +89,7 @@ export function renderGuildList(
     "Your servers",
     `<h1>Your servers</h1>
      <p class="muted">Only servers where you are owner or hold Administrator / Manage Server are listed. Keystone must also be in the server for its detail page to load.</p>
+     <p><a href="/dashboard/fleet">Open the fleet view and apply a template</a></p>
      <div class="panel">
        ${guilds.length === 0 ? "<p>No manageable servers yet.</p>" : `<table><thead><tr><th>Server</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table>`}
      </div>
@@ -133,7 +135,161 @@ export function renderOverview(
      <div class="grid">${stats}</div>
      <div class="panel"><h2>Portability</h2>${latest}</div>
      ${modules}
-     <p class="muted">Settings are validated by each module's own schema. Templates and fleet controls remain open.</p>
+     <p class="muted">Settings are validated by each module's own schema. <a href="/dashboard/fleet">Preview a built-in template across servers</a>.</p>
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface FleetNotice {
+  readonly applied?: number;
+  readonly failed?: number;
+}
+
+function settingText(value: unknown): string {
+  if (value === undefined) return "—";
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export function renderFleet(
+  username: string,
+  view: FleetView,
+  templates: readonly ConfigTemplate[],
+  csrfToken: string,
+  notice: FleetNotice = {},
+): string {
+  const noticeHtml = notice.applied !== undefined
+    ? notice.applied > 0
+      ? `<div class="notice">Template applied: ${notice.applied} module setting${notice.applied === 1 ? "" : "s"} written. Every write is in that module's audit trail.</div>`
+      : `<div class="notice">Nothing to apply: the selected guilds already match this template.</div>`
+    : "";
+  const failureHtml = notice.failed && notice.failed > 0
+    ? `<div class="form-error">${notice.failed} write${notice.failed === 1 ? "" : "s"} failed. The remaining writes were still attempted; review the audit trail and try again.</div>`
+    : "";
+
+  const rows = view.guilds
+    .map((guild) => {
+      const enabled = guild.modules
+        .filter((module) => module.enabled === true)
+        .map((module) => module.name);
+      const unreadable = guild.modules.filter((module) => module.enabled === null).length;
+      return `<tr>
+        <td><input type="checkbox" name="guild" value="${escapeHtml(guild.id)}" aria-label="${escapeHtml(guild.name)}"></td>
+        <td><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">${escapeHtml(guild.name)}</a></td>
+        <td class="muted">${escapeHtml(guild.id)}</td>
+        <td>${enabled.length > 0 ? escapeHtml(enabled.join(", ")) : "<span class=\"muted\">none</span>"}${
+          unreadable > 0
+            ? ` <span class="muted">· ${unreadable} unreadable</span>`
+            : ""
+        }</td>
+      </tr>`;
+    })
+    .join("");
+
+  const templateOptions = templates
+    .map(
+      (template, index) => `<div class="panel">
+        <div class="field check">
+          <input type="radio" id="template-${escapeHtml(template.id)}" name="template" value="${escapeHtml(template.id)}"${index === 0 ? " checked" : ""} required>
+          <label for="template-${escapeHtml(template.id)}"><strong>${escapeHtml(template.name)}</strong></label>
+        </div>
+        <p class="muted">${escapeHtml(template.description)}</p>
+        <p class="muted">Touches ${template.modules.map((entry) => escapeHtml(labelFor(entry.moduleId))).join(", ")}.</p>
+      </div>`,
+    )
+    .join("");
+
+  const form = view.guilds.length === 0
+    ? `<p class="muted">No manageable servers yet. The fleet view lists the same guilds as the dashboard.</p>`
+    : `<div class="panel">
+        <h2>Apply a built-in template</h2>
+        <p class="muted">Select servers and a template. Preview runs the template against each server's current settings and shows the exact diff; nothing is written until you confirm.</p>
+        <form method="post" action="/dashboard/fleet/preview">
+          <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+          <table><thead><tr><th></th><th>Server</th><th>ID</th><th>Enabled modules</th></tr></thead><tbody>${rows}</tbody></table>
+          <fieldset><legend>Template</legend>${templateOptions}</fieldset>
+          <p><button type="submit">Preview template</button></p>
+        </form>
+      </div>`;
+
+  return layout(
+    "Fleet",
+    `<p><a href="/dashboard">← All servers</a></p>
+     <h1>Fleet</h1>
+     <p class="muted">One settings action across the servers you can manage. Each selected server is re-authorized, and every write goes through the module's own schema and audit trail.</p>
+     ${noticeHtml}${failureHtml}${form}
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export function renderTemplatePreview(
+  username: string,
+  plan: TemplatePlan,
+  csrfToken: string,
+): string {
+  const panels = plan.guilds
+    .map((guildPlan) => {
+      if (guildPlan.modules.length === 0) {
+        return `<div class="panel"><h2>${escapeHtml(guildPlan.guild.name)}</h2><p class="muted">No changes in this guild.</p></div>`;
+      }
+
+      const rows = guildPlan.modules
+        .flatMap((module) => {
+          const issueRows = module.issues.map(
+            (issue) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
+              issue.path.split(".").map(labelFor).join(" · "),
+            )}</td><td colspan="2" class="error">${escapeHtml(issue.message)}</td></tr>`,
+          );
+          const changeRows = Object.entries(module.changes).map(
+            ([path, change]) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
+              path.split(".").map(labelFor).join(" · "),
+            )}</td><td><code>${escapeHtml(settingText(change.from))}</code></td><td><code>${escapeHtml(settingText(change.to))}</code></td></tr>`,
+          );
+          return [...issueRows, ...changeRows];
+        })
+        .join("");
+
+      return `<div class="panel">
+        <h2>${escapeHtml(guildPlan.guild.name)} <span class="muted">· ${escapeHtml(guildPlan.guild.id)}</span></h2>
+        <table><thead><tr><th>Module</th><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>`;
+    })
+    .join("");
+
+  const summary = plan.issueCount > 0
+    ? `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}; ${plan.issueCount} schema issue${plan.issueCount === 1 ? "" : "s"}. Apply is disabled until they are resolved.`
+    : `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}. Nothing has been written yet.`;
+
+  const hiddenGuilds = plan.guilds
+    .map((guildPlan) => `<input type="hidden" name="guild" value="${escapeHtml(guildPlan.guild.id)}">`)
+    .join("");
+  const apply = plan.issueCount > 0
+    ? `<div class="form-error">This preview has schema issues, so apply is disabled. Reset or fix the affected module, then preview again.</div>`
+    : plan.changeCount === 0
+      ? `<p class="muted">No changes to apply: the selected guilds already match this template.</p>`
+      : `<form method="post" action="/dashboard/fleet/apply">
+          <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+          <input type="hidden" name="template" value="${escapeHtml(plan.template.id)}">
+          <input type="hidden" name="fingerprint" value="${escapeHtml(plan.fingerprint)}">
+          ${hiddenGuilds}
+          <p><button type="submit">Apply to ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}</button></p>
+        </form>`;
+
+  return layout(
+    `${plan.template.name} preview`,
+    `<p><a href="/dashboard/fleet">← Back to the fleet</a></p>
+     <h1>${escapeHtml(plan.template.name)}</h1>
+     <p class="muted">${escapeHtml(plan.template.description)}</p>
+     <div class="notice">${escapeHtml(summary)}</div>
+     ${panels}
+     ${apply}
      ${logoutForm(csrfToken)}`,
     username,
   );
