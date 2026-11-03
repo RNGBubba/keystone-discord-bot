@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-03T02:15:00.000Z",
+  "updatedAt": "2026-11-03T07:06:36.000Z",
   "passes": [
     {
       "id": "pass-01",
@@ -738,6 +738,21 @@
         "tests": "540",
         "budget": "20/100 roots · 141 subcommands · 4 context menus",
         "live": "19/19",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
+      "id": "pass-56",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 webhooks and Idempotency-Key: the second half of the public-API block. One `WebhookStore` port (in-memory + Drizzle, migration 0019) over `webhook_subscriptions` and `webhook_deliveries`; a `whsec_…` signing secret is shown once and sealed with the same `SecretBox` as Discord tokens. Creating, test-pinging and removing an endpoint use the session -> guild authorization -> CSRF gate and append `webhook.create` / `webhook.test` / `webhook.delete` dashboard audit rows. Delivery is an outbox row written before the network call, signed `t=<unix>,v1=HMAC-SHA256(<t>.<body>)`; one drainer in the web process attempts due rows, retries a failure three times with exponential backoff, then leaves a terminal failed receipt with the last HTTP status. Settings updates, token issue and token revoke enqueue events. `Idempotency-Key` on a token settings write reuses the existing `PostgresIdempotencyStore`/`job_receipts`: the same key and body replay the stored status and exact response bytes (`Idempotent-Replayed: true`), a different body is 409 `idempotency_conflict`, and only the first call writes settings or audit. `response_body` is text rather than jsonb so a replay is byte-identical. Tests 569 / 85 files; live probe 22/22, adding web-webhooks (a local receiver verified the HMAC independently, an always-500 receiver was tried three times then failed and the receipt page showed 500, non-loopback http was refused at 400, and both removals were audited) and web-idempotency-key (replay, 409 conflict, one audit row and the stored fingerprint) over real local HTTP and Postgres.",
+      "journal": "journal/2026-11-03-pass-56.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "569",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "22/22",
         "memory": "current",
         "build": "pass"
       }

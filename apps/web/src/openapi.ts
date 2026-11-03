@@ -24,6 +24,8 @@ export interface ApiOperation {
     readonly description: string;
   }[];
   readonly requestBody?: { readonly description: string };
+  /** Adds a 409 response for a reused Idempotency-Key. */
+  readonly conflicts?: boolean;
 }
 
 export const API_OPERATIONS: readonly ApiOperation[] = [
@@ -90,8 +92,16 @@ export const API_OPERATIONS: readonly ApiOperation[] = [
         required: false,
         description: "Session writes only; bearer tokens do not use CSRF.",
       },
+      {
+        name: "Idempotency-Key",
+        in: "header",
+        required: false,
+        description:
+          "8–128 characters. A retry with the same key and body replays the stored response; a different body is refused at 409.",
+      },
     ],
     requestBody: { description: "A partial module settings object." },
+    conflicts: true,
   },
 ];
 
@@ -131,6 +141,9 @@ export function openApiDocument(): Record<string, unknown> {
         "403": { $ref: "#/components/responses/Forbidden" },
         "404": { $ref: "#/components/responses/NotFound" },
         "429": { $ref: "#/components/responses/RateLimited" },
+        ...(operation.conflicts
+          ? { "409": { $ref: "#/components/responses/Conflict" } }
+          : {}),
       },
       ...(operation.scopes
         ? {
@@ -230,6 +243,11 @@ export function openApiDocument(): Record<string, unknown> {
         },
         NotFound: {
           description: "No such API route.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        Conflict: {
+          description:
+            "The Idempotency-Key was already used with a different body, or the first request is still in flight.",
           content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
         },
         RateLimited: {

@@ -11,7 +11,7 @@
  */
 import "dotenv/config";
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -27,6 +27,7 @@ import {
   createDashboardStore,
   createSavedTemplateStore,
   createIdempotencyStore,
+  createWebhookStore,
   createPanicStore,
   createPortabilityStore,
   createPostgresDatabase,
@@ -57,6 +58,7 @@ import { AuthService } from "../apps/web/src/auth";
 import { SecretBox, sha256 } from "../apps/web/src/crypto";
 import { DashboardService } from "../apps/web/src/overview";
 import { createWebHandler } from "../apps/web/src/server";
+import { startWebhookDrainer, WebhookService } from "../apps/web/src/webhooks";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "../apps/web/src/rate-limit";
 import type { ConfigBundle } from "../apps/web/src/config-bundle";
 import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
@@ -602,6 +604,18 @@ async function main(): Promise<void> {
   // and the Postgres writes are all the real code paths, not service methods
   // called directly.
   {
+    // This block owns the two probe guilds, so it starts from their clean state.
+    // A failed earlier run must not make the next one pass or fail for the
+    // wrong reason (the schema-widget check counts the audit trail).
+    await database.runner.exec(`
+      DELETE FROM audit_events WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      DELETE FROM settings WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      DELETE FROM api_tokens WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      DELETE FROM config_baselines WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      DELETE FROM config_templates WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      DELETE FROM webhook_subscriptions WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    `);
+
     const registry = new ModuleRegistry().registerAll(modules);
     const auditStore = createAuditStore(database);
     const baselineStore = createConfigBaselineStore(database);
@@ -609,12 +623,15 @@ async function main(): Promise<void> {
     const analyticsStore = createAnalyticsStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
     const apiTokens = new ApiTokenService(createApiTokenStore(database));
+    const box = new SecretBox(randomBytes(32));
+    const webhooks = new WebhookService(createWebhookStore(database), box);
+    const idempotency = createIdempotencyStore(database);
     const probeOAuth = new WebProbeOAuth();
     let authClock = Date.now();
     const auth = new AuthService({
       oauth: probeOAuth,
       sessions: createSessionStore(database),
-      box: new SecretBox(randomBytes(32)),
+      box,
       now: () => authClock,
       config: {
         clientId: "live-probe-client",
@@ -635,6 +652,7 @@ async function main(): Promise<void> {
       baselineStore,
       savedTemplateStore,
       analyticsStore,
+      webhooks,
     );
     // This long script must not throttle itself: the deliberate 429 proof runs
     // on a second handler with tight policies below.
@@ -654,6 +672,8 @@ async function main(): Promise<void> {
       databaseMode: "postgres" as const,
       apiTokens,
       audit: auditStore,
+      webhooks,
+      idempotency,
     };
     const handler = createWebHandler({
       ...serverDeps,
@@ -664,6 +684,9 @@ async function main(): Promise<void> {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => resolve());
     });
+    // The same drainer the real web runtime starts: the probe does not call the
+    // service directly, so the 429/retry/backoff timing is the shipped one.
+    const webhookDrainer = startWebhookDrainer(webhooks, logger, 100);
 
     try {
       const address = server.address();
@@ -1648,6 +1671,346 @@ async function main(): Promise<void> {
         features: ["operations.scoped-api-tokens"],
       });
 
+      // --- Webhooks and Idempotency-Key ---------------------------------------
+      await database.runner.exec(`
+        DELETE FROM webhook_subscriptions WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+        DELETE FROM job_receipts WHERE idempotency_key LIKE 'http:token:%';
+      `);
+
+      const receivedHooks: { headers: Record<string, string | string[] | undefined>; body: string }[] =
+        [];
+      const hookReceiver = createServer((req, res) => {
+        let body = "";
+        req.on("data", (chunk: Buffer) => {
+          body += chunk.toString("utf8");
+        });
+        req.on("end", () => {
+          receivedHooks.push({ headers: req.headers, body });
+          res.statusCode = 200;
+          res.end("ok");
+        });
+      });
+      let failedAttempts = 0;
+      const failingReceiver = createServer((req, res) => {
+        failedAttempts += 1;
+        req.resume();
+        req.on("end", () => {
+          res.statusCode = 500;
+          res.end("nope");
+        });
+      });
+      for (const [label, receiver] of [
+        ["hook", hookReceiver],
+        ["failing", failingReceiver],
+      ] as const) {
+        await new Promise<void>((resolve, reject) => {
+          receiver.once("error", reject);
+          receiver.listen(0, "127.0.0.1", () => resolve());
+        });
+        const bound = receiver.address();
+        assert(bound !== null && typeof bound === "object", `the ${label} receiver has no port`);
+      }
+      const hookPort = (hookReceiver.address() as { port: number }).port;
+      const failingPort = (failingReceiver.address() as { port: number }).port;
+
+      const waitFor = async (
+        label: string,
+        check: () => Promise<boolean> | boolean,
+        timeoutMs = 10_000,
+      ): Promise<void> => {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+          if (await check()) return;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        assert(false, `timed out waiting for ${label}`);
+      };
+
+      const signatureVerifies = (
+        hook: { headers: Record<string, string | string[] | undefined>; body: string },
+        signingSecret: string,
+      ): boolean => {
+        const header = hook.headers["x-keystone-signature"];
+        if (typeof header !== "string") return false;
+        const parts = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(header);
+        if (!parts) return false;
+        // Independent HMAC: the probe does not reuse the sender's verifier.
+        const expected = createHmac("sha256", signingSecret)
+          .update(`${parts[1]}.${hook.body}`)
+          .digest("hex");
+        const left = Buffer.from(expected);
+        const right = Buffer.from(parts[2] as string);
+        return left.length === right.length && timingSafeEqual(left, right);
+      };
+
+      try {
+        const hooksPath = `/dashboard/guilds/${WEB_GUILD}/webhooks`;
+        const emptyHooks = await fetch(`${base}${hooksPath}`, { headers: { cookie } });
+        assert(emptyHooks.status === 200, `the webhooks page returned ${emptyHooks.status}`);
+        assert(
+          (await emptyHooks.text()).includes("No webhook endpoints"),
+          "the empty webhook page is not honest",
+        );
+
+        const insecure = await fetch(`${base}${hooksPath}`, {
+          method: "POST",
+          redirect: "manual",
+          headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ csrf, url: "http://example.com/hook" }).toString(),
+        });
+        assert(insecure.status === 400, `an insecure webhook URL returned ${insecure.status}`);
+
+        const hookForm = new URLSearchParams({ csrf, url: `http://127.0.0.1:${hookPort}/hook` });
+        hookForm.append("event", "settings.updated");
+        const hookCreate = await fetch(`${base}${hooksPath}`, {
+          method: "POST",
+          redirect: "manual",
+          headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+          body: hookForm.toString(),
+        });
+        assert(hookCreate.status === 200, `webhook create returned ${hookCreate.status}`);
+        const hookSecret = /<pre>(whsec_[A-Za-z0-9_-]+)<\/pre>/.exec(await hookCreate.text())?.[1];
+        assert(hookSecret !== undefined, "the signing secret was not shown once");
+
+        const hookRows = await database.runner.query<{
+          id: string;
+          secret: string;
+          events: unknown;
+        }>(
+          `SELECT id, secret, events FROM webhook_subscriptions WHERE guild_id = '${WEB_GUILD}'`,
+        );
+        assert(hookRows.length === 1, `expected one subscription, saw ${hookRows.length}`);
+        const hookId = hookRows[0]!.id;
+        assert(
+          hookRows[0]!.secret !== hookSecret && hookRows[0]!.secret.startsWith("v1."),
+          "the signing secret is not sealed at rest",
+        );
+        assert(
+          !JSON.stringify(hookRows).includes(hookSecret),
+          "the plaintext signing secret is in the database",
+        );
+
+        const hookTest = await fetch(`${base}${hooksPath}/${hookId}/test`, {
+          method: "POST",
+          redirect: "manual",
+          headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ csrf }).toString(),
+        });
+        assert(hookTest.status === 302, `the webhook test ping returned ${hookTest.status}`);
+        await waitFor("the test delivery", () => receivedHooks.length >= 1);
+        const ping = receivedHooks[0]!;
+        assert(ping.headers["x-keystone-event"] === "webhook.test", "the ping has the wrong event");
+        assert(signatureVerifies(ping, hookSecret), "the test delivery signature did not verify");
+        const pingTimestamp = Number(
+          /^t=(\d+),/.exec(String(ping.headers["x-keystone-signature"]))?.[1],
+        );
+        assert(
+          Math.abs(Date.now() / 1_000 - pingTimestamp) < 60,
+          "the delivery timestamp is not fresh",
+        );
+
+        // A token write with an Idempotency-Key: the second call replays, the
+        // same key with a different body is refused, and the write is audited once.
+        const hookTokenForm = new URLSearchParams({
+          csrf,
+          name: "probe webhooks",
+          expiresInDays: "30",
+        });
+        hookTokenForm.append("scope", "settings:write");
+        const hookTokenResponse = await fetch(
+          `${base}/dashboard/guilds/${WEB_GUILD}/tokens`,
+          {
+            method: "POST",
+            redirect: "manual",
+            headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+            body: hookTokenForm.toString(),
+          },
+        );
+        assert(hookTokenResponse.status === 200, "the webhook write token was not issued");
+        const writeToken = /<pre>(keystone_[A-Za-z0-9_-]+)<\/pre>/.exec(
+          await hookTokenResponse.text(),
+        )?.[1];
+        assert(writeToken !== undefined, "the write token secret was not shown");
+        const [writeTokenRow] = await database.runner.query<{ id: string }>(
+          `SELECT id FROM api_tokens WHERE guild_id = '${WEB_GUILD}' ORDER BY created_at DESC LIMIT 1`,
+        );
+        assert(writeTokenRow !== undefined, "the write token row is missing");
+
+        const settingsPath = `/api/v1/guilds/${WEB_GUILD}/settings/ai`;
+        const patch = (body: string, key: string): Promise<Response> =>
+          fetch(`${base}${settingsPath}`, {
+            method: "PATCH",
+            headers: {
+              authorization: `Bearer ${writeToken}`,
+              "content-type": "application/json",
+              "idempotency-key": key,
+            },
+            body,
+          });
+        const writesBefore = (await auditStore.list(WEB_GUILD, 50)).filter(
+          (row) => row.action === "settings.update",
+        ).length;
+        const firstPatch = await patch(JSON.stringify({ monthlyBudgetUsd: 13 }), "live-probe-key-1");
+        assert(firstPatch.status === 200, `the first keyed write returned ${firstPatch.status}`);
+        assert(
+          firstPatch.headers.get("idempotent-replayed") === "false",
+          "the first keyed write claimed to be a replay",
+        );
+        const firstPatchBody = await firstPatch.text();
+
+        const replayPatch = await patch(
+          JSON.stringify({ monthlyBudgetUsd: 13 }),
+          "live-probe-key-1",
+        );
+        assert(replayPatch.status === 200, `the replayed write returned ${replayPatch.status}`);
+        assert(
+          replayPatch.headers.get("idempotent-replayed") === "true",
+          "the replayed write did not say it was a replay",
+        );
+        assert(
+          (await replayPatch.text()) === firstPatchBody,
+          "the replay returned a different body",
+        );
+
+        const conflictPatch = await patch(
+          JSON.stringify({ monthlyBudgetUsd: 14 }),
+          "live-probe-key-1",
+        );
+        assert(conflictPatch.status === 409, `a body mismatch returned ${conflictPatch.status}`);
+        const conflictBody = (await conflictPatch.json()) as { error?: { code?: string } };
+        assert(
+          conflictBody.error?.code === "idempotency_conflict",
+          "the body mismatch did not name the conflict",
+        );
+        const writesAfter = (await auditStore.list(WEB_GUILD, 50)).filter(
+          (row) => row.action === "settings.update",
+        ).length;
+        assert(
+          writesAfter === writesBefore + 1,
+          `the replay or conflict wrote an extra audit row (${writesBefore} -> ${writesAfter})`,
+        );
+
+        const receiptRows = await database.runner.query<{
+          status: string;
+          fingerprint: string;
+          response_status: number;
+        }>(
+          `SELECT status, fingerprint, response_status FROM job_receipts
+             WHERE idempotency_key = 'http:token:${writeTokenRow.id}:live-probe-key-1'`,
+        );
+        assert(
+          receiptRows[0]?.status === "completed" &&
+            receiptRows[0]?.response_status === 200 &&
+            /^[0-9a-f]{64}$/.test(receiptRows[0]?.fingerprint ?? ""),
+          "the idempotency receipt did not store the fingerprint and response",
+        );
+
+        await waitFor("the settings webhook", () => receivedHooks.length >= 2);
+        const settingsHook = receivedHooks.find(
+          (hook) => hook.headers["x-keystone-event"] === "settings.updated",
+        );
+        assert(settingsHook !== undefined, "the settings update queued no webhook");
+        assert(signatureVerifies(settingsHook, hookSecret), "the settings delivery did not verify");
+        const settingsPayload = JSON.parse(settingsHook.body) as {
+          event?: string;
+          data?: { moduleId?: string; actorId?: string; source?: string };
+        };
+        assert(settingsPayload.event === "settings.updated", "the payload has the wrong event");
+        assert(
+          settingsPayload.data?.moduleId === "ai" &&
+            settingsPayload.data?.actorId === `token:${writeTokenRow.id}` &&
+            settingsPayload.data?.source === "api",
+          "the settings payload did not name the module, actor and source",
+        );
+
+        const receiptsPage = await fetch(`${base}${hooksPath}`, { headers: { cookie } });
+        const receiptsHtml = await receiptsPage.text();
+        assert(receiptsHtml.includes("Delivery receipts"), "the receipt table is missing");
+        assert(receiptsHtml.includes("delivered"), "a delivered receipt is not shown");
+
+        // A receiver that always fails: three attempts with backoff, then stop.
+        const failForm = new URLSearchParams({ csrf, url: `http://127.0.0.1:${failingPort}/hook` });
+        failForm.append("event", "settings.updated");
+        const failCreate = await fetch(`${base}${hooksPath}`, {
+          method: "POST",
+          redirect: "manual",
+          headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+          body: failForm.toString(),
+        });
+        assert(failCreate.status === 200, `the failing subscription returned ${failCreate.status}`);
+        const failRows = await database.runner.query<{ id: string }>(
+          `SELECT id FROM webhook_subscriptions WHERE guild_id = '${WEB_GUILD}' AND url LIKE '%${failingPort}%'`,
+        );
+        const failId = failRows[0]?.id;
+        assert(failId !== undefined, "the failing subscription was not stored");
+
+        const secondWrite = await patch(
+          JSON.stringify({ monthlyBudgetUsd: 15 }),
+          "live-probe-key-2",
+        );
+        assert(secondWrite.status === 200, `the second keyed write returned ${secondWrite.status}`);
+        await waitFor(
+          "the failing delivery to exhaust its attempts",
+          async () => {
+            const rows = await database.runner.query<{ status: string; attempts: number }>(
+              `SELECT status, attempts FROM webhook_deliveries WHERE subscription_id = '${failId}'`,
+            );
+            return rows.length === 1 && rows[0]!.status === "failed" && rows[0]!.attempts === 3;
+          },
+          15_000,
+        );
+        assert(failedAttempts >= 3, `the failing receiver saw ${failedAttempts} attempts`);
+
+        const failedReceipts = await fetch(`${base}${hooksPath}`, { headers: { cookie } });
+        const failedHtml = await failedReceipts.text();
+        assert(failedHtml.includes("failed"), "a terminal failure is not shown");
+        assert(failedHtml.includes("500"), "the receipt does not show the HTTP status");
+
+        for (const id of [hookId, failId]) {
+          const removed = await fetch(`${base}${hooksPath}/${id}/delete`, {
+            method: "POST",
+            redirect: "manual",
+            headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ csrf }).toString(),
+          });
+          assert(removed.status === 302, `webhook delete returned ${removed.status}`);
+        }
+        const hookAudit = await auditStore.list(WEB_GUILD, 100);
+        assert(
+          hookAudit.filter((row) => row.action === "webhook.create").length === 2,
+          "the two subscriptions did not leave two create rows",
+        );
+        assert(
+          hookAudit.filter((row) => row.action === "webhook.delete").length === 2,
+          "the two removals did not leave two delete rows",
+        );
+        const leftover = await database.runner.query<{ rows: string }>(
+          `SELECT count(*)::text AS rows FROM webhook_subscriptions WHERE guild_id = '${WEB_GUILD}'`,
+        );
+        assert(leftover[0]?.rows === "0", "a removed subscription is still stored");
+
+        record({
+          id: "web-webhooks",
+          status: "pass",
+          detail:
+            "real local HTTP on Postgres: a subscription was created behind the guild write gate, its whsec_ secret was shown once and stored sealed, an on-demand test ping reached a local receiver and its t/v1 HMAC verified independently, a settings.updated event was delivered with the module/actor/source payload, an always-500 receiver was retried three times with backoff and then showed a failed receipt with HTTP 500, and both removals left dashboard audit rows; plain-http non-loopback URLs were refused at 400",
+          features: ["operations.public-api-webhooks"],
+        });
+
+        record({
+          id: "web-idempotency-key",
+          status: "pass",
+          detail:
+            "real local HTTP on Postgres: a settings:write token sent the same Idempotency-Key and body twice; the second response carried Idempotent-Replayed: true and the identical body, the same key with a different body returned 409 idempotency_conflict, only one settings.update audit row was written, and the job_receipts row stored the request fingerprint and the 200 response",
+          features: ["operations.public-api-webhooks"],
+        });
+      } finally {
+        hookReceiver.closeAllConnections();
+        await new Promise<void>((resolve) => hookReceiver.close(() => resolve()));
+        failingReceiver.closeAllConnections();
+        await new Promise<void>((resolve) => failingReceiver.close(() => resolve()));
+      }
+
       // --- Session hardening: owners, limits, rotation and revocation ---------
       probeOAuth.userId = WEB_NORMAL_USER;
       const normal = await signIn();
@@ -1855,6 +2218,7 @@ async function main(): Promise<void> {
         features: ["operations.dashboard-session-hardening"],
       });
     } finally {
+      webhookDrainer.stop();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

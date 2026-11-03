@@ -159,7 +159,7 @@ checked. See [[Master-Plan]] for the research program.
 | Importer (MEE6/Dyno/Carl) | ❌ | ❌ | ❌ | ❌ | ❌ | P5 | **Our edge** |
 | Full export | ❌ | ❔ | ❌ | ❔ | ❌ | P5 | JSON, documented schema |
 | Real deletion | ❔ | ❔ | ❔ | ❔ | ❔ | P5 | Receipt included |
-| Public API / webhooks | ❌ | ❔ | ❌ | 💰 | ❔ | P6 | Session or scoped-token reads and writes, audited tokens and OpenAPI shipped; webhooks and `Idempotency-Key` open |
+| Public API / webhooks | ❌ | ❔ | ❌ | 💰 | ❔ | P6 | Session or scoped-token reads and writes, audited tokens, signed webhooks with retries and receipts, `Idempotency-Key` replay and OpenAPI shipped; the live Discord OAuth round trip is open |
 | i18n | ❔ | ✅ | ❔ | ✅ | ❔ | P7 | i18next, per-guild locale |
 | Status page | ❌ | ❔ | ❔ | ❔ | ❔ | P9 | Public incidents |
 

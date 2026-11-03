@@ -2,6 +2,26 @@
 
 ## Now
 
+**Pass 56 finished the P6 API block with signed webhooks and `Idempotency-Key`**
+(2026-11-03): a guild can subscribe an https endpoint from the dashboard, and a
+failed receiver is retried with exponential backoff before the delivery becomes
+a terminal receipt the admin can read. One `WebhookStore` port has in-memory and
+Drizzle adapters over `webhook_subscriptions` and `webhook_deliveries`
+(migration 0019); the `whsec_…` signing secret is shown once and stored sealed,
+and every body is signed `t=<unix>,v1=HMAC-SHA256(<t>.<body>)` so a receiver can
+refuse a forged or stale delivery. Settings updates, token issue and token
+revoke enqueue events; the outbox row is written before the network call and
+one drainer in the web process (which already holds the sealing key) attempts
+it. Create, test and delete use the session → guild → CSRF gate and leave
+dashboard audit rows. `Idempotency-Key` on a token settings write reuses
+`PostgresIdempotencyStore`: the same key and body replay the stored status and
+exact response bytes, a different body is `409`, and only the first call writes
+settings or audit. Tests are **569 / 85 files**; `pnpm probe:live` is **22/22**,
+adding `web-webhooks` (an independent HMAC check, a 500 receiver retried three
+times then failed, the receipt page, both removals audited, non-loopback http
+refused) and `web-idempotency-key` (replay, conflict, one audit row, stored
+fingerprint). See [pass 56](../../journal/2026-11-03-pass-56.md).
+
 **Pass 55 added the P6 scoped API tokens** (2026-11-03): a `keystone_…` secret
 is shown once by the dashboard and stored only as a SHA-256 hash in
 `api_tokens` (migration 0018), bound to one guild and a subset of `guild:read`,
@@ -554,9 +574,11 @@ schemas and write path. Pass 52 added named saved templates and audited their
 create/update/delete through the same plan and writer. Pass 53 added read-only
 analytics aggregates over the existing ledgers. Pass 54 added session rotation,
 logout revocation behind the OAuth port, per-route rate limits and the
-`owners[]` instance console. The remaining P6 exit items are idle timeout, a
-Discord refresh-token path, scoped API tokens and the live Discord OAuth round
-trip. See
+`owners[]` instance console. Pass 55 added hashed, guild-bound scoped tokens
+with per-token limits and a generated OpenAPI document. Pass 56 added signed
+webhook delivery with retries and receipts, and `Idempotency-Key` replay on
+token writes. The remaining P6 exit items are an idle timeout, a Discord
+refresh-token path and the live Discord OAuth round trip. See
 [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
@@ -629,7 +651,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 553 tests / 82 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 20/20 · memory current
+pnpm check        exit 0 · typecheck 0 · 569 tests / 85 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 22/22 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -641,6 +663,8 @@ live fleet     2026-11-03 UTC · real local HTTP fleet page listed two Postgres-
 live config portability 2026-11-03 UTC · real local HTTP on Postgres · 12-module checksummed file export · multipart import preview with no write · edited checksum 400 · wrong fingerprint 409 · apply 302, one audited AI write, baseline stored · no drift, then one changed value after an out-of-band update · OAuth exchange fake
 live saved templates 2026-11-03 UTC · real local HTTP on Postgres · saved from one guild and listed · two-guild preview with no write · tampered and stale 409 · apply 302, one audited write per guild · invalid stored row reported and refused 400 · create/update/delete audited · OAuth exchange fake
 live dashboard analytics 2026-11-03 UTC · real local HTTP on Postgres · 7 audit rows, 3 cases, 2 invite joins, 3 tickets, 3 command runs seeded · API and page matched every aggregate and source count · empty guild named · days=91/abc 400 · signed-out 401 · OAuth exchange fake
+live webhooks    2026-11-03 UTC · real local HTTP on Postgres · endpoint created, secret shown once and sealed at rest · local receiver verified t/v1 HMAC independently · settings.updated delivered with module/actor/source · always-500 receiver tried 3 times then failed with HTTP 500 on the receipt page · both removals audited · non-loopback http 400 · OAuth exchange fake
+live idempotency 2026-11-03 UTC · real local HTTP on Postgres · same key and body replayed byte-identically with Idempotent-Replayed: true · different body 409 idempotency_conflict · exactly one settings.update audit row · receipt stored the fingerprint and 200 status · OAuth exchange fake
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -865,11 +889,13 @@ read that file.
 | 24 | Each token has its own limited window; revocation is immediate and audited once | `web.test.ts`: two requests pass, the third is `429` with `Retry-After`, the next window passes and a second token is unaffected; revoke `302` then `401`, a second revoke `404` with no second audit row; live: same, with one `api_token.issue` and one `api_token.revoke` dashboard row | Real local HTTP + a movable clock, plus the Postgres live check |
 | 25 | The OpenAPI document describes the routes that exist | `openapi.test.ts`: every operation's sample path matches a registered `/api/v1` route and its method, every such route has an operation, scopes come from `API_SCOPES`, and both principals are declared; live `GET /api/v1/openapi.json` named both and the analytics scope | Unit + real route table, plus the Postgres live check |
 | 26 | Owners-only instance actions refuse a guild admin | `web.test.ts`: instance page and revoke action are `401` anonymous, `403` for a manage-guild user and `200`/`302` for `WEB_OWNER_IDS`; deleting every row for a user signs that session out | Real local HTTP + **PGlite**, plus the Postgres `web-session-hardening` live check |
+| 27 | A webhook delivery is signed, retried with backoff and receipted | `webhooks.test.ts`: the URL rules, a sealed secret, `signWebhook`/`verifyWebhookSignature` including a stale timestamp, three attempts then terminal, event fan-out and receipt ordering; `webhook-store.test.ts` (PGlite): round trip, due/complete/retry and cascade; `web.test.ts`: create/list/test/delete behind the gate with audit rows | Unit + **PGlite**, plus the Postgres `web-webhooks` live check |
+| 28 | A keyed token write replays and a different body is refused | `web.test.ts`: second call `200` with `Idempotent-Replayed: true` and the same body, a different body `409 idempotency_conflict`, exactly one audit row; `idempotency.test.ts` (PGlite): the stored response replays as the same bytes, release and lease work | Real local HTTP + **PGlite**, plus the Postgres `web-idempotency-key` live check |
 
 This table proves the foundation, the narrow write path, the schema-widget
 editor, the fleet/built-in/saved template paths, the analytics read, session
-hardening and the scoped-token API, not the exit demo. Live Discord OAuth, live
-Discord token revocation, webhooks and per-token `Idempotency-Key` remain open.
+hardening, the scoped-token API, signed webhooks and keyed replay, not the exit
+demo. Live Discord OAuth and live Discord token revocation remain open.
 A live Postgres-backed
 session is real — pass 44 applied the session table and `/healthz` runs with
 `database: postgres` — but an authenticated OAuth session has still not crossed
@@ -1044,11 +1070,11 @@ for the dashboard. The auth gate, settings writes, schema-generated widgets and
 the settings audit trail are built in the existing `apps/web` HTML app; pass 50
 added the fleet view and built-in templates, pass 52 added saved templates, pass
 53 added analytics aggregates, pass 54 added session rotation, logout
-revocation, per-route limits and the `owners[]` instance console, and pass 55
+revocation, per-route limits and the `owners[]` instance console, pass 55
 added hashed scoped tokens, per-token limits, audited issue/revoke and the
-generated OpenAPI document. The carrier decision is recorded in
-[[ADR-0016-dashboard-foundation]]. Next are webhooks, `Idempotency-Key` replay,
-an idle timeout and a refresh-token path, plus the live Discord OAuth round
-trip. Before
+generated OpenAPI document, and pass 56 added signed webhook delivery with
+retries and receipts plus `Idempotency-Key` replay. The carrier decision is
+recorded in [[ADR-0016-dashboard-foundation]]. Next are an idle timeout and a
+refresh-token path, plus the live Discord OAuth round trip. Before
 launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

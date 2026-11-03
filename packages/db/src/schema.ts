@@ -570,16 +570,80 @@ export const caseCounters = pgTable("case_counters", {
   nextCaseNumber: integer("next_case_number").notNull().default(2),
 });
 
-/** Idempotency receipts for queue work. See `packages/queue`. */
+/**
+ * Idempotency receipts for queue work and keyed HTTP writes. See
+ * `packages/queue` and the `Idempotency-Key` path in `apps/web`.
+ *
+ * A request receipt adds the body fingerprint and the response to replay. The
+ * queue never writes those columns; the API never reads job status.
+ */
 export const jobReceipts = pgTable("job_receipts", {
   idempotencyKey: text("idempotency_key").primaryKey(),
   jobName: text("job_name").notNull(),
   status: text("status").notNull(), // claimed | completed | failed
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
+  fingerprint: text("fingerprint"),
+  responseStatus: integer("response_status"),
+  /** Exact JSON text, not jsonb: a replay must be byte-identical. */
+  responseBody: text("response_body"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Outbound webhook endpoints. `secret` is sealed by the web app before it
+ * reaches this row; the plaintext signing secret is shown to the operator once.
+ */
+export const webhookSubscriptions = pgTable(
+  "webhook_subscriptions",
+  {
+    id: uuid("id").primaryKey(),
+    guildId: text("guild_id").notNull(),
+    url: text("url").notNull(),
+    secret: text("secret").notNull(),
+    events: jsonValue("events").notNull(),
+    createdBy: text("created_by"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("webhook_subscriptions_guild_created_idx").on(
+      table.guildId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/**
+ * The delivery outbox. A pending row is retried until it succeeds or reaches
+ * the attempt cap; `delivered_at`, `last_status` and `last_error` are the
+ * receipt the admin reads. Rows die with their subscription.
+ */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id").notNull(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => webhookSubscriptions.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    payload: jsonValue("payload").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    lastStatus: integer("last_status"),
+    lastError: text("last_error"),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("webhook_deliveries_due_idx").on(table.status, table.nextAttemptAt),
+    index("webhook_deliveries_guild_created_idx").on(table.guildId, table.createdAt),
+    index("webhook_deliveries_subscription_idx").on(table.subscriptionId),
+  ],
+);
 
 export const imports = pgTable("imports", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -666,6 +730,8 @@ export const schema = {
   eventRsvps,
   caseCounters,
   jobReceipts,
+  webhookSubscriptions,
+  webhookDeliveries,
   imports,
   backups,
   webSessions,

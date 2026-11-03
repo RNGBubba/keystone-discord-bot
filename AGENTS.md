@@ -130,9 +130,9 @@ rate-limited register leaves the app with no commands.
   framework-free `apps/web` HTML app; a future Next.js shell is not built and is
   not required for this slice. Saved templates, analytics aggregates, session
   hardening and hashed guild-scoped API tokens (per-route scopes, per-token
-  limits, audited issue/revoke, a generated OpenAPI document) are in repo;
-  webhooks, `Idempotency-Key` and the live Discord OAuth round trip remain
-  open.
+  limits, audited issue/revoke, a generated OpenAPI document), signed webhook
+  delivery with retries and receipts, and `Idempotency-Key` replay are in repo;
+  the live Discord OAuth round trip remains open.
 - P7 invite tracking is in repo as the sixth module: `/invites` leaderboard,
   stats and who-invited-whom, backed by `invite_joins` and advisory fake-join
   flags. A cold cache records an unknown inviter; the adapter test covers it.
@@ -253,8 +253,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 553
-  tests in 82 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 569
+  tests in 85 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -403,7 +403,8 @@ rate-limited register leaves the app with no commands.
   role/select/voice paths, a live Discord timer delivery and a live panic
   lockdown (the SQL/service halves are live-proven), a real member leave,
   pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth and live token
-  revocation, webhooks, `Idempotency-Key`, and the rest of P7.
+  revocation, an idle session timeout, a refresh-token path, and the rest of
+  P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

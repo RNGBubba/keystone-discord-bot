@@ -6,8 +6,10 @@ import {
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
+  InMemoryIdempotencyStore,
   InMemorySavedTemplateStore,
   InMemorySessionStore,
+  InMemoryWebhookStore,
   type AnalyticsSnapshot,
   type AnalyticsStore,
   type AnalyticsWindow,
@@ -22,6 +24,7 @@ import { modules } from "@keystone/module-catalog";
 import { GuildAccessService, canManageGuild } from "./access";
 import { ApiTokenService } from "./api-tokens";
 import { AuthService } from "./auth";
+import { verifyWebhookSignature, WebhookService } from "./webhooks";
 import { SecretBox, sha256 } from "./crypto";
 import { createWebHandler } from "./server";
 import { DashboardService } from "./overview";
@@ -172,6 +175,8 @@ interface Harness {
   savedTemplates: InMemorySavedTemplateStore;
   analytics: FixedAnalyticsStore;
   apiTokens: ApiTokenService;
+  webhooks: WebhookService;
+  idempotency: InMemoryIdempotencyStore;
   close(): Promise<void>;
 }
 
@@ -193,10 +198,13 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
   const savedTemplates = new InMemorySavedTemplateStore();
   const analytics = new FixedAnalyticsStore();
   const apiTokens = new ApiTokenService(new InMemoryApiTokenStore());
+  const box = new SecretBox(randomBytes(32));
+  const webhooks = new WebhookService(new InMemoryWebhookStore(), box);
+  const idempotency = new InMemoryIdempotencyStore();
   const auth = new AuthService({
     oauth,
     sessions,
-    box: new SecretBox(randomBytes(32)),
+    box,
     now: options.now,
     config: {
       clientId: "client-id",
@@ -219,6 +227,7 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
       baselines,
       savedTemplates,
       analytics,
+      webhooks,
     ),
     logger: createSilentLogger(),
     secureCookies: false,
@@ -226,6 +235,8 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     rateLimiter: options.rateLimiter ?? new RateLimiter(DEFAULT_RATE_LIMITS),
     apiTokens,
     audit,
+    webhooks,
+    idempotency,
   });
   const server = createServer(handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -242,6 +253,8 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     savedTemplates,
     analytics,
     apiTokens,
+    webhooks,
+    idempotency,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1839,6 +1852,230 @@ describe("P6 scoped API tokens", () => {
       expect(badDays.status).toBe(400);
       expect(await test.apiTokens.list(GUILD_A)).toEqual([]);
       expect(test.audit.records(GUILD_A)).toEqual([]);
+    } finally {
+      await test.close();
+    }
+  });
+});
+
+describe("P6 webhooks and Idempotency-Key", () => {
+  async function receiver(status: number): Promise<{
+    url: string;
+    received: { headers: Record<string, string | string[] | undefined>; body: string }[];
+    close(): Promise<void>;
+  }> {
+    const received: { headers: Record<string, string | string[] | undefined>; body: string }[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString("utf8");
+      });
+      req.on("end", () => {
+        received.push({ headers: req.headers, body });
+        res.statusCode = status;
+        res.end(status >= 200 && status < 300 ? "ok" : "nope");
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("receiver did not bind");
+    return {
+      url: `http://127.0.0.1:${address.port}/hook`,
+      received,
+      async close() {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      },
+    };
+  }
+
+  it("creates, tests and removes a subscription through the guild write gate", async () => {
+    const test = await harness();
+    const sink = await receiver(200);
+    try {
+      const { cookie, csrf } = await login(test);
+      const base = `${test.base}/dashboard/guilds/${GUILD_A}/webhooks`;
+      const empty = await fetch(base, { headers: { cookie } });
+      expect(empty.status).toBe(200);
+      expect(await empty.text()).toContain("No webhook endpoints");
+
+      const insecure = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/webhooks`,
+        new URLSearchParams({ csrf, url: "http://example.com/hook", event: "settings.updated" }),
+      );
+      expect(insecure.status).toBe(400);
+      expect(await test.webhooks.list(GUILD_A)).toEqual([]);
+
+      const form = new URLSearchParams({ csrf, url: sink.url });
+      form.append("event", "settings.updated");
+      form.append("event", "api_token.issued");
+      const created = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/webhooks`,
+        form,
+      );
+      expect(created.status).toBe(200);
+      const html = await created.text();
+      const secret = /<pre>(whsec_[A-Za-z0-9_-]+)<\/pre>/.exec(html)?.[1];
+      expect(secret).toBeTruthy();
+      expect(html).toContain("Signing secret");
+
+      const [subscription] = await test.webhooks.list(GUILD_A);
+      expect(subscription?.url).toBe(sink.url);
+      expect(subscription?.events).toEqual(["settings.updated", "api_token.issued"]);
+      expect(subscription?.secret).not.toContain(secret as string);
+      expect(test.audit.records(GUILD_A)).toMatchObject([
+        { actorId: USER, action: "webhook.create", targetId: subscription?.id },
+      ]);
+
+      const withoutCsrf = await fetch(`${base}/${subscription?.id}/test`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: "",
+      });
+      expect(withoutCsrf.status).toBe(403);
+
+      const tested = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/webhooks/${subscription?.id}/test`,
+        new URLSearchParams({ csrf }),
+      );
+      expect(tested.status).toBe(302);
+      expect(tested.headers.get("location")).toBe(
+        `/dashboard/guilds/${GUILD_A}/webhooks?tested=1`,
+      );
+      expect(await test.webhooks.drain()).toBe(1);
+      expect(sink.received).toHaveLength(1);
+      expect(sink.received[0]?.headers["x-keystone-event"]).toBe("webhook.test");
+      expect(
+        verifyWebhookSignature(
+          secret as string,
+          sink.received[0]?.headers["x-keystone-signature"] as string,
+          sink.received[0]?.body as string,
+        ),
+      ).toBe(true);
+
+      // A real settings write queues the subscribed event through the same path.
+      const saved = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/settings/ai`,
+        aiForm(csrf),
+      );
+      expect(saved.status).toBe(302);
+      expect(await test.webhooks.drain()).toBe(1);
+      const settingsDelivery = sink.received[1];
+      expect(settingsDelivery?.headers["x-keystone-event"]).toBe("settings.updated");
+      expect(JSON.parse(settingsDelivery?.body as string)).toMatchObject({
+        event: "settings.updated",
+        data: { moduleId: "ai", actorId: USER, source: "dashboard" },
+      });
+
+      const page = await fetch(base, { headers: { cookie } });
+      const pageHtml = await page.text();
+      expect(pageHtml).toContain("Delivery receipts");
+      expect(pageHtml).toContain("delivered");
+
+      const removed = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/webhooks/${subscription?.id}/delete`,
+        new URLSearchParams({ csrf }),
+      );
+      expect(removed.status).toBe(302);
+      expect(await test.webhooks.list(GUILD_A)).toEqual([]);
+      expect(await test.webhooks.deliveries(GUILD_A)).toEqual([]);
+      expect(test.audit.records(GUILD_A).map((row) => row.action)).toContain("webhook.delete");
+    } finally {
+      await sink.close();
+      await test.close();
+    }
+  });
+
+  it("records a failing receiver's HTTP status and error as a receipt", async () => {
+    const test = await harness();
+    const sink = await receiver(500);
+    try {
+      const { cookie, csrf } = await login(test);
+      const form = new URLSearchParams({ csrf, url: sink.url, event: "settings.updated" });
+      await postSettingsForm(test, cookie, `/dashboard/guilds/${GUILD_A}/webhooks`, form);
+      await test.webhooks.enqueue(GUILD_A, "settings.updated", { moduleId: "ai" });
+      expect(await test.webhooks.drain()).toBe(1);
+
+      const [receipt] = await test.webhooks.deliveries(GUILD_A);
+      expect(receipt).toMatchObject({ status: "pending", attempts: 1, lastStatus: 500 });
+      expect(receipt?.lastError).toContain("500");
+
+      const page = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/webhooks`, {
+        headers: { cookie },
+      });
+      const html = await page.text();
+      expect(html).toContain("Internal Server Error");
+      expect(html).toContain("500");
+    } finally {
+      await sink.close();
+      await test.close();
+    }
+  });
+
+  it("replays a token write on the same Idempotency-Key and refuses a different body", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const issued = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/tokens`,
+        (() => {
+          const form = new URLSearchParams({ csrf, name: "deploy", expiresInDays: "30" });
+          form.append("scope", "settings:write");
+          return form;
+        })(),
+      );
+      expect(issued.status).toBe(200);
+      const secret = /<pre>(keystone_[A-Za-z0-9_-]+)<\/pre>/.exec(await issued.text())?.[1] as string;
+      const writesBefore = test.audit.records(GUILD_A).filter(
+        (row) => row.action === "settings.update",
+      ).length;
+
+      const patch = (body: string, key: string): Promise<Response> =>
+        fetch(`${test.base}/api/v1/guilds/${GUILD_A}/settings/ai`, {
+          method: "PATCH",
+          headers: {
+            authorization: `Bearer ${secret}`,
+            "content-type": "application/json",
+            "idempotency-key": key,
+          },
+          body,
+        });
+
+      const first = await patch(JSON.stringify({ monthlyBudgetUsd: 11 }), "probe-key-0001");
+      expect(first.status).toBe(200);
+      expect(first.headers.get("idempotent-replayed")).toBe("false");
+      const firstBody = await first.text();
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 11 });
+
+      const replay = await patch(JSON.stringify({ monthlyBudgetUsd: 11 }), "probe-key-0001");
+      expect(replay.status).toBe(200);
+      expect(replay.headers.get("idempotent-replayed")).toBe("true");
+      expect(await replay.text()).toBe(firstBody);
+      expect(
+        test.audit.records(GUILD_A).filter((row) => row.action === "settings.update"),
+      ).toHaveLength(writesBefore + 1);
+
+      const conflict = await patch(JSON.stringify({ monthlyBudgetUsd: 12 }), "probe-key-0001");
+      expect(conflict.status).toBe(409);
+      expect(await conflict.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 11 });
+
+      const invalid = await patch(JSON.stringify({ monthlyBudgetUsd: 12 }), "short");
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({ error: { code: "idempotency_key_invalid" } });
     } finally {
       await test.close();
     }

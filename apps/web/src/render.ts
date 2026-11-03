@@ -1,7 +1,10 @@
-import type {
-  AnalyticsSnapshot,
-  ApiTokenRecord,
-  AuditEventRecord,
+import {
+  WEBHOOK_EVENTS,
+  type AnalyticsSnapshot,
+  type ApiTokenRecord,
+  type AuditEventRecord,
+  type WebhookDelivery,
+  type WebhookSubscription,
 } from "@keystone/kernel";
 import type {
   DashboardModule,
@@ -153,6 +156,10 @@ export function renderOverview(
      <div class="panel"><h2>API tokens</h2>
        <p class="muted">Issue a guild-scoped <code>keystone_…</code> token for automation. The secret is shown once; only its hash is stored, and every route checks the token's guild and scopes.</p>
        <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/tokens">Manage API tokens</a></p>
+     </div>
+     <div class="panel"><h2>Webhooks</h2>
+       <p class="muted">Send signed <code>settings.updated</code> and token events to an HTTPS endpoint. Each delivery is queued, retried with backoff and shown as a receipt.</p>
+       <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/webhooks">Manage webhooks</a></p>
      </div>
      <div class="panel"><h2>Portability</h2>${latest}</div>
      <div class="panel"><h2>Config export, import and drift</h2>
@@ -987,6 +994,90 @@ export function renderApiTokens(
      </div>
      <div class="panel"><h2>Issued tokens</h2>
        ${tokens.length === 0 ? `<p class="muted">No tokens have been issued for this server.</p>` : `<table><thead><tr><th>Name</th><th>Scopes</th><th>Status</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}
+     </div>
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface WebhookRenderOptions {
+  readonly issued?: { readonly subscription: WebhookSubscription; readonly secret: string };
+  readonly deleted?: boolean;
+  readonly tested?: boolean;
+}
+
+export function renderWebhooks(
+  username: string,
+  guild: DiscordGuild,
+  subscriptions: readonly WebhookSubscription[],
+  deliveries: readonly WebhookDelivery[],
+  csrfToken: string,
+  options: WebhookRenderOptions = {},
+): string {
+  const guildBase = `/dashboard/guilds/${encodePathSegment(guild.id)}`;
+  const base = `${guildBase}/webhooks`;
+  const notice = options.issued
+    ? `<div class="notice">Signing secret for <strong>${escapeHtml(options.issued.subscription.url)}</strong>. Copy it now; it is stored sealed and shown once.</div>
+       <pre>${escapeHtml(options.issued.secret)}</pre>
+       <p class="muted">Every delivery carries <code>X-Keystone-Signature: t=&lt;unix&gt;,v1=&lt;hex&gt;</code> over <code>t.body</code>. Reject an old timestamp and compare the HMAC before trusting the body.</p>`
+    : "";
+  const deleted = options.deleted
+    ? `<div class="notice">Subscription removed together with its delivery receipts.</div>`
+    : "";
+  const tested = options.tested
+    ? `<div class="notice">A test delivery was queued. Its result appears in the receipts below.</div>`
+    : "";
+
+  const rows = subscriptions
+    .map(
+      (subscription) => `<tr>
+        <td><code>${escapeHtml(subscription.url)}</code></td>
+        <td>${subscription.events.map((event) => `<code>${escapeHtml(event)}</code>`).join(" ")}</td>
+        <td>${escapeHtml(subscription.createdAt)}</td>
+        <td>
+          <form method="post" action="${base}/${encodePathSegment(subscription.id)}/test"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Send test</button></form>
+          <form method="post" action="${base}/${encodePathSegment(subscription.id)}/delete"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Remove</button></form>
+        </td>
+      </tr>`,
+    )
+    .join("");
+
+  const receipts = deliveries
+    .map(
+      (delivery) => `<tr>
+        <td>${escapeHtml(delivery.event)}</td>
+        <td>${escapeHtml(delivery.status)}</td>
+        <td>${delivery.attempts}</td>
+        <td>${delivery.lastStatus === undefined ? "—" : delivery.lastStatus}</td>
+        <td>${delivery.lastError ? escapeHtml(delivery.lastError.slice(0, 120)) : "—"}</td>
+        <td>${escapeHtml(delivery.createdAt)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  return layout(
+    "Webhooks",
+    `<p><a href="${guildBase}">← Back to ${escapeHtml(guild.name)}</a></p>
+     <h1>Webhooks</h1>
+     <p class="muted">Keystone signs each delivery with this subscription's secret. A delivery is queued in an outbox before the request, retried with backoff up to three attempts, and its final receipt stays here.</p>
+     ${notice}${deleted}${tested}
+     <div class="panel"><h2>Add a subscription</h2>
+       <form method="post" action="${base}">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="webhook-url">Endpoint URL</label><input id="webhook-url" name="url" type="url" maxlength="2048" placeholder="https://example.com/keystone" required><small>HTTPS; plain http is accepted only for localhost.</small></div>
+         <fieldset><legend>Events</legend>
+           ${WEBHOOK_EVENTS.map(
+             (event) => `<div class="field check"><input id="event-${event.replaceAll(".", "-")}" name="event" type="checkbox" value="${event}" checked><label for="event-${event.replaceAll(".", "-")}">${event}</label></div>`,
+           ).join("")}
+         </fieldset>
+         <p><button type="submit">Add subscription</button></p>
+       </form>
+     </div>
+     <div class="panel"><h2>Subscriptions</h2>
+       ${subscriptions.length === 0 ? `<p class="muted">No webhook endpoints are configured for this server.</p>` : `<table><thead><tr><th>Endpoint</th><th>Events</th><th>Created</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}
+     </div>
+     <div class="panel"><h2>Delivery receipts</h2>
+       ${deliveries.length === 0 ? `<p class="muted">No delivery has been attempted yet.</p>` : `<table><thead><tr><th>Event</th><th>State</th><th>Attempts</th><th>HTTP</th><th>Last error</th><th>Queued</th></tr></thead><tbody>${receipts}</tbody></table>`}
      </div>
      ${logoutForm(csrfToken)}`,
     username,

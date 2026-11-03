@@ -12,6 +12,7 @@ import { DrizzleAiStore } from "./ai-store";
 import { DrizzlePortabilityStore } from "./portability-store";
 import { DrizzleSessionStore } from "./web-session-store";
 import { DrizzleApiTokenStore } from "./api-token-store";
+import { DrizzleWebhookStore } from "./webhook-store";
 import { DrizzleDashboardStore } from "./web-dashboard-store";
 import { DrizzleInviteStore } from "./invite-store";
 import { DrizzleLoggingStore } from "./logging-store";
@@ -81,6 +82,10 @@ export function createSessionStore(handle: PostgresHandle): DrizzleSessionStore 
 
 export function createApiTokenStore(handle: PostgresHandle): DrizzleApiTokenStore {
   return new DrizzleApiTokenStore(handle.db as never);
+}
+
+export function createWebhookStore(handle: PostgresHandle): DrizzleWebhookStore {
+  return new DrizzleWebhookStore(handle.db as never);
 }
 
 export function createDashboardStore(handle: PostgresHandle): DrizzleDashboardStore {

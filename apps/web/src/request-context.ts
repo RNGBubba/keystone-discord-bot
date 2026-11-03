@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type {
   ApiTokenRecord,
   AuditStore,
+  IdempotencyStore,
   Logger,
   WebSession,
 } from "@keystone/kernel";
@@ -12,6 +13,7 @@ import { CSRF_COOKIE, SESSION_COOKIE, parseCookies, serializeCookie } from "./co
 import { appendSetCookie } from "./http";
 import type { DashboardService } from "./overview";
 import type { RateLimiter } from "./rate-limit";
+import type { WebhookService } from "./webhooks";
 
 export interface WebServerDeps {
   auth: AuthService;
@@ -23,6 +25,9 @@ export interface WebServerDeps {
   rateLimiter: RateLimiter;
   apiTokens: ApiTokenService;
   audit: AuditStore;
+  webhooks: WebhookService;
+  /** Receipts for `Idempotency-Key` on a token write. */
+  idempotency: IdempotencyStore;
 }
 
 export interface RouteContext {

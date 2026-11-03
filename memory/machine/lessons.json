@@ -149,13 +149,13 @@
       ],
       "facts": [
         {
-          "text": "18 migrations",
-          "source": "migrations"
-        },
-        {
-          "text": "20 live checks",
-          "source": "liveChecks"
-        }
+      "text": "19 migrations",
+      "source": "migrations"
+    },
+    {
+      "text": "22 live checks",
+      "source": "liveChecks"
+    }
       ]
     },
     {

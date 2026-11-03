@@ -20,9 +20,10 @@ export/import with a stored baseline and a drift page, and read-only analytics
 aggregates over the ledgers the bot already keeps. Every apply is bound to the
 previewed plan. The dashboard stays the existing framework-free `apps/web` HTML
 app; a Next.js shell is not built and is not required for this slice. Session
-hardening and hashed guild-scoped API tokens with per-route scopes and limits
-are in repo; webhooks, `Idempotency-Key` and the live OAuth round trip are the
-remaining P6 work. P7 now has invite tracking as
+hardening, hashed guild-scoped API tokens with per-route scopes and limits,
+signed webhook delivery with retries and receipts, and `Idempotency-Key` replay
+are in repo; the live OAuth round trip is the remaining P6 proof. P7 now has
+invite tracking as
 a sixth module (attribution, a joins/retention leaderboard and advisory
 suspicious-join flags), audit logging as a seventh module (five event kinds, one
 operator channel and a retained ledger), link/profanity/zalgo content filters,
@@ -48,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**553 tests across 82 files** without a Discord token, database or network.
+**569 tests across 85 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -483,9 +484,9 @@ issue/revoke append one dashboard audit row each. `GET /api/v1/openapi.json` is
 generated from an operation table that a test walks against the route registry
 in both directions.
 
-This is still not the P6 exit demo: idle timeout, a Discord refresh-token path,
-webhooks, `Idempotency-Key`, and a live OAuth round trip (and live token
-revocation) against Discord remain open. See
+This is still not the P6 exit demo: an idle timeout, a Discord refresh-token
+path, and a live OAuth round trip (and live token revocation) against Discord
+remain open. See
 [Dashboard](memory/vault/03-Architecture/Dashboard.md) and
 [ADR-0016](memory/vault/03-Architecture/ADR/ADR-0016-dashboard-foundation.md).
 
@@ -525,9 +526,10 @@ Everything below is free. No feature is moved behind a paywall.
 - P6 dashboard/API foundation: Discord OAuth2/PKCE, opaque Postgres sessions,
   per-guild BigInt authorization, a read-only overview, module settings writes
   through the bot's own schemas, `/api/v1` reads plus a settings `PATCH`, a
-  fleet template preview, checksummed config export/import with drift, and
+  fleet template preview, checksummed config export/import with drift,
   hashed guild-bound API tokens with per-route scopes, per-token limits and a
-  generated OpenAPI 3.1 document.
+  generated OpenAPI 3.1 document, signed webhook delivery with retries and
+  receipts, and `Idempotency-Key` replay on token writes.
 - Token-free tests on PGlite and structural fakes.
 
 ### Moderation and security
@@ -604,9 +606,10 @@ Everything below is free. No feature is moved behind a paywall.
 
 ### Planned (honest roadmap)
 
-- **P6 remaining:** idle timeout, a Discord refresh-token path, webhooks and
-  `Idempotency-Key` replay, plus the live OAuth round trip. Scoped API tokens,
-  per-token limits and the generated OpenAPI document are in repo.
+- **P6 remaining:** an idle timeout, a Discord refresh-token path and the live
+  OAuth round trip. Scoped API tokens, per-token limits, the generated OpenAPI
+  document, signed webhooks with retries and receipts, and `Idempotency-Key`
+  replay are in repo.
   Schema-driven widgets, the audit trail, the fleet view, built-in and saved
   templates, config export/import/drift, analytics aggregates, session rotation
   and logout revocation, per-route limits, and the `owners[]` instance console
@@ -930,8 +933,8 @@ Still open and not claimed as done:
 - MEE6 import is file-based, not a live fetch.
 - Forms modal input is not implemented; `/form submit` takes the validated
   `answers` option. Forms are not yet part of the `/export guild` bundle.
-- Live Discord OAuth, webhooks and `Idempotency-Key` are the remaining P6 work.
-  The Postgres session path, scoped tokens and analytics are live-proven locally,
+- Live Discord OAuth is the remaining P6 proof. The Postgres session path,
+  scoped tokens, analytics, webhooks and keyed replay are live-proven locally,
   but the Discord login that creates a session is not.
 
 ## How to add stuff

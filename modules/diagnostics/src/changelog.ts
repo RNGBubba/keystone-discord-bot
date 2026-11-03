@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-56",
+    date: "2026-11-03",
+    summary:
+      "P6 webhooks and Idempotency-Key: subscribe an https endpoint from the dashboard, receive HMAC-signed settings and token events, watch retries back off and stop on the delivery receipt page, and safely retry a keyed token write knowing the stored response will be replayed instead of applied twice.",
+    journal: "memory/journal/2026-11-03-pass-56.md",
+  },
+  {
     pass: "pass-55",
     date: "2026-11-03",
     summary:

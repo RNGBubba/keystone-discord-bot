@@ -279,6 +279,40 @@ takes effect immediately. There is no browser-held permission cache. A
 sub-resource in a later write route must be checked against the authorized guild
 as well; the URL id alone is never enough.
 
+## Webhooks and `Idempotency-Key`
+
+A guild can subscribe an https endpoint (plain `http:` only on loopback, so a
+local receiver can be tested) to `settings.updated`, `api_token.issued` and
+`api_token.revoked`. The server mints a `whsec_…` signing secret, seals it with
+the same `SecretBox` as the session and Discord tokens, and shows the plaintext
+once. The database only ever holds the sealed value.
+
+Delivery is an outbox, not a fire-and-forget `fetch`. `WebhookService.enqueue`
+writes one `webhook_deliveries` row per matching subscription before the network
+is touched. `startWebhookDrainer` picks due rows (`status = 'pending'` and
+`next_attempt_at <= now`, the exact shape of
+`webhook_deliveries_due_idx`), signs the body and posts it with
+`t=<unix>,v1=HMAC-SHA256(<t>.<body>)` in `x-keystone-signature`, plus
+`x-keystone-event` and `x-keystone-delivery`. A receiver recomputes the HMAC in
+constant time and refuses a timestamp outside its tolerance, so a captured body
+cannot be replayed later. A failed attempt is scheduled at
+`250ms * 2^(attempt-1)`; the third failure is terminal and keeps the last status
+and error, which is what the receipt table on the page shows. Deleting a
+subscription cascades its receipts.
+
+The drainer lives in `apps/web` because that process already owns the sealing
+key; the Discord worker has no web dependencies and no reason to hold it. The
+rows are durable, so moving the drainer into the worker later would not change
+the `WebhookStore` contract.
+
+`Idempotency-Key` is the second use of `job_receipts`. A token write namespaces
+the key by principal (`http:<actor>:<key>`) and fingerprints `METHOD path\nbody`,
+so two clients cannot collide. A completed receipt with the same fingerprint
+replays the stored status and body with `Idempotent-Replayed: true`; the same key
+with a different body is `409 idempotency_conflict`; a failed write releases the
+claim so a corrected retry can run. The response body is stored as text, not
+jsonb, because jsonb normalises key order and a replay must be byte-identical.
+
 ## Where the code lives
 
 | File | Owns |
@@ -364,11 +398,14 @@ server or a browser.
   session cookie; it does not extend the Discord grant. No refresh token is
   stored until refresh and single-flight exist, so the session re-authenticates
   when its access token expires.
-- Webhook subscriptions and signed delivery, and `Idempotency-Key` replay on the
-  token principal.
 - Live OAuth against Discord and live Discord token revocation. The local probe
   drives a real Postgres session and asserts revocation at the port, but it fakes
   the OAuth code exchange, so neither is claimed.
+- Webhook SSRF hardening. A subscription URL must be https (loopback http is
+  allowed so a local receiver can be tested), but private and link-local address
+  ranges are not blocked. Creating one requires Manage Guild, so the gate is the
+  current control; an allowlist or DNS resolution check is the next step, not a
+  claim that this is done.
 
 The kill signal in [[Roadmap]] says read-only first if the authorization matrix
 cannot pass. That step is done; settings writes now reuse the same gate. This is

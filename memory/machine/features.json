@@ -2008,11 +2008,23 @@
             "wick-security": "❔"
           },
           "phase": "P6",
-          "status": "open",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "The token half is shipped as `operations.scoped-api-tokens`; webhook delivery and `Idempotency-Key` remain",
-          "liveVerified": false,
-          "openReason": "Session and bearer-token reads/writes, scopes, per-token limits and the generated OpenAPI document are built; webhook subscriptions and delivery, signed payloads and Idempotency-Key replay are not."
+          "note": "Webhook subscriptions and signed delivery plus `Idempotency-Key` replay on the token principal. One `WebhookStore` port has in-memory and Drizzle adapters over `webhook_subscriptions` and `webhook_deliveries` (migration 0019); the signing secret is `whsec_…`, shown once and stored sealed, and every delivery carries `t=<unix>,v1=<hmac>` over `<t>.<body>` so a receiver can reject a forged or stale body. Delivery is an outbox row written before the network call: three attempts with exponential backoff, then a terminal failed receipt the admin reads on the page. Settings updates and token issue/revoke enqueue events; the drainer lives in the web process because it already owns the sealing key. `Idempotency-Key` reuses `PostgresIdempotencyStore`/`job_receipts`: the same key and body replay the stored status and exact response bytes, a different body is `409`, and only the first call writes. Creating, testing and removing an endpoint pass the session -> guild -> CSRF gate and append dashboard audit rows. Live 2026-11-03 over real local HTTP on Postgres: a local receiver verified the HMAC independently, an always-500 receiver was retried three times then failed, the receipt page showed the 500, and the replay/conflict cases held.",
+          "evidence": [
+            "packages/kernel/src/webhooks.ts",
+            "packages/db/src/webhook-store.ts",
+            "packages/db/src/migrations/0019-webhooks.ts",
+            "apps/web/src/webhooks.ts",
+            "apps/web/src/routes/webhooks.ts",
+            "apps/web/src/idempotency.ts",
+            "apps/web/src/routes/api.ts",
+            "apps/web/src/webhooks.test.ts",
+            "packages/db/src/webhook-store.test.ts",
+            "packages/db/src/idempotency.test.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true
         },
         {
           "id": "operations.i18n",

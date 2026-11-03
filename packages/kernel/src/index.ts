@@ -25,4 +25,5 @@ export * from "./config";
 export * from "./telemetry";
 export * from "./web";
 export * from "./api-tokens";
+export * from "./webhooks";
 export * from "./dispatch";

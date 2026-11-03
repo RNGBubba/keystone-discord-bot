@@ -60,6 +60,12 @@ export async function tokenCreate(
       expiresAt: issued.record.expiresAt,
     },
   });
+  await ctx.deps.webhooks.enqueue(write.guild.id, "api_token.issued", {
+    tokenId: issued.record.id,
+    name: issued.record.name,
+    scopes: [...issued.record.scopes],
+    actorId: write.session.userId,
+  });
 
   const tokens = await ctx.deps.apiTokens.list(write.guild.id);
   send(
@@ -95,6 +101,11 @@ export async function tokenRevoke(
     action: "api_token.revoke",
     targetId: revoked.id,
     data: { source: "dashboard", name: revoked.name, scopes: [...revoked.scopes] },
+  });
+  await ctx.deps.webhooks.enqueue(write.guild.id, "api_token.revoked", {
+    tokenId: revoked.id,
+    name: revoked.name,
+    actorId: write.session.userId,
   });
   redirect(
     ctx.res,

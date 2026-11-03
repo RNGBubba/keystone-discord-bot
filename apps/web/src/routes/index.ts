@@ -4,6 +4,7 @@ import * as auth from "./auth";
 import * as dashboard from "./dashboard";
 import * as instance from "./instance";
 import * as tokens from "./tokens";
+import * as webhooks from "./webhooks";
 
 export type RouteHandler = (
   ctx: RouteContext,
@@ -20,6 +21,7 @@ const GUILD_ID = String.raw`(\d{15,20})`;
 const MODULE_ID = String.raw`([a-z][a-z0-9-]{1,31})`;
 const TEMPLATE_ID = String.raw`([0-9a-fA-F-]{36})`;
 const TOKEN_ID = TEMPLATE_ID;
+const WEBHOOK_ID = TEMPLATE_ID;
 const exact = (path: string): RegExp => new RegExp(`^${path}$`);
 
 export const ROUTES: readonly Route[] = [
@@ -129,6 +131,26 @@ export const ROUTES: readonly Route[] = [
     pattern: exact(`/dashboard/guilds/${GUILD_ID}/tokens/${TOKEN_ID}/revoke`),
     methods: ["POST"],
     handler: tokens.tokenRevoke,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/webhooks`),
+    methods: ["GET"],
+    handler: webhooks.webhooksPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/webhooks`),
+    methods: ["POST"],
+    handler: webhooks.webhookCreate,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/webhooks/${WEBHOOK_ID}/test`),
+    methods: ["POST"],
+    handler: webhooks.webhookTest,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/webhooks/${WEBHOOK_ID}/delete`),
+    methods: ["POST"],
+    handler: webhooks.webhookDelete,
   },
   { pattern: exact("/api/v1/openapi.json"), methods: ["GET"], handler: api.openapi },
   { pattern: exact("/api/v1/me"), methods: ["GET"], handler: api.me },

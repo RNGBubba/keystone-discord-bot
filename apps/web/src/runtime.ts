@@ -5,9 +5,11 @@ import {
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
+  InMemoryIdempotencyStore,
   InMemorySavedTemplateStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
+  InMemoryWebhookStore,
   ModuleRegistry,
   SettingsService,
   createLogger,
@@ -16,10 +18,12 @@ import {
   type AuditStore,
   type ConfigBaselineStore,
   type DashboardStore,
+  type IdempotencyStore,
   type SavedTemplateStore,
   type Logger,
   type SessionStore,
   type SettingsRepository,
+  type WebhookStore,
 } from "@keystone/kernel";
 import {
   createAnalyticsStore,
@@ -27,10 +31,12 @@ import {
   createAuditStore,
   createConfigBaselineStore,
   createDashboardStore,
+  createIdempotencyStore,
   createSavedTemplateStore,
   createPostgresDatabase,
   createSessionStore,
   createSettingsRepository,
+  createWebhookStore,
   type PostgresHandle,
 } from "@keystone/db";
 import { modules } from "@keystone/module-catalog";
@@ -43,6 +49,7 @@ import { DashboardService } from "./overview";
 import { createWebHandler, type WebServerDeps } from "./server";
 import { HttpError } from "./http-error";
 import { DEFAULT_RATE_LIMITS, RateLimiter } from "./rate-limit";
+import { startWebhookDrainer, WebhookService } from "./webhooks";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
 /** Re-key the opaque cookie every 15 minutes; the absolute expiry does not move. */
@@ -84,6 +91,8 @@ export function createWebRuntime(env: Env): WebRuntime {
   let baselineStore: ConfigBaselineStore;
   let savedTemplateStore: SavedTemplateStore;
   let apiTokenStore: ApiTokenStore;
+  let webhookStore: WebhookStore;
+  let idempotencyStore: IdempotencyStore;
   let analyticsStore: AnalyticsStore | undefined;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
@@ -94,6 +103,8 @@ export function createWebRuntime(env: Env): WebRuntime {
     baselineStore = createConfigBaselineStore(database);
     savedTemplateStore = createSavedTemplateStore(database);
     apiTokenStore = createApiTokenStore(database);
+    webhookStore = createWebhookStore(database);
+    idempotencyStore = createIdempotencyStore(database);
     analyticsStore = createAnalyticsStore(database);
     logger.info("web data: postgres");
   } else {
@@ -105,6 +116,8 @@ export function createWebRuntime(env: Env): WebRuntime {
     baselineStore = new InMemoryConfigBaselineStore();
     savedTemplateStore = new InMemorySavedTemplateStore();
     apiTokenStore = new InMemoryApiTokenStore();
+    webhookStore = new InMemoryWebhookStore();
+    idempotencyStore = new InMemoryIdempotencyStore();
   }
 
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
@@ -147,10 +160,11 @@ export function createWebRuntime(env: Env): WebRuntime {
     logger.warn("Discord OAuth is not configured — /login returns 503 until the three OAuth values and DISCORD_TOKEN are set.");
   }
 
+  const box = new SecretBox(sessionKey);
   const auth = new AuthService({
     oauth,
     sessions,
-    box: new SecretBox(sessionKey),
+    box,
     config: {
       clientId: env.DISCORD_CLIENT_ID,
       clientSecret: env.DISCORD_CLIENT_SECRET,
@@ -162,6 +176,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     },
   });
   const access = new GuildAccessService(oauth ?? unavailableOAuth());
+  const webhooks = new WebhookService(webhookStore, box);
   const dashboard = new DashboardService(
     registry,
     new SettingsService(settingsRepository, registry, auditStore),
@@ -170,7 +185,9 @@ export function createWebRuntime(env: Env): WebRuntime {
     baselineStore,
     savedTemplateStore,
     analyticsStore,
+    webhooks,
   );
+  const drainer = startWebhookDrainer(webhooks, logger);
   const handler = createWebHandler({
     auth,
     access,
@@ -181,6 +198,8 @@ export function createWebRuntime(env: Env): WebRuntime {
     rateLimiter: new RateLimiter(DEFAULT_RATE_LIMITS),
     apiTokens: new ApiTokenService(apiTokenStore),
     audit: auditStore,
+    webhooks,
+    idempotency: idempotencyStore,
   });
 
   return {
@@ -193,6 +212,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     },
     ephemeralSessionKey,
     async close() {
+      drainer.stop();
       await database?.close();
     },
   };

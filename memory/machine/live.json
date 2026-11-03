@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T06:37:34.726Z",
+  "generatedAt": "2026-11-03T07:02:29.572Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -12,7 +12,7 @@
       "reachable": true,
       "version": "16.15",
       "migrations": {
-        "applied": 18,
+        "applied": 19,
         "pending": 0,
         "upToDate": true
       }
@@ -25,7 +25,7 @@
     {
       "id": "postgres-migrations",
       "status": "pass",
-      "detail": "18 migrations applied, 0 pending on Postgres 16.15",
+      "detail": "19 migrations applied, 0 pending on Postgres 16.15",
       "features": []
     },
     {
@@ -39,7 +39,7 @@
     {
       "id": "redis-shared-cooldown",
       "status": "pass",
-      "detail": "two clients: first allowed, second refused with 1998ms remaining",
+      "detail": "two clients: first allowed, second refused with 1999ms remaining",
       "features": []
     },
     {
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1145ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1233ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 96847c5f8304… matched after import 39cbbec7",
+      "detail": "bundle checksum 2c472edb4754… matched after import 5f084fd4",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -162,6 +162,22 @@
       "detail": "real local HTTP on Postgres: an owner issued a guild:read token from the dashboard, the secret was shown once and only its SHA-256 hash reached Postgres; the token authorized the existing overview and guild-list handlers and returned its own identity at /api/v1/me while a foreign-guild call and a wrong-scope analytics call were 403 and anonymous/bogus bearers were 401; the token's first use was stamped; a tight per-token window returned 429 + Retry-After and recovered in the next window; revoke then returned 401, a second revoke wrote no row and exactly one api_token.issue and one api_token.revoke dashboard audit row named the owner; /api/v1/openapi.json was served from the route table. OAuth exchange used a fake port",
       "features": [
         "operations.scoped-api-tokens"
+      ]
+    },
+    {
+      "id": "web-webhooks",
+      "status": "pass",
+      "detail": "real local HTTP on Postgres: a subscription was created behind the guild write gate, its whsec_ secret was shown once and stored sealed, an on-demand test ping reached a local receiver and its t/v1 HMAC verified independently, a settings.updated event was delivered with the module/actor/source payload, an always-500 receiver was retried three times with backoff and then showed a failed receipt with HTTP 500, and both removals left dashboard audit rows; plain-http non-loopback URLs were refused at 400",
+      "features": [
+        "operations.public-api-webhooks"
+      ]
+    },
+    {
+      "id": "web-idempotency-key",
+      "status": "pass",
+      "detail": "real local HTTP on Postgres: a settings:write token sent the same Idempotency-Key and body twice; the second response carried Idempotent-Replayed: true and the identical body, the same key with a different body returned 409 idempotency_conflict, only one settings.update audit row was written, and the job_receipts row stored the request fingerprint and the 200 response",
+      "features": [
+        "operations.public-api-webhooks"
       ]
     },
     {

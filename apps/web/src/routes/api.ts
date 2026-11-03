@@ -1,5 +1,12 @@
+import type { RequestClaim } from "@keystone/kernel";
 import { authorizeApiGuild, requireApiPrincipal, requireSettingsWrite } from "../authorization";
-import { csrfHeader, parseApiSettings, sendJson } from "../http";
+import {
+  csrfHeader,
+  parseSettingsJson,
+  readApiSettingsBody,
+  sendJson,
+} from "../http";
+import { claimRefusal, parseIdempotencyKey, requestFingerprint } from "../idempotency";
 import { analyticsDays } from "../overview";
 import { openApiDocument } from "../openapi";
 import type { RouteContext } from "../request-context";
@@ -94,29 +101,65 @@ export async function settings(
   const guildId = params[0] as string;
   const moduleId = params[1] as string;
 
+  // Authorize before reading the body. A session must present CSRF; a bearer
+  // token cannot forge a cookie, so its scope and guild are the gate.
+  let guild;
+  let actorId: string;
   if (ctx.bearerPresent) {
     const authorized = await authorizeApiGuild(ctx.deps, ctx, guildId, "settings:write");
-    const patch = await parseApiSettings(ctx.req);
-    const module = await ctx.deps.dashboard.update(authorized.guild, moduleId, patch, {
-      actorId: `token:${authorized.token?.id ?? "unknown"}`,
-      source: "api",
-    });
-    sendJson(ctx.res, 200, { guildId, module });
-    return true;
+    guild = authorized.guild;
+    actorId = `token:${authorized.token?.id ?? "unknown"}`;
+  } else {
+    const write = await requireSettingsWrite(
+      ctx.deps,
+      ctx.session,
+      guildId,
+      () => csrfHeader(ctx.req),
+    );
+    guild = write.guild;
+    actorId = write.session.userId;
   }
 
-  const write = await requireSettingsWrite(
-    ctx.deps,
-    ctx.session,
-    guildId,
-    () => csrfHeader(ctx.req),
-  );
-  const patch = await parseApiSettings(ctx.req);
-  const module = await ctx.deps.dashboard.update(write.guild, moduleId, patch, {
-    actorId: write.session.userId,
-    source: "api",
-  });
-  sendJson(ctx.res, 200, { guildId, module });
+  // Read the exact bytes once: the patch and the fingerprint must describe the
+  // same request, and a replay is a response, not a second parse.
+  const raw = await readApiSettingsBody(ctx.req);
+  const patch = parseSettingsJson(raw);
+  const key = parseIdempotencyKey(ctx.req.headers["idempotency-key"]);
+  const storageKey = key ? `http:${actorId}:${key}` : undefined;
+  const fingerprint = requestFingerprint(ctx.method, ctx.path, raw);
+  let claim: RequestClaim | undefined;
+
+  if (storageKey) {
+    claim = await ctx.deps.idempotency.claimRequest(
+      storageKey,
+      "http.settings.patch",
+      fingerprint,
+    );
+    if (claim.outcome === "replay") {
+      sendJson(ctx.res, claim.response.status, claim.response.body, [], {
+        "Idempotent-Replayed": "true",
+      });
+      return true;
+    }
+    const refusal = claimRefusal(claim);
+    if (refusal) throw refusal;
+  }
+
+  try {
+    const module = await ctx.deps.dashboard.update(guild, moduleId, patch, {
+      actorId,
+      source: "api",
+    });
+    const body = { guildId, module };
+    if (storageKey) {
+      await ctx.deps.idempotency.completeRequest(storageKey, fingerprint, { status: 200, body });
+    }
+    sendJson(ctx.res, 200, body, [], storageKey ? { "Idempotent-Replayed": "false" } : {});
+  } catch (error) {
+    // Release the claim so a corrected retry is not stuck behind the lease.
+    if (storageKey) await ctx.deps.idempotency.releaseRequest(storageKey);
+    throw error;
+  }
   return true;
 }
 

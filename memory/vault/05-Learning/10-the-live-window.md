@@ -30,15 +30,15 @@ pnpm db:migrate
 pnpm probe:live
 ```
 
-The probe opens the configured Postgres, checks that the 18 migrations are current,
+The probe opens the configured Postgres, checks that the 19 migrations are current,
 writes a settings row, closes the pool, reopens it and reads the row again. It
 uses two Redis clients to prove a cooldown is shared. It runs a BullMQ job twice
 with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 20 live checks against 18
-migrations. The newest seven drive real local HTTP on Postgres: the schema form
+into the Live-Window page. The last recorded run is 22 live checks against 19
+migrations. The HTTP checks drive real local HTTP on Postgres: the schema form
 path (login, session, CSRF, save, reject), the fleet template path (list,
 preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
 guild), the config path (checksummed file export, multipart upload, preview

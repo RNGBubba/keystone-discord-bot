@@ -196,14 +196,53 @@ export interface HealthProbe {
 
 export type IdempotencyClaim = "run" | "done";
 
+/** The response an idempotent HTTP request replays. */
+export interface StoredHttpResponse {
+  readonly status: number;
+  readonly body: unknown;
+}
+
 /**
- * Receipts that make a retried job safe. Postgres implements this in
- * `@keystone/db`; the queue calls it around every handler.
+ * What an `Idempotency-Key` claim means.
+ *
+ * `execute` is the first use (or a retry after a failed attempt); `replay`
+ * carries the stored response for the same key and body; `conflict` is the same
+ * key with a different body; `in-flight` is a concurrent retry while the first
+ * request still holds the lease.
+ */
+export type RequestClaim =
+  | { readonly outcome: "execute" }
+  | { readonly outcome: "replay"; readonly response: StoredHttpResponse }
+  | { readonly outcome: "conflict" }
+  | { readonly outcome: "in-flight" };
+
+/**
+ * Receipts that make a retried job or HTTP write safe. Postgres implements this
+ * in `@keystone/db`; the queue calls `claim/complete/fail` around every handler
+ * and the API calls `claimRequest/completeRequest` around a keyed write.
+ *
+ * The same rows serve both: a job key and an HTTP key are namespaced by the
+ * caller, so neither can collide with the other.
  */
 export interface IdempotencyStore {
   claim(key: string, jobName: string): Promise<IdempotencyClaim>;
   complete(key: string): Promise<void>;
   fail(key: string, error: string): Promise<void>;
+  /**
+   * Claim an HTTP request key. A key that was completed with the same
+   * fingerprint replays; a different fingerprint is a conflict; a fresh claim
+   * older than the lease is allowed to run again so a crash cannot wedge it.
+   */
+  claimRequest(
+    key: string,
+    jobName: string,
+    fingerprint: string,
+    now?: number,
+  ): Promise<RequestClaim>;
+  /** Store the response so a retry of the same key and body can replay it. */
+  completeRequest(key: string, fingerprint: string, response: StoredHttpResponse): Promise<void>;
+  /** Drop an unfinished claim so a corrected retry is not stuck behind the lease. */
+  releaseRequest(key: string): Promise<void>;
 }
 
 /**

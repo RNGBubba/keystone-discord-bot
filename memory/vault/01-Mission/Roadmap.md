@@ -142,8 +142,13 @@ before a UI framework was added; settings writes followed through the same gate.
   `/api/v1` handlers, per-token fixed windows, audited issue/revoke and an
   OpenAPI 3.1 document generated from a table the route-drift test checks (pass
   55).
-- [ ] Public API v1 remainder: webhook subscriptions and signed delivery, and
-  `Idempotency-Key` replay on the token principal.
+- [x] Public API v1 remainder: webhook subscriptions and signed delivery, and
+  `Idempotency-Key` replay on the token principal. One `WebhookStore` port
+  (in-memory + Drizzle, migration 0019), a `whsec_…` secret shown once and
+  sealed, `t/v1` HMAC headers, an outbox with three backed-off attempts and a
+  terminal receipt, dashboard create/test/delete behind the guild write gate,
+  and request receipts that replay the exact response bytes or refuse a
+  different body at `409` (pass 56).
 
 **Exit demo:** two guilds and two users; user A cannot read/write guild B through
 the UI or API. Every setting is editable. A template applies with a preview. A

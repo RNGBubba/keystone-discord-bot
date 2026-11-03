@@ -201,6 +201,10 @@ export class DashboardService {
     private readonly baselines?: ConfigBaselineStore,
     private readonly savedTemplates?: SavedTemplateStore,
     private readonly analyticsStore?: AnalyticsStore,
+    /** Outbound webhook outbox; absent in a unit test that does not need it. */
+    private readonly webhooks?: {
+      enqueue(guildId: string, event: "settings.updated", payload: Record<string, unknown>): Promise<number>;
+    },
   ) {}
 
   private present(module: ModuleManifest, values: Record<string, unknown>): DashboardModule {
@@ -1176,6 +1180,13 @@ export class DashboardService {
     if (!module) throw new HttpError(404, "No such module.", "module_not_found");
     try {
       const values = await this.settings.update(guild.id, moduleId, patch, context);
+      // The write is durable; the outbox row is written before the response so
+      // a subscriber cannot miss an event that the admin was told succeeded.
+      await this.webhooks?.enqueue(guild.id, "settings.updated", {
+        moduleId,
+        ...(context.actorId ? { actorId: context.actorId } : {}),
+        source: context.source,
+      });
       return this.present(module, values);
     } catch (error) {
       const issues = zodIssues(error);

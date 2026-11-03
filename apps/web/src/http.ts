@@ -58,8 +58,12 @@ export function sendJson(
   status: number,
   body: unknown,
   cookies: string[] = [],
+  extraHeaders: Record<string, string> = {},
 ): void {
-  const headers: Record<string, string | string[]> = { "Cache-Control": "no-store" };
+  const headers: Record<string, string | string[]> = {
+    "Cache-Control": "no-store",
+    ...extraHeaders,
+  };
   if (cookies.length > 0) headers["Set-Cookie"] = cookies;
   send(res, status, JSON.stringify(body), "application/json; charset=utf-8", headers);
 }
@@ -111,11 +115,23 @@ function parseSettings(raw: string): Record<string, unknown> {
 export async function parseApiSettings(
   req: IncomingMessage,
 ): Promise<Record<string, unknown>> {
+  return parseSettingsJson(await readApiSettingsBody(req));
+}
+
+/**
+ * Read the JSON body once, before parsing it, so the API can fingerprint the
+ * exact bytes an `Idempotency-Key` covers.
+ */
+export async function readApiSettingsBody(req: IncomingMessage): Promise<string> {
   const contentType = req.headers["content-type"] ?? "";
   if (!contentType.toLowerCase().startsWith("application/json")) {
     throw new HttpError(415, "Send settings as application/json.", "content_type_required");
   }
-  return parseSettings(await parseBody(req, MAX_SETTINGS_BYTES));
+  return parseBody(req, MAX_SETTINGS_BYTES);
+}
+
+export function parseSettingsJson(raw: string): Record<string, unknown> {
+  return parseSettings(raw);
 }
 
 export interface SettingsFormBody {
