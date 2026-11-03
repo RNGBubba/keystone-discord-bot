@@ -61,7 +61,12 @@ import { createWebHandler } from "../apps/web/src/server";
 import { startWebhookDrainer, WebhookService } from "../apps/web/src/webhooks";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "../apps/web/src/rate-limit";
 import type { ConfigBundle } from "../apps/web/src/config-bundle";
-import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
+import {
+  OAuthRefreshRejected,
+  type DiscordGuild,
+  type DiscordOAuth,
+  type OAuthTokens,
+} from "../apps/web/src/oauth";
 
 const root = path.resolve(import.meta.dirname, "..");
 const GUILD = "live-probe";
@@ -111,22 +116,52 @@ function assert(ok: boolean, message: string): asserts ok {
 class WebProbeOAuth implements DiscordOAuth {
   /** The probe has no Discord login, so it selects which user the fake returns. */
   userId = WEB_USER;
-  readonly revocations: string[] = [];
+  readonly revocations: { token: string; hint: string }[] = [];
+  /** Every refresh token presented; the replay case expects the same one twice. */
+  readonly refreshCalls: string[] = [];
+  /** Discord rotates: a token works once, then a replay is refused. */
+  readonly #accepted = new Set<string>();
+  #sequence = 0;
 
   authorizationUrl(input: { state: string }): string {
     return `https://discord.test/oauth?state=${encodeURIComponent(input.state)}`;
   }
 
-  async exchangeCode(): Promise<{ accessToken: string }> {
-    return { accessToken: "live-probe-access-token" };
+  async exchangeCode(): Promise<OAuthTokens> {
+    this.#sequence += 1;
+    const refreshToken = `live-probe-refresh-${this.#sequence}`;
+    this.#accepted.add(refreshToken);
+    return {
+      accessToken: "live-probe-access-token",
+      refreshToken,
+      expiresInSeconds: 3_600,
+    };
+  }
+
+  async refreshToken(token: string): Promise<OAuthTokens> {
+    this.refreshCalls.push(token);
+    // A small delay makes two concurrent requests actually overlap.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    if (!this.#accepted.delete(token)) throw new OAuthRefreshRejected();
+    this.#sequence += 1;
+    const next = `live-probe-refresh-${this.#sequence}`;
+    this.#accepted.add(next);
+    return {
+      accessToken: "live-probe-access-refreshed",
+      refreshToken: next,
+      expiresInSeconds: 3_600,
+    };
   }
 
   async fetchUser(): Promise<{ id: string; username: string }> {
     return { id: this.userId, username: `Live probe ${this.userId}` };
   }
 
-  async revokeToken(accessToken: string): Promise<void> {
-    this.revocations.push(accessToken);
+  async revokeToken(
+    token: string,
+    hint: "access_token" | "refresh_token" = "access_token",
+  ): Promise<void> {
+    this.revocations.push({ token, hint });
   }
 
   async fetchGuilds(): Promise<DiscordGuild[]> {
@@ -640,6 +675,8 @@ async function main(): Promise<void> {
         issuer: "https://discord.com",
         sessionTtlMs: 60 * 60_000,
         rotationIntervalMs: 60_000,
+        idleTimeoutMs: 5 * 60_000,
+        touchIntervalMs: 0,
         owners: [WEB_USER],
       },
     });
@@ -2011,6 +2048,119 @@ async function main(): Promise<void> {
         await new Promise<void>((resolve) => failingReceiver.close(() => resolve()));
       }
 
+      // --- Session idle timeout and refresh -----------------------------------
+      {
+        // Activity inside the window is accepted and moves the idle clock; a
+        // session past it is refused and its row is deleted, not left dormant.
+        const idleLogin = await signIn();
+        const idleHash = sha256(idleLogin.cookie.split("; ")[0]?.split("=")[1] as string);
+        const [idleRow] = await database.runner.query<{ last_seen_at: string }>(
+          `SELECT last_seen_at::text AS last_seen_at FROM web_sessions WHERE id = '${idleHash}'`,
+        );
+        assert(idleRow !== undefined, "the idle probe session was not stored");
+
+        // The probe freezes `authClock`, so activity is written against that
+        // same clock rather than Postgres `now()`, which drifts ahead.
+        await database.runner.exec(
+          `UPDATE web_sessions SET last_seen_at = '${new Date(authClock - 4 * 60_000).toISOString()}' WHERE id = '${idleHash}'`,
+        );
+        const alive = await fetch(`${base}/api/v1/me`, { headers: { cookie: idleLogin.cookie } });
+        assert(alive.status === 200, `a session inside the idle window returned ${alive.status}`);
+        const [touched] = await database.runner.query<{ last_seen_at: string }>(
+          `SELECT last_seen_at::text AS last_seen_at FROM web_sessions WHERE id = '${idleHash}'`,
+        );
+        assert(
+          Date.now() - Date.parse(touched?.last_seen_at as string) < 60_000,
+          "activity did not refresh last_seen_at",
+        );
+
+        await database.runner.exec(
+          `UPDATE web_sessions SET last_seen_at = '${new Date(authClock - 6 * 60_000).toISOString()}' WHERE id = '${idleHash}'`,
+        );
+        const idle = await fetch(`${base}/api/v1/me`, { headers: { cookie: idleLogin.cookie } });
+        assert(idle.status === 401, `an idle session returned ${idle.status} instead of 401`);
+        const [idleLeft] = await database.runner.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM web_sessions WHERE id = '${idleHash}'`,
+        );
+        assert(idleLeft?.count === "0", "the idle session row was not deleted");
+
+        // An expired access token is refreshed once for two concurrent requests;
+        // the rotated credential is persisted, and replaying the spent one dies.
+        const refreshLogin = await signIn();
+        const refreshHash = sha256(refreshLogin.cookie.split("; ")[0]?.split("=")[1] as string);
+        const readSession = async (): Promise<{
+          access_token: string;
+          refresh_token: string;
+          access_expires_at: string;
+        }> => {
+          const [row] = await database.runner.query<{
+            access_token: string;
+            refresh_token: string;
+            access_expires_at: string;
+          }>(
+            `SELECT access_token, refresh_token, access_expires_at::text AS access_expires_at FROM web_sessions WHERE id = '${refreshHash}'`,
+          );
+          assert(row !== undefined, "the refresh probe session is missing");
+          return row;
+        };
+        const before = await readSession();
+        assert(before.refresh_token.startsWith("v1."), "the refresh token is not sealed at rest");
+        assert(
+          !before.refresh_token.includes("live-probe-refresh-"),
+          "the plaintext refresh token is in the database",
+        );
+
+        const callsBefore = probeOAuth.refreshCalls.length;
+        await database.runner.exec(
+          `UPDATE web_sessions SET access_expires_at = '${new Date(authClock - 1_000).toISOString()}' WHERE id = '${refreshHash}'`,
+        );
+        const expired = await readSession();
+        assert(
+          Date.parse(expired.access_expires_at) <= authClock,
+          `the access-expiry update did not apply: ${expired.access_expires_at} vs ${new Date(authClock).toISOString()}`,
+        );
+        const [one, two] = await Promise.all([
+          fetch(`${base}/api/v1/me`, { headers: { cookie: refreshLogin.cookie } }),
+          fetch(`${base}/api/v1/me`, { headers: { cookie: refreshLogin.cookie } }),
+        ]);
+        assert(one.status === 200 && two.status === 200, `concurrent refresh returned ${one.status}/${two.status}`);
+        assert(
+          probeOAuth.refreshCalls.length === callsBefore + 1,
+          `two concurrent requests made ${probeOAuth.refreshCalls.length - callsBefore} refresh calls`,
+        );
+        const after = await readSession();
+        assert(after.refresh_token !== before.refresh_token, "the rotated refresh token was not stored");
+        assert(after.access_token !== before.access_token, "the refreshed access token was not stored");
+        assert(Date.parse(after.access_expires_at) > Date.now(), "the refreshed access token is already expired");
+
+        // A stale copy of the old row presents a refresh token that was already
+        // spent. Discord refuses it; the session must die rather than retry it.
+        await database.runner.exec(
+          `UPDATE web_sessions
+              SET refresh_token = '${before.refresh_token.replaceAll("'", "''")}',
+                  access_expires_at = '${new Date(authClock - 1_000).toISOString()}'
+            WHERE id = '${refreshHash}'`,
+        );
+        const replay = await fetch(`${base}/api/v1/me`, { headers: { cookie: refreshLogin.cookie } });
+        assert(replay.status === 401, `a replayed refresh token returned ${replay.status}`);
+        assert(
+          probeOAuth.refreshCalls.at(-1) === probeOAuth.refreshCalls[callsBefore],
+          "the replay presented a different refresh token",
+        );
+        const [refreshLeft] = await database.runner.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM web_sessions WHERE id = '${refreshHash}'`,
+        );
+        assert(refreshLeft?.count === "0", "a refused refresh did not delete the session");
+
+        record({
+          id: "web-session-idle-refresh",
+          status: "pass",
+          detail:
+            "real local HTTP on Postgres: a session inside the 5-minute idle window was accepted and its last_seen_at moved with the request; the same session past the window returned 401 and its row was deleted; an expired Discord access token was refreshed exactly once for two concurrent requests, the rotated sealed refresh token and new access expiry were persisted, and restoring the spent refresh token made the next request 401 and deleted the session",
+          features: ["operations.dashboard-session-hardening"],
+        });
+      }
+
       // --- Session hardening: owners, limits, rotation and revocation ---------
       probeOAuth.userId = WEB_NORMAL_USER;
       const normal = await signIn();
@@ -2198,8 +2348,12 @@ async function main(): Promise<void> {
         `expected one Discord revocation, saw ${probeOAuth.revocations.length}`,
       );
       assert(
-        probeOAuth.revocations[0] === "live-probe-access-token",
-        "logout did not revoke the session's Discord access token",
+        probeOAuth.revocations[0]?.hint === "refresh_token",
+        "logout did not revoke the refresh grant",
+      );
+      assert(
+        probeOAuth.revocations[0]?.token.startsWith("live-probe-refresh-"),
+        "logout revoked something other than the stored refresh token",
       );
       assert(
         (await fetch(`${base}/api/v1/me`, { headers: { cookie: rotatedCookie } })).status === 401,
@@ -2214,7 +2368,7 @@ async function main(): Promise<void> {
         id: "web-session-hardening",
         status: "pass",
         detail:
-          "real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the access token and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed",
+          "real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the sealed refresh grant and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed",
         features: ["operations.dashboard-session-hardening"],
       });
     } finally {

@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-57",
+    date: "2026-11-03",
+    summary:
+      "P6 session lifecycle: a dashboard session unused for 30 minutes (configurable with WEB_SESSION_IDLE_MS) is ended and deleted, activity keeps it alive without extending the 7-day maximum, and an expired Discord access token is refreshed from a sealed, rotating refresh token — once even when two requests arrive together. Logout now revokes the refresh grant.",
+    journal: "memory/journal/2026-11-03-pass-57.md",
+  },
+  {
     pass: "pass-56",
     date: "2026-11-03",
     summary:

@@ -1757,16 +1757,19 @@
           "phase": "P6",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "The opaque session cookie is re-keyed every 15 minutes on a safe GET, and the old value is dead immediately; logout asks the OAuth port to revoke the Discord access token before deleting the row; fixed-window limits cover the auth, dashboard, write and API classes with Retry-After; and WEB_OWNER_IDS gates the instance console and its sign-out-everywhere action. Live 2026-11-03 over real local HTTP and Postgres. Revocation is asserted at the port because the probe's OAuth exchange is fake; no live Discord revocation is claimed.",
+          "note": "The opaque session cookie is re-keyed every 15 minutes on a safe GET, and the old value is dead immediately; an idle session (default 30 minutes, `WEB_SESSION_IDLE_MS`, minimum 1 minute) is refused and its row deleted, while activity inside the window moves `last_seen_at` without extending the absolute 7-day lifetime; an expired Discord access token is refreshed from a sealed refresh token, rotated in the same write, with one in-flight refresh per session so two concurrent requests spend the token once; logout revokes the sealed refresh grant before deleting the row; fixed-window limits cover the auth, dashboard, write and API classes with Retry-After; and WEB_OWNER_IDS gates the instance console and its sign-out-everywhere action. Live 2026-11-03 over real local HTTP and Postgres (`web-session-idle-refresh`, `web-session-hardening`). Revocation and refresh are asserted at the fake OAuth port because the probe's exchange is fake; no live Discord login, revocation or refresh is claimed.",
           "evidence": [
             "apps/web/src/web.test.ts",
             "apps/web/src/auth.ts",
+            "apps/web/src/oauth.ts",
             "apps/web/src/rate-limit.ts",
             "packages/db/src/web-store.test.ts",
+            "packages/db/src/migrations/0020-session-refresh.ts",
             "memory/vault/03-Architecture/Dashboard.md"
           ],
           "liveVerified": true,
           "liveEvidence": [
+            "web-session-idle-refresh",
             "web-session-hardening"
           ]
         },

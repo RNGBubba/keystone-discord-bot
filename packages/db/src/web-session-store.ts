@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
-import type { SessionStore, WebSession } from "@keystone/kernel";
+import type { SessionCredentials, SessionStore, WebSession } from "@keystone/kernel";
 import { webSessions } from "./schema";
 import type { schema } from "./schema";
 
@@ -8,10 +8,11 @@ import type { schema } from "./schema";
  * Postgres session store.
  *
  * The browser holds a random opaque token; this table only holds its SHA-256
- * hash. The Discord access token arrives already sealed by the web layer, so
- * this adapter never needs the encryption key and cannot accidentally log a
- * token. There is no refresh token: the dashboard has no refresh path, and
- * storing one would be an unused credential.
+ * hash. The Discord access and refresh tokens arrive already sealed by the web
+ * layer, so this adapter never needs the encryption key and cannot accidentally
+ * log a token. Three timestamps have three jobs: `created_at` is the rotation
+ * clock, `last_seen_at` is the idle clock, and `expires_at` is the absolute
+ * lifetime that activity never moves.
  */
 export class DrizzleSessionStore implements SessionStore {
   constructor(private readonly db: PgDatabase<any, typeof schema>) {}
@@ -22,8 +23,11 @@ export class DrizzleSessionStore implements SessionStore {
       userId: session.userId,
       username: session.username,
       accessToken: session.accessToken,
+      refreshToken: session.refreshToken ?? null,
+      accessExpiresAt: new Date(session.accessExpiresAt),
       csrfHash: session.csrfHash,
       createdAt: new Date(session.createdAt),
+      lastSeenAt: new Date(session.lastSeenAt),
       expiresAt: new Date(session.expiresAt),
     });
   }
@@ -40,8 +44,11 @@ export class DrizzleSessionStore implements SessionStore {
       userId: row.userId,
       username: row.username,
       accessToken: row.accessToken,
+      ...(row.refreshToken ? { refreshToken: row.refreshToken } : {}),
+      accessExpiresAt: row.accessExpiresAt.toISOString(),
       csrfHash: row.csrfHash,
       createdAt: row.createdAt.toISOString(),
+      lastSeenAt: row.lastSeenAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
     };
   }
@@ -53,7 +60,31 @@ export class DrizzleSessionStore implements SessionStore {
         id: next.id,
         csrfHash: next.csrfHash,
         createdAt: new Date(next.createdAt),
+        lastSeenAt: new Date(next.lastSeenAt),
         expiresAt: new Date(next.expiresAt),
+      })
+      .where(eq(webSessions.id, id))
+      .returning({ id: webSessions.id });
+    return updated.length > 0;
+  }
+
+  async touch(id: string, lastSeenAt: string): Promise<boolean> {
+    const updated = await this.db
+      .update(webSessions)
+      .set({ lastSeenAt: new Date(lastSeenAt) })
+      .where(eq(webSessions.id, id))
+      .returning({ id: webSessions.id });
+    return updated.length > 0;
+  }
+
+  async updateTokens(id: string, credentials: SessionCredentials): Promise<boolean> {
+    const updated = await this.db
+      .update(webSessions)
+      .set({
+        accessToken: credentials.accessToken,
+        refreshToken: credentials.refreshToken ?? null,
+        accessExpiresAt: new Date(credentials.accessExpiresAt),
+        lastSeenAt: new Date(credentials.lastSeenAt),
       })
       .where(eq(webSessions.id, id))
       .returning({ id: webSessions.id });

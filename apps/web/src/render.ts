@@ -1090,6 +1090,7 @@ export interface InstanceView {
   readonly secureCookies: boolean;
   readonly sessionTtlMs: number;
   readonly rotationIntervalMs: number;
+  readonly idleTimeoutMs: number;
   readonly owners: readonly string[];
   readonly rateLimits: RateLimitPolicies;
 }
@@ -1133,6 +1134,7 @@ export function renderInstance(
          <tr><th>Discord OAuth</th><td>${view.oauthConfigured ? "configured" : "not configured"}</td></tr>
          <tr><th>Secure cookies</th><td>${view.secureCookies ? "yes" : "no (local HTTP)"}</td></tr>
          <tr><th>Session lifetime</th><td>${duration(view.sessionTtlMs)} absolute</td></tr>
+         <tr><th>Session idle timeout</th><td>${view.idleTimeoutMs > 0 ? `${duration(view.idleTimeoutMs)} without a request` : "disabled"}</td></tr>
          <tr><th>Session rotation</th><td>${view.rotationIntervalMs > 0 ? `every ${duration(view.rotationIntervalMs)} on a page load` : "disabled"}</td></tr>
        </tbody></table>
      </div>

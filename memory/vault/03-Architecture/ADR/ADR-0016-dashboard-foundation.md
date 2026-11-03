@@ -74,14 +74,15 @@ server-rendered app generates them from the module schema.
   module's schema (pass 49) and the fleet view applies built-in templates (pass
   50); modal editing, custom saved templates and bulk actions beyond templates
   are still open.
-- No Discord refresh-token path yet: a session that outlives the access token
-  needs a re-login. The unused refresh-token column was removed in pass 20 rather
-  than storing a credential no code uses. Pass 54 rotates the opaque session
-  cookie every 15 minutes and revokes the Discord grant on logout, but it does
-  not extend the grant.
-- Per-route fixed windows now cover auth, dashboard, write and API classes
-  (pass 54). Public API tokens and per-token limits are still open;
-  `Idempotency-Key`, webhooks and OpenAPI remain P6.
+- At the time of this decision there was no Discord refresh-token path: a
+  session that outlived the access token needed a re-login. The unused
+  refresh-token column was removed in pass 20 rather than storing a credential no
+  code uses. Pass 54 rotated the opaque session cookie every 15 minutes and
+  revoked the Discord grant on logout, but did not extend the grant. Pass 57
+  added the refresh path; see the follow-up below.
+- At the time of this decision, public API tokens and per-token limits were open,
+  and `Idempotency-Key`, webhooks and OpenAPI remained P6. Passes 55–56 closed
+  that block; see the follow-up below.
 - The live OAuth redirect has not been exercised against Discord; the tests use a
   fake OAuth port and a real local HTTP server.
 
@@ -162,4 +163,22 @@ This deliberately does **not** reuse the full `keystone.export` bundle: config
 import must not create or delete cases, members or transcripts. It is a
 settings-only contract with its own kind and version. The carrier is still the
 framework-free `apps/web` app; custom saved templates and analytics aggregates
-remain later P6 work.
+remained later P6 work at that pass.
+
+## Follow-up (passes 55–57) — the rest of P6 in repo
+
+Pass 55 added hashed, guild-bound API tokens with per-route scopes, per-token
+fixed windows, audited issue/revoke and an OpenAPI 3.1 document generated from
+the route table. Pass 56 added signed webhook delivery (one `WebhookStore` port,
+a sealed `whsec_` secret, `t/v1` HMAC headers, an outbox with three backed-off
+attempts and a visible terminal receipt) and `Idempotency-Key` replay on token
+writes through the existing `job_receipts` claim rule. Pass 57 added the idle
+session timeout (`WEB_SESSION_IDLE_MS`, default 30 minutes), a sealed rotating
+refresh token with one in-flight refresh per session, and logout of the refresh
+grant.
+
+P6 is complete in repo after pass 57. The only remaining P6 item is the live
+Discord OAuth round trip — login, refresh and revocation against real
+credentials — which cannot be completed in this environment and is not claimed.
+The carrier is still the framework-free `apps/web` app; a Next.js shell remains
+an option, not a requirement.

@@ -111,9 +111,9 @@ framework-free Node HTTP service so the authorization matrix could be proven
 before a UI framework was added; settings writes followed through the same gate.
 
 - [x] OAuth2 code + PKCE, sealed `state`, `iss` and exact redirect validation.
-- [x] Opaque Postgres-backed sessions; the Discord access token sealed
-  server-side and never sent to the browser. No refresh token is stored until
-  refresh/rotation exists.
+- [x] Opaque Postgres-backed sessions; the Discord access and refresh tokens
+  sealed server-side and never sent to the browser. The refresh path and its
+  single-flight rotation exist (pass 57).
 - [x] `GuildAccessService` with BigInt permissions and a bot-token membership
   check; CSP, CSRF and `no-store` on authenticated responses.
 - [x] Read-only dashboard and `/api/v1` reads through the kernel
@@ -149,6 +149,12 @@ before a UI framework was added; settings writes followed through the same gate.
   terminal receipt, dashboard create/test/delete behind the guild write gate,
   and request receipts that replay the exact response bytes or refuse a
   different body at `409` (pass 56).
+- [x] Session lifecycle: an idle timeout (`WEB_SESSION_IDLE_MS`, default 30
+  minutes, minimum 1) that refuses and deletes a stale row without extending the
+  absolute lifetime, and a sealed, rotating Discord refresh token with one
+  in-flight refresh per session; logout revokes the refresh grant. Migration
+  0020 adds the columns (pass 57). The live Discord OAuth round trip remains
+  blocked on real credentials and a human browser.
 
 **Exit demo:** two guilds and two users; user A cannot read/write guild B through
 the UI or API. Every setting is editable. A template applies with a preview. A

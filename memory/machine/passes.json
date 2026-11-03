@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-03T07:06:36.000Z",
+  "updatedAt": "2026-11-03T07:28:40.000Z",
   "passes": [
     {
       "id": "pass-01",
@@ -753,6 +753,21 @@
         "tests": "569",
         "budget": "20/100 roots · 141 subcommands · 4 context menus",
         "live": "22/22",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
+      "id": "pass-57",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 session lifecycle, the last landable piece of the phase. The opaque session gains `last_seen_at`, a sealed refresh token and an access expiry. A session unused past the configurable idle window (default 30 minutes, `WEB_SESSION_IDLE_MS`, minimum 1 minute) is refused and its row deleted, while activity inside the window moves the idle clock without extending the absolute 7-day lifetime. An expired Discord access token is refreshed through the OAuth port, the rotated refresh token is sealed and persisted in the same write, and one in-flight refresh per session means two concurrent requests spend one token. A refused token (invalid_grant) deletes the session; a transport failure keeps it for a later attempt. Logout now revokes the sealed refresh grant instead of only the access token. Migration 0020 adds `refresh_token`, `access_expires_at` and `last_seen_at`; existing sessions get one idle window and an access expiry from their absolute expiry. The instance page shows the idle window. Three HTTP tests and one PGlite test cover stale-session deletion, activity touching, single-flight refresh with rotation, and a replayed spent token. Tests 573 / 85 files; live probe 23/23, adding web-session-idle-refresh over real local HTTP and Postgres: idle inside/outside the window with row deletion, two concurrent requests made exactly one refresh call, the rotated sealed token was stored, and restoring the spent token returned 401 and deleted the session. The probe's OAuth exchange, refresh and revocation are fake; live Discord OAuth is still unclaimed.",
+      "journal": "journal/2026-11-03-pass-57.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "573",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "23/23",
         "memory": "current",
         "build": "pass"
       }

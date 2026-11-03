@@ -50,17 +50,36 @@ Authenticated responses are `Cache-Control: no-store`.
 
 ## Sessions and limits
 
-`AuthService.resolve` reads the opaque cookie on every request. On a `GET` or
-`HEAD` past `rotationIntervalMs` (15 minutes in `runtime.ts`) it mints a new
-session token and CSRF token, keeps the sealed Discord token and the absolute
-expiry, and calls `SessionStore.rotate(oldId, next)`; the old id is gone in one
-step, so a replay is a `401`. `createdAt` means the issue time of the current
-credential. Rotation is never attempted on a `POST`: that request carries a CSRF
-token minted against the old hash.
+`AuthService.resolve` reads the opaque cookie on every request. Three clocks are
+separate on purpose: `createdAt` is the rotation clock, `lastSeenAt` is the idle
+clock, and `expiresAt` is the absolute 7-day lifetime. Activity moves only
+`lastSeenAt`, at most once per `touchIntervalMs`; it never extends `expiresAt`.
+A session unused past `WEB_SESSION_IDLE_MS` (30 minutes by default, minimum 1
+minute) is refused and its row is deleted, so an abandoned credential stops
+existing instead of waiting to be guessed. The instance page prints the active
+window.
 
-`POST /logout` calls `DiscordOAuth.revokeToken` first and deletes the local row
-second, even if Discord is down. The browser session is the thing under our
-control; remote revocation is best effort and is reported, never assumed.
+On a `GET` or `HEAD` past `rotationIntervalMs` (15 minutes in `runtime.ts`) it
+mints a new session token and CSRF token, keeps the sealed Discord tokens and
+the absolute expiry, and calls `SessionStore.rotate(oldId, next)`; the old id is
+gone in one step, so a replay is a `401`. Rotation is never attempted on a
+`POST`: that request carries a CSRF token minted against the old hash.
+
+When the sealed access token passes `accessExpiresAt`, `resolve` refreshes it
+before any route runs. Both Discord tokens are sealed with the same `SecretBox`;
+the refresh token is rotated and persisted in the same `updateTokens` write as
+the new access token, so a spent credential is never left in the row. An
+in-process map keyed by session id makes two concurrent requests await one
+refresh call; a refused token (`invalid_grant`) deletes the session, while a
+transport failure leaves it for a later attempt. This map is correct for the
+single `apps/web` process this repo deploys; a multi-replica deployment needs a
+shared lock before it can claim the same guarantee.
+
+`POST /logout` asks Discord to revoke the sealed refresh grant first (the access
+token when there is no refresh credential) and deletes the local row second,
+even if Discord is down. Revoking only the access token would leave the grant
+able to mint a replacement. The browser session is the thing under our control;
+remote revocation is best effort and is reported, never assumed.
 
 `RateLimiter` is a fixed window keyed by signed-in user or socket address, in
 `auth`, `dashboard`, `write`, `api` and `apiToken` classes. `server.ts` applies
@@ -394,13 +413,11 @@ server or a browser.
 ## Deliberately not done yet
 
 - Bulk actions beyond the built-in and saved templates.
-- Idle timeout and a Discord refresh-token path. Rotation re-keys the opaque
-  session cookie; it does not extend the Discord grant. No refresh token is
-  stored until refresh and single-flight exist, so the session re-authenticates
-  when its access token expires.
-- Live OAuth against Discord and live Discord token revocation. The local probe
-  drives a real Postgres session and asserts revocation at the port, but it fakes
-  the OAuth code exchange, so neither is claimed.
+- Live OAuth against Discord, live refresh and live Discord token revocation.
+  The local probe drives a real Postgres session and asserts refresh/revocation
+  at the port, but it fakes the OAuth code exchange, so none of them is claimed.
+- A shared refresh lock for multiple web replicas. Single-flight is in-process
+  today, which matches the one-process carrier.
 - Webhook SSRF hardening. A subscription URL must be https (loopback http is
   allowed so a local receiver can be tested), but private and link-local address
   ranges are not blocked. Creating one requires Manage Guild, so the gate is the

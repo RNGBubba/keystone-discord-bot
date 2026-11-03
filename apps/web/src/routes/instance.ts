@@ -26,6 +26,7 @@ export async function instancePage(ctx: RouteContext): Promise<boolean> {
         secureCookies: ctx.deps.secureCookies,
         sessionTtlMs: ctx.deps.auth.ttlMs,
         rotationIntervalMs: ctx.deps.auth.rotationIntervalMs,
+        idleTimeoutMs: ctx.deps.auth.idleTimeoutMs,
         owners: ctx.deps.auth.owners,
         rateLimits: ctx.deps.rateLimiter.policies,
       },

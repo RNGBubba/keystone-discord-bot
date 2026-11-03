@@ -10,7 +10,7 @@ import {
   type OAuthState,
 } from "./crypto";
 import { HttpError } from "./http-error";
-import type { DiscordOAuth } from "./oauth";
+import { OAuthRefreshRejected, type DiscordOAuth, type OAuthTokens } from "./oauth";
 
 export interface AuthConfig {
   /** OAuth values are optional so the server can boot in degraded local mode. */
@@ -21,6 +21,10 @@ export interface AuthConfig {
   sessionTtlMs: number;
   /** Re-key a signed-in session after this age on a safe GET. 0 disables. */
   rotationIntervalMs?: number;
+  /** Reject a session unused for this long. 0 disables (tests only). */
+  idleTimeoutMs?: number;
+  /** Write activity at most this often; 0 writes on every request. */
+  touchIntervalMs?: number;
   /** Discord user ids allowed to act on the whole instance. */
   owners?: readonly string[];
 }
@@ -73,13 +77,16 @@ export interface LogoutResult {
  *
  * `state` and the PKCE verifier live in an HttpOnly, AEAD-sealed cookie bound
  * to this one attempt. The session cookie is a random value; only its SHA-256
- * hash is stored. The Discord access token is sealed before it reaches the
- * session store and is never returned by any route. No refresh token is kept:
- * the dashboard has no refresh path, so a session simply expires and the user
- * signs in again. Rotation re-keys the opaque cookie, not the Discord grant.
+ * hash is stored. The Discord access and refresh tokens are sealed before they
+ * reach the session store and are never returned by any route. The refresh
+ * token is rotated on every use and persisted in the same write that stores the
+ * new access token, so a used credential is never left where a later request
+ * could present it again. Rotation re-keys the opaque cookie, not the grant.
  */
 export class AuthService {
   private readonly now: () => number;
+  /** One in-flight refresh per session, so two requests cannot spend one token. */
+  readonly #refreshes = new Map<string, Promise<WebSession | undefined>>();
 
   constructor(private readonly deps: AuthDependencies) {
     this.now = deps.now ?? Date.now;
@@ -100,6 +107,14 @@ export class AuthService {
 
   get rotationIntervalMs(): number {
     return this.deps.config.rotationIntervalMs ?? 0;
+  }
+
+  get idleTimeoutMs(): number {
+    return this.deps.config.idleTimeoutMs ?? 0;
+  }
+
+  get touchIntervalMs(): number {
+    return this.deps.config.touchIntervalMs ?? 30_000;
   }
 
   get owners(): readonly string[] {
@@ -170,15 +185,20 @@ export class AuthService {
     const user = await oauth.fetchUser(tokens.accessToken);
     const sessionToken = randomToken(32);
     const csrfToken = randomToken(24);
-    const createdAt = new Date(this.now()).toISOString();
+    const now = this.now();
+    const expiresAtMs = now + this.deps.config.sessionTtlMs;
+    const accessExpiresAt = this.accessExpiry(tokens, now, expiresAtMs);
     const session: WebSession = {
       id: sha256(sessionToken),
       userId: user.id,
       username: user.username,
       accessToken: this.deps.box.seal(tokens.accessToken),
+      ...(tokens.refreshToken ? { refreshToken: this.deps.box.seal(tokens.refreshToken) } : {}),
+      accessExpiresAt,
       csrfHash: sha256(csrfToken),
-      createdAt,
-      expiresAt: new Date(this.now() + this.deps.config.sessionTtlMs).toISOString(),
+      createdAt: new Date(now).toISOString(),
+      lastSeenAt: new Date(now).toISOString(),
+      expiresAt: new Date(expiresAtMs).toISOString(),
     };
     await this.deps.sessions.create(session);
     return { sessionToken, csrfToken };
@@ -188,7 +208,15 @@ export class AuthService {
     if (!sessionToken) return undefined;
     const session = await this.deps.sessions.get(sha256(sessionToken));
     if (!session) return undefined;
-    if (Date.parse(session.expiresAt) <= this.now()) {
+    const now = this.now();
+    if (Date.parse(session.expiresAt) <= now) {
+      await this.deps.sessions.delete(session.id);
+      return undefined;
+    }
+    const idle = this.idleTimeoutMs;
+    if (idle > 0 && now - Date.parse(session.lastSeenAt) > idle) {
+      // The row is deleted, not merely refused: an abandoned credential should
+      // stop existing, and the next request must not get a second chance with it.
       await this.deps.sessions.delete(session.id);
       return undefined;
     }
@@ -201,32 +229,134 @@ export class AuthService {
    * CSRF token minted for the old cookie, so rotating before checking it would
    * turn a valid form into a 403. The absolute `expiresAt` never moves; only
    * `createdAt` becomes the issue time of the current credential.
+   *
+   * Before anything else, an expired Discord access token is refreshed once for
+   * every concurrent caller. A session with no refresh credential and an expired
+   * access token is deleted: it cannot do anything a signed-in user expects, so
+   * pretending it is alive only defers the 401.
    */
   async resolve(sessionToken: string | undefined, method: string): Promise<SessionResolution> {
-    const session = await this.session(sessionToken);
+    let session = await this.session(sessionToken);
     if (!session) return { session: undefined };
 
-    const interval = this.rotationIntervalMs;
-    if (interval <= 0 || (method !== "GET" && method !== "HEAD")) return { session };
-    if (this.now() - Date.parse(session.createdAt) < interval) return { session };
-
-    const remaining = Date.parse(session.expiresAt) - this.now();
-    if (remaining <= 0) return { session: undefined };
-
-    const sessionTokenNext = randomToken(32);
-    const csrfToken = randomToken(24);
-    const next: WebSession = {
-      ...session,
-      id: sha256(sessionTokenNext),
-      csrfHash: sha256(csrfToken),
-      createdAt: new Date(this.now()).toISOString(),
-    };
-    if (!(await this.deps.sessions.rotate(session.id, next))) {
-      // Another request already rotated this credential; the presented value is
-      // one-use, so treat it as gone instead of reviving it.
-      return { session: undefined };
+    if (Date.parse(session.accessExpiresAt) <= this.now()) {
+      if (!session.refreshToken) {
+        await this.deps.sessions.delete(session.id);
+        return { session: undefined };
+      }
+      const refreshed = await this.refresh(session);
+      if (!refreshed) return { session: undefined };
+      session = refreshed;
     }
-    return { session: next, rotated: { sessionToken: sessionTokenNext, csrfToken, maxAgeMs: remaining } };
+
+    const interval = this.rotationIntervalMs;
+    const now = this.now();
+    if (
+      interval > 0 &&
+      (method === "GET" || method === "HEAD") &&
+      now - Date.parse(session.createdAt) >= interval
+    ) {
+      const remaining = Date.parse(session.expiresAt) - now;
+      if (remaining <= 0) return { session: undefined };
+
+      const sessionTokenNext = randomToken(32);
+      const csrfToken = randomToken(24);
+      const next: WebSession = {
+        ...session,
+        id: sha256(sessionTokenNext),
+        csrfHash: sha256(csrfToken),
+        createdAt: new Date(now).toISOString(),
+        lastSeenAt: new Date(now).toISOString(),
+      };
+      if (!(await this.deps.sessions.rotate(session.id, next))) {
+        // Another request already rotated this credential; the presented value is
+        // one-use, so treat it as gone instead of reviving it.
+        return { session: undefined };
+      }
+      return { session: next, rotated: { sessionToken: sessionTokenNext, csrfToken, maxAgeMs: remaining } };
+    }
+
+    const active = await this.touch(session);
+    if (!active) return { session: undefined };
+    return { session: active };
+  }
+
+  /**
+   * Record activity, throttled so a dashboard burst is one write rather than
+   * one per asset. The idle window itself is read before this runs, so a stale
+   * session never gets touched alive again.
+   */
+  private async touch(session: WebSession): Promise<WebSession | undefined> {
+    const now = this.now();
+    if (now - Date.parse(session.lastSeenAt) < this.touchIntervalMs) return session;
+    const lastSeenAt = new Date(now).toISOString();
+    if (!(await this.deps.sessions.touch(session.id, lastSeenAt))) return undefined;
+    return { ...session, lastSeenAt };
+  }
+
+  /** The access-token lifetime, never past the session's absolute expiry. */
+  private accessExpiry(tokens: OAuthTokens, now: number, absoluteExpiryMs: number): string {
+    const lifetime =
+      tokens.expiresInSeconds !== undefined
+        ? tokens.expiresInSeconds * 1_000
+        : this.deps.config.sessionTtlMs;
+    return new Date(Math.min(now + lifetime, absoluteExpiryMs)).toISOString();
+  }
+
+  /** One refresh per session id; concurrent callers await the same promise. */
+  private refresh(session: WebSession): Promise<WebSession | undefined> {
+    const existing = this.#refreshes.get(session.id);
+    if (existing) return existing;
+
+    let promise: Promise<WebSession | undefined>;
+    promise = this.#doRefresh(session).finally(() => {
+      if (this.#refreshes.get(session.id) === promise) this.#refreshes.delete(session.id);
+    });
+    this.#refreshes.set(session.id, promise);
+    return promise;
+  }
+
+  async #doRefresh(session: WebSession): Promise<WebSession | undefined> {
+    const oauth = this.deps.oauth;
+    let refreshToken: string;
+    try {
+      if (!oauth || !session.refreshToken) throw new Error("no refresh credential");
+      refreshToken = this.deps.box.open(session.refreshToken);
+    } catch {
+      await this.deps.sessions.delete(session.id);
+      return undefined;
+    }
+
+    let tokens: OAuthTokens;
+    try {
+      tokens = await oauth.refreshToken(refreshToken);
+    } catch (error) {
+      // A refused token is permanent: delete the row. A transport failure is not,
+      // so leave it for a later request instead of logging the user out on a
+      // network blip.
+      if (error instanceof OAuthRefreshRejected) {
+        await this.deps.sessions.delete(session.id);
+      }
+      return undefined;
+    }
+
+    const now = this.now();
+    const credentials = {
+      accessToken: this.deps.box.seal(tokens.accessToken),
+      // Discord rotates the refresh token. If it ever omits the new value, keep
+      // the current one rather than deleting a credential that still works.
+      ...(tokens.refreshToken
+        ? { refreshToken: this.deps.box.seal(tokens.refreshToken) }
+        : session.refreshToken
+          ? { refreshToken: session.refreshToken }
+          : {}),
+      accessExpiresAt: this.accessExpiry(tokens, now, Date.parse(session.expiresAt)),
+      lastSeenAt: new Date(now).toISOString(),
+    };
+    if (!(await this.deps.sessions.updateTokens(session.id, credentials))) {
+      return undefined;
+    }
+    return { ...session, ...credentials };
   }
 
   accessToken(session: WebSession): string {
@@ -250,11 +380,25 @@ export class AuthService {
     let revoked = false;
     const oauth = this.deps.oauth;
     if (this.oauthConfigured && oauth) {
+      // Revoke the refresh credential when there is one: revoking only the
+      // access token would leave the grant able to mint a replacement.
+      let token: string;
+      let hint: "access_token" | "refresh_token" = "refresh_token";
       try {
-        await oauth.revokeToken(this.accessToken(session));
-        revoked = true;
+        token = session.refreshToken
+          ? this.deps.box.open(session.refreshToken)
+          : this.accessToken(session);
+        if (!session.refreshToken) hint = "access_token";
       } catch {
-        revoked = false;
+        token = "";
+      }
+      if (token) {
+        try {
+          await oauth.revokeToken(token, hint);
+          revoked = true;
+        } catch {
+          revoked = false;
+        }
       }
     }
     await this.deps.sessions.delete(session.id);

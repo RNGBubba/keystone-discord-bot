@@ -54,6 +54,8 @@ import { startWebhookDrainer, WebhookService } from "./webhooks";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
 /** Re-key the opaque cookie every 15 minutes; the absolute expiry does not move. */
 const SESSION_ROTATION_MS = 15 * 60_000;
+/** A dashboard burst is one activity write, not one per request. */
+const SESSION_TOUCH_MS = 30_000;
 
 export interface WebRuntime {
   handler: ReturnType<typeof createWebHandler>;
@@ -72,6 +74,7 @@ function unavailableOAuth(): DiscordOAuth {
       throw new HttpError(503, "Discord OAuth is not configured.", "oauth_unconfigured");
     },
     exchangeCode: fail,
+    refreshToken: fail,
     fetchUser: fail,
     fetchGuilds: fail,
     botInGuild: fail,
@@ -172,6 +175,8 @@ export function createWebRuntime(env: Env): WebRuntime {
       issuer: env.DISCORD_OAUTH_ISSUER,
       sessionTtlMs: SESSION_TTL_MS,
       rotationIntervalMs: SESSION_ROTATION_MS,
+      idleTimeoutMs: env.WEB_SESSION_IDLE_MS,
+      touchIntervalMs: SESSION_TOUCH_MS,
       owners,
     },
   });

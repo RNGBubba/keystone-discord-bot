@@ -22,6 +22,22 @@ export interface DiscordGuild {
 
 export interface OAuthTokens {
   accessToken: string;
+  /** Present on the authorization-code and refresh grants. Sealed before storage. */
+  refreshToken?: string;
+  /** Discord's stated access-token lifetime; absent means the caller chooses. */
+  expiresInSeconds?: number;
+}
+
+/**
+ * Discord refused the refresh token (`invalid_grant`). This is permanent: the
+ * grant was revoked or the token was already rotated, so the session must die
+ * instead of retrying the same credential forever.
+ */
+export class OAuthRefreshRejected extends Error {
+  constructor(message = "Discord rejected the refresh token.") {
+    super(message);
+    this.name = "OAuthRefreshRejected";
+  }
 }
 
 export interface AuthorizationInput {
@@ -43,11 +59,17 @@ export interface DiscordOAuth {
   fetchGuilds(accessToken: string): Promise<DiscordGuild[]>;
   botInGuild(guildId: string): Promise<boolean>;
   /**
-   * Ask Discord to invalidate an access token. Logout calls this before it
-   * deletes the local session; the port keeps the request testable without a
-   * real Discord client.
+   * Exchange a refresh token for a new access token. Discord rotates the refresh
+   * token on every call, so the response usually carries a new one and the old
+   * value is dead. A refusal throws `OAuthRefreshRejected`.
    */
-  revokeToken(accessToken: string): Promise<void>;
+  refreshToken(refreshToken: string): Promise<OAuthTokens>;
+  /**
+   * Ask Discord to invalidate a token. Logout prefers the refresh token, because
+   * revoking only the access token leaves the grant able to mint a new one. The
+   * port keeps the request testable without a real Discord client.
+   */
+  revokeToken(token: string, hint?: "access_token" | "refresh_token"): Promise<void>;
 }
 
 export interface DiscordOAuthOptions {
@@ -92,12 +114,56 @@ export class DiscordOAuthClient implements DiscordOAuth {
       redirect_uri: input.redirectUri,
       code_verifier: input.codeVerifier,
     });
-    const tokens = await requestJson<{ access_token: string }>(`${DISCORD_API}/oauth2/token`, {
+    const tokens = await requestJson<{
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    }>(`${DISCORD_API}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
-    return { accessToken: tokens.access_token };
+    return {
+      accessToken: tokens.access_token,
+      ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+      ...(typeof tokens.expires_in === "number"
+        ? { expiresInSeconds: tokens.expires_in }
+        : {}),
+    };
+  }
+
+  async refreshToken(refreshToken: string): Promise<OAuthTokens> {
+    const body = new URLSearchParams({
+      client_id: this.options.clientId,
+      client_secret: this.options.clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+    const response = await fetch(`${DISCORD_API}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    // invalid_grant arrives as 400; 401 is Discord refusing the client itself.
+    // Both mean the stored credential will never work again.
+    if (response.status === 400 || response.status === 401) {
+      throw new OAuthRefreshRejected();
+    }
+    if (!response.ok) {
+      throw new Error(`Discord refresh failed with HTTP ${response.status}.`);
+    }
+    const tokens = (await response.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+    return {
+      accessToken: tokens.access_token,
+      ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+      ...(typeof tokens.expires_in === "number"
+        ? { expiresInSeconds: tokens.expires_in }
+        : {}),
+    };
   }
 
   async fetchUser(accessToken: string): Promise<DiscordUser> {
@@ -132,12 +198,15 @@ export class DiscordOAuthClient implements DiscordOAuth {
     return true;
   }
 
-  async revokeToken(accessToken: string): Promise<void> {
+  async revokeToken(
+    token: string,
+    hint: "access_token" | "refresh_token" = "access_token",
+  ): Promise<void> {
     const body = new URLSearchParams({
       client_id: this.options.clientId,
       client_secret: this.options.clientSecret,
-      token: accessToken,
-      token_type_hint: "access_token",
+      token,
+      token_type_hint: hint,
     });
     const response = await fetch(`${DISCORD_API}/oauth2/token/revoke`, {
       method: "POST",

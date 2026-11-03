@@ -62,6 +62,12 @@ export const envSchema = z.object({
   DISCORD_OAUTH_ISSUER: z.string().url().default("https://discord.com"),
   SESSION_SECRET: optionalString,
   /**
+   * Reject a dashboard session that has been unused for this long. The absolute
+   * 7-day lifetime is separate and never extended by activity. One minute is
+   * the floor so a misconfiguration cannot disable the idle check entirely.
+   */
+  WEB_SESSION_IDLE_MS: z.coerce.number().int().min(60_000).default(1_800_000),
+  /**
    * Comma-separated Discord user ids allowed to act on the whole instance.
    * Guild Manage Server is deliberately not enough; see the dashboard security
    * contract. Empty means the owner console stays closed to everyone.

@@ -173,9 +173,11 @@ https://github.com/RNGBubba/keystone-discord-bot
   rotation, logout revocation, per-route limits and an `owners[]` instance
   console (pass 54), plus hashed guild-bound API tokens with per-route scopes,
   per-token limits, audited issue/revoke and a generated OpenAPI document (pass
-  55). Live Discord OAuth, live Discord token revocation, idle timeout, a
-  refresh-token path, webhooks and `Idempotency-Key` remain open. See
-  [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
+  55), plus signed webhook delivery with retries and receipts and
+  `Idempotency-Key` replay (pass 56), plus the idle session timeout and a sealed,
+  rotating refresh-token path (pass 57). Live Discord OAuth and live token
+  revocation remain open. See [[Dashboard]] and
+  [[ADR-0016-dashboard-foundation]].
 - Phase **P5** complete in-repo: versioned export/restore with checksum
   verification, 24-hour rollback, deletion receipts, file level importers,
   transcript archives and a read-only drift report.

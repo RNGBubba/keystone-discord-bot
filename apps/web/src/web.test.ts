@@ -30,7 +30,12 @@ import { createWebHandler } from "./server";
 import { DashboardService } from "./overview";
 import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "./rate-limit";
 import type { ConfigBundle } from "./config-bundle";
-import type { DiscordGuild, DiscordOAuth } from "./oauth";
+import {
+  OAuthRefreshRejected,
+  type DiscordGuild,
+  type DiscordOAuth,
+  type OAuthTokens,
+} from "./oauth";
 
 const GUILD_A = "111111111111111111";
 const GUILD_B = "222222222222222222";
@@ -39,6 +44,7 @@ const GUILD_D = "555555555555555555";
 const GUILD_Z = "999999999999999999";
 const USER = "444444444444444444";
 const ACCESS_TOKEN = "discord-access-token-should-never-reach-browser";
+const REFRESH_TOKEN = "discord-refresh-token-should-never-reach-browser";
 
 function analyticsSnapshot(
   guildId: string,
@@ -120,8 +126,14 @@ class FixedAnalyticsStore implements AnalyticsStore {
 
 class FakeOAuth implements DiscordOAuth {
   exchanges = 0;
-  readonly revocations: string[] = [];
+  /** Every refresh token presented, including a refused replay. */
+  readonly refreshCalls: string[] = [];
+  /** The fake rotates like Discord: a token works once, then is refused. */
+  readonly acceptedRefreshTokens = new Set<string>([REFRESH_TOKEN]);
+  refreshDelayMs = 0;
+  readonly revocations: { token: string; hint: string }[] = [];
   revokeFails = false;
+  #refreshSequence = 0;
   readonly guilds: DiscordGuild[] = [
     { id: GUILD_A, name: "Alpha <script>alert(1)</script>", icon: null, owner: false, permissions: String(1n << 5n) },
     { id: GUILD_B, name: "Beta", icon: null, owner: false, permissions: "0" },
@@ -134,9 +146,26 @@ class FakeOAuth implements DiscordOAuth {
     return `https://discord.test/oauth?state=${encodeURIComponent(input.state)}`;
   }
 
-  async exchangeCode(): Promise<{ accessToken: string }> {
+  async exchangeCode(): Promise<OAuthTokens> {
     this.exchanges += 1;
-    return { accessToken: ACCESS_TOKEN };
+    this.acceptedRefreshTokens.add(REFRESH_TOKEN);
+    return { accessToken: ACCESS_TOKEN, refreshToken: REFRESH_TOKEN, expiresInSeconds: 3_600 };
+  }
+
+  async refreshToken(token: string): Promise<OAuthTokens> {
+    this.refreshCalls.push(token);
+    if (this.refreshDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.refreshDelayMs));
+    }
+    if (!this.acceptedRefreshTokens.delete(token)) throw new OAuthRefreshRejected();
+    this.#refreshSequence += 1;
+    const next = `discord-refresh-token-${this.#refreshSequence}`;
+    this.acceptedRefreshTokens.add(next);
+    return {
+      accessToken: `${ACCESS_TOKEN}-${this.#refreshSequence}`,
+      refreshToken: next,
+      expiresInSeconds: 3_600,
+    };
   }
 
   async fetchUser(): Promise<{ id: string; username: string }> {
@@ -151,14 +180,19 @@ class FakeOAuth implements DiscordOAuth {
     return this.botGuilds.has(guildId);
   }
 
-  async revokeToken(accessToken: string): Promise<void> {
-    this.revocations.push(accessToken);
+  async revokeToken(
+    token: string,
+    hint: "access_token" | "refresh_token" = "access_token",
+  ): Promise<void> {
+    this.revocations.push({ token, hint });
     if (this.revokeFails) throw new Error("Discord revocation failed");
   }
 }
 
 interface HarnessOptions {
   rotationIntervalMs?: number;
+  idleTimeoutMs?: number;
+  touchIntervalMs?: number;
   owners?: readonly string[];
   rateLimiter?: RateLimiter;
   now?: () => number;
@@ -213,6 +247,8 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
       issuer: "https://discord.com",
       sessionTtlMs: 7 * 24 * 60 * 60_000,
       rotationIntervalMs: options.rotationIntervalMs,
+      idleTimeoutMs: options.idleTimeoutMs ?? 0,
+      touchIntervalMs: options.touchIntervalMs ?? 0,
       owners: options.owners,
     },
   });
@@ -1502,6 +1538,95 @@ describe("P6 session hardening", () => {
     }
   });
 
+  it("expires an idle session and deletes its row", async () => {
+    let clock = Date.parse("2026-11-03T00:00:00.000Z");
+    const test = await harness({
+      idleTimeoutMs: 10 * 60_000,
+      touchIntervalMs: 1_000,
+      now: () => clock,
+    });
+    try {
+      const { cookie } = await login(test);
+      const hash = sha256(cookie.split("; ")[0]?.split("=")[1] as string);
+
+      // Activity inside the window refreshes the timestamp.
+      clock += 9 * 60_000;
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+      expect(Date.parse((await test.sessions.get(hash))?.lastSeenAt as string)).toBe(clock);
+
+      // One millisecond past the window is idle, and the row is gone, not merely
+      // refused: the next request must not get a second chance with it.
+      clock += 10 * 60_000 + 1;
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
+      expect(await test.sessions.get(hash)).toBeUndefined();
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("refreshes an expired access token once for concurrent requests", async () => {
+    let clock = Date.parse("2026-11-03T00:00:00.000Z");
+    const test = await harness({ now: () => clock });
+    test.oauth.refreshDelayMs = 25;
+    try {
+      const { cookie } = await login(test);
+      const hash = sha256(cookie.split("; ")[0]?.split("=")[1] as string);
+      const before = await test.sessions.get(hash);
+      expect(before?.refreshToken).toBeTruthy();
+
+      clock += 3_600_000 + 1;
+      const responses = await Promise.all([
+        fetch(`${test.base}/api/v1/me`, { headers: { cookie } }),
+        fetch(`${test.base}/api/v1/me`, { headers: { cookie } }),
+      ]);
+      expect(responses.map((response) => response.status)).toEqual([200, 200]);
+      // One refresh call for two concurrent requests: the second waited on the
+      // first promise instead of spending the same rotating token twice.
+      expect(test.oauth.refreshCalls).toEqual([REFRESH_TOKEN]);
+
+      const after = await test.sessions.get(hash);
+      expect(after?.refreshToken).not.toBe(before?.refreshToken);
+      expect(after?.accessToken).not.toBe(before?.accessToken);
+      expect(Date.parse(after?.accessExpiresAt as string)).toBe(clock + 3_600_000);
+
+      // A later request uses the rotated credentials without another refresh.
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+      expect(test.oauth.refreshCalls).toHaveLength(1);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("refuses a reused refresh token and deletes the session", async () => {
+    let clock = Date.parse("2026-11-03T00:00:00.000Z");
+    const test = await harness({ now: () => clock });
+    try {
+      const { cookie } = await login(test);
+      const hash = sha256(cookie.split("; ")[0]?.split("=")[1] as string);
+      const original = await test.sessions.get(hash);
+
+      clock += 3_600_001;
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+      const rotated = await test.sessions.get(hash);
+      expect(rotated?.refreshToken).not.toBe(original?.refreshToken);
+
+      // Put the already-spent credential back into the row and expire the access
+      // token: the fake refuses the replay like Discord would.
+      await test.sessions.updateTokens(hash, {
+        accessToken: original?.accessToken as string,
+        refreshToken: original?.refreshToken as string,
+        accessExpiresAt: new Date(clock - 1).toISOString(),
+        lastSeenAt: new Date(clock).toISOString(),
+      });
+      clock += 1_000;
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
+      expect(test.oauth.refreshCalls).toEqual([REFRESH_TOKEN, REFRESH_TOKEN]);
+      expect(await test.sessions.get(hash)).toBeUndefined();
+    } finally {
+      await test.close();
+    }
+  });
+
   it("revokes the Discord token before deleting the local session", async () => {
     const test = await harness();
     try {
@@ -1512,7 +1637,7 @@ describe("P6 session hardening", () => {
         headers: { cookie, "x-keystone-csrf": csrf },
       });
       expect(response.status).toBe(302);
-      expect(test.oauth.revocations).toEqual([ACCESS_TOKEN]);
+      expect(test.oauth.revocations).toEqual([{ token: REFRESH_TOKEN, hint: "refresh_token" }]);
       expect(await test.sessions.get(sha256(cookie.split("=")[1] as string))).toBeUndefined();
       expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
     } finally {
@@ -1531,7 +1656,7 @@ describe("P6 session hardening", () => {
         headers: { cookie, "x-keystone-csrf": csrf },
       });
       expect(response.status).toBe(302);
-      expect(test.oauth.revocations).toEqual([ACCESS_TOKEN]);
+      expect(test.oauth.revocations).toEqual([{ token: REFRESH_TOKEN, hint: "refresh_token" }]);
       expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
     } finally {
       await test.close();
@@ -1613,8 +1738,10 @@ describe("P6 session hardening", () => {
         userId: "777777777777777777",
         username: "Other",
         accessToken: "sealed-other",
+        accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
         csrfHash: sha256("other-csrf"),
         createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
       });
       const revoked = await fetch(`${owner.base}/dashboard/instance/sessions/revoke`, {
@@ -2091,8 +2218,10 @@ describe("session storage", () => {
       userId: USER,
       username: "Admin",
       accessToken: "sealed-a",
+      accessExpiresAt: new Date(Date.now() + 60_000).toISOString(),
       csrfHash: sha256("csrf"),
       createdAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
     expect(await store.get(raw)).toBeUndefined();

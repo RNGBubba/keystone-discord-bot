@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P6",
-  "lastPass": "journal/2026-11-03-pass-56.md",
-  "nextAction": "P6 is down to the session leftovers and the live Discord login: an idle timeout, a refresh-token path, and the live OAuth/token-revocation round trip, which cannot be completed here without real Discord credentials. Then P7 Components V2 UI and i18n; P8 playback needs a Lavalink node, and P9/P10 need outside input.",
+  "lastPass": "journal/2026-11-03-pass-57.md",
+  "nextAction": "P6 is complete in repo, including the idle timeout and the refresh-token path. The only remaining P6 item is the live Discord OAuth round trip with real login, refresh and token revocation, which cannot be completed here without client credentials and a human browser. Then P7 Components V2 UI and i18n; P8 playback needs a Lavalink node, and P9/P10 need outside input.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 569
+    "tests": 573
   },
   "modules": [
     {

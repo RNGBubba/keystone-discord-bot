@@ -49,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**569 tests across 85 files** without a Discord token, database or network.
+**573 tests across 85 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -304,6 +304,7 @@ message or the vault.
 | `DISCORD_OAUTH_REDIRECT_URI` | dashboard | Must match the Developer Portal exactly; defaults to `$WEB_ORIGIN/auth/callback` |
 | `DISCORD_OAUTH_ISSUER` | no | Defaults to `https://discord.com`; the callback rejects any other `iss` |
 | `SESSION_SECRET` | production web | 32 bytes base64/base64url or 64 hex; the process refuses to boot in production without it |
+| `WEB_SESSION_IDLE_MS` | no | End a dashboard session after this much inactivity; defaults to `1800000` (30 minutes), minimum `60000` |
 
 `/setup` reports which mode is live. A configured-but-unreachable service is a
 boot error, not a silent downgrade.
@@ -468,12 +469,15 @@ delete append their own `template.*` audit rows. There is no marketplace and no
 second settings store.
 
 **Session hardening** rotates the opaque dashboard cookie every 15 minutes on a
-safe page load, so the previous value is refused immediately. Logout asks the
-OAuth port to revoke the Discord access token before deleting the session, and
-the local session dies even when Discord is unavailable. Fixed windows cap the
-auth, dashboard, write and API route classes with `429` + `Retry-After`, and
-`WEB_OWNER_IDS` gates an owner console whose sign-out-every-session action a
-guild admin cannot reach.
+safe page load, so the previous value is refused immediately. A session unused
+for 30 minutes (`WEB_SESSION_IDLE_MS`) is refused and its row deleted; activity
+moves only the idle clock, never the absolute 7-day lifetime. An expired Discord
+access token is refreshed from a sealed, rotating refresh token, once even when
+two requests arrive together, and logout revokes that grant before deleting the
+session. The local session dies even when Discord is unavailable. Fixed windows
+cap the auth, dashboard, write and API route classes with `429` +
+`Retry-After`, and `WEB_OWNER_IDS` gates an owner console whose
+sign-out-every-session action a guild admin cannot reach.
 
 **Scoped API tokens** are the second principal. The dashboard issues a
 `keystone_…` secret once and stores only its SHA-256 hash; the token is bound to
@@ -484,9 +488,9 @@ issue/revoke append one dashboard audit row each. `GET /api/v1/openapi.json` is
 generated from an operation table that a test walks against the route registry
 in both directions.
 
-This is still not the P6 exit demo: an idle timeout, a Discord refresh-token
-path, and a live OAuth round trip (and live token revocation) against Discord
-remain open. See
+This is still not the P6 exit demo: a live OAuth round trip, live refresh and
+live token revocation against Discord remain open. The idle timeout and the
+sealed refresh path are in repo (pass 57). See
 [Dashboard](memory/vault/03-Architecture/Dashboard.md) and
 [ADR-0016](memory/vault/03-Architecture/ADR/ADR-0016-dashboard-foundation.md).
 
@@ -606,10 +610,11 @@ Everything below is free. No feature is moved behind a paywall.
 
 ### Planned (honest roadmap)
 
-- **P6 remaining:** an idle timeout, a Discord refresh-token path and the live
-  OAuth round trip. Scoped API tokens, per-token limits, the generated OpenAPI
-  document, signed webhooks with retries and receipts, and `Idempotency-Key`
-  replay are in repo.
+- **P6 remaining:** the live OAuth round trip (login, refresh and token
+  revocation against real credentials). Scoped API tokens, per-token limits, the
+  generated OpenAPI document, signed webhooks with retries and receipts,
+  `Idempotency-Key` replay, an idle session timeout and a sealed rotating
+  refresh-token path are in repo.
   Schema-driven widgets, the audit trail, the fleet view, built-in and saved
   templates, config export/import/drift, analytics aggregates, session rotation
   and logout revocation, per-route limits, and the `owners[]` instance console
@@ -933,7 +938,8 @@ Still open and not claimed as done:
 - MEE6 import is file-based, not a live fetch.
 - Forms modal input is not implemented; `/form submit` takes the validated
   `answers` option. Forms are not yet part of the `/export guild` bundle.
-- Live Discord OAuth is the remaining P6 proof. The Postgres session path,
+- Live Discord OAuth, refresh and token revocation are the remaining P6 proof.
+  The Postgres session path,
   scoped tokens, analytics, webhooks and keyed replay are live-proven locally,
   but the Discord login that creates a session is not.
 

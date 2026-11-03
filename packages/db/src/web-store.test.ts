@@ -15,14 +15,16 @@ function session(): WebSession {
     userId: "444444444444444444",
     username: "Admin",
     accessToken: "sealed-access-token",
+    accessExpiresAt: new Date(now.getTime() + 3_600_000).toISOString(),
     csrfHash: "hashed-csrf-token",
     createdAt: now.toISOString(),
+    lastSeenAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 86_400_000).toISOString(),
   };
 }
 
 describe("Drizzle web stores", () => {
-  it("round-trips an opaque session without refresh credentials", async () => {
+  it("round-trips an opaque session and its activity clock", async () => {
     const harness = await createMigratedPglite();
     try {
       const store = new DrizzleSessionStore(harness.db);
@@ -35,6 +37,8 @@ describe("Drizzle web stores", () => {
         csrfHash: "hashed-csrf-token",
       });
       expect(loaded?.expiresAt).toBe(original.expiresAt);
+      expect(loaded?.accessExpiresAt).toBe(original.accessExpiresAt);
+      expect(loaded?.lastSeenAt).toBe(original.lastSeenAt);
       expect(loaded).not.toHaveProperty("refreshToken");
       expect(loaded).not.toHaveProperty("rotatedAt");
 
@@ -75,6 +79,33 @@ describe("Drizzle web stores", () => {
       expect(await store.deleteForUser(original.userId)).toBe(1);
       expect(await store.get(next.id)).toBeUndefined();
       expect(await store.get("another-row")).toBeDefined();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("records activity and replaces sealed credentials in one write", async () => {
+    const harness = await createMigratedPglite();
+    try {
+      const store = new DrizzleSessionStore(harness.db);
+      const original = session();
+      await store.create(original);
+
+      const seen = new Date(Date.now() + 5_000).toISOString();
+      expect(await store.touch(original.id, seen)).toBe(true);
+      expect((await store.get(original.id))?.lastSeenAt).toBe(seen);
+      expect(await store.touch("already-gone", seen)).toBe(false);
+
+      const expires = new Date(Date.now() + 9_000).toISOString();
+      const credentials = {
+        accessToken: "sealed-access-b",
+        refreshToken: "sealed-refresh-b",
+        accessExpiresAt: expires,
+        lastSeenAt: seen,
+      };
+      expect(await store.updateTokens(original.id, credentials)).toBe(true);
+      expect(await store.get(original.id)).toMatchObject(credentials);
+      expect(await store.updateTokens("already-gone", credentials)).toBe(false);
     } finally {
       await harness.close();
     }

@@ -2,6 +2,25 @@
 
 ## Now
 
+**Pass 57 closed P6's landable work with the session idle timeout and refresh-token
+path** (2026-11-03): the opaque session now carries `last_seen_at`, a sealed
+refresh token and an access expiry. A session unused past the configured window
+(default 30 minutes, `WEB_SESSION_IDLE_MS`, minimum 1 minute) is refused and its
+row deleted, while activity inside the window moves the idle clock without
+extending the absolute 7-day lifetime. An expired Discord access token is
+refreshed through the OAuth port; the rotated refresh token is sealed and stored
+in the same write, and one in-flight refresh per session means two concurrent
+requests spend the token once. A permanent refusal deletes the session and a
+transport failure leaves it for a retry. Logout now revokes the refresh grant,
+not only the access token. Migration 0020 adds the three columns and gives
+existing sessions one idle window. Tests are **573 / 85 files**; `pnpm probe:live`
+is **23/23**, adding `web-session-idle-refresh`: a session inside the window was
+accepted with `last_seen_at` moved, 6 idle minutes returned `401` and deleted the
+row, two concurrent requests made exactly one refresh call, the rotated sealed
+token was stored, and replaying the spent token returned `401` and deleted the
+session. The probe's OAuth exchange, refresh and revocation are fake, so live
+Discord login remains open. See [pass 57](../../journal/2026-11-03-pass-57.md).
+
 **Pass 56 finished the P6 API block with signed webhooks and `Idempotency-Key`**
 (2026-11-03): a guild can subscribe an https endpoint from the dashboard, and a
 failed receiver is retried with exponential backoff before the delivery becomes
@@ -562,8 +581,8 @@ bot-token membership check, a server-rendered dashboard, `/api/v1` reads and
 schema-validated module settings writes from both the HTML form and
 `PATCH /api/v1`. The web process is split into an ordered route table, per-area
 handlers, one request context, shared render/HTTP modules and one settings-write
-CSRF gate. The browser never receives a Discord token; the session stores one
-sealed access token and no refresh token.
+CSRF gate. The browser never receives a Discord token; the session stores a
+sealed access token and, after pass 57, a sealed rotating refresh token.
 Pass 49 generated the settings editor from each module's own schema and made
 every accepted settings change append an `audit_events` row, so an edit is one
 generic, schema-declared path rather than a hand-built form per module. Pass 50
@@ -577,8 +596,9 @@ logout revocation behind the OAuth port, per-route rate limits and the
 `owners[]` instance console. Pass 55 added hashed, guild-bound scoped tokens
 with per-token limits and a generated OpenAPI document. Pass 56 added signed
 webhook delivery with retries and receipts, and `Idempotency-Key` replay on
-token writes. The remaining P6 exit items are an idle timeout, a Discord
-refresh-token path and the live Discord OAuth round trip. See
+token writes. Pass 57 added the idle session timeout and the sealed, rotating
+refresh-token path. The only remaining P6 exit item is the live Discord OAuth
+round trip with real credentials. See
 [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
@@ -651,7 +671,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 569 tests / 85 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 22/22 · memory current
+pnpm check        exit 0 · typecheck 0 · 573 tests / 85 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 23/23 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -665,6 +685,7 @@ live saved templates 2026-11-03 UTC · real local HTTP on Postgres · saved from
 live dashboard analytics 2026-11-03 UTC · real local HTTP on Postgres · 7 audit rows, 3 cases, 2 invite joins, 3 tickets, 3 command runs seeded · API and page matched every aggregate and source count · empty guild named · days=91/abc 400 · signed-out 401 · OAuth exchange fake
 live webhooks    2026-11-03 UTC · real local HTTP on Postgres · endpoint created, secret shown once and sealed at rest · local receiver verified t/v1 HMAC independently · settings.updated delivered with module/actor/source · always-500 receiver tried 3 times then failed with HTTP 500 on the receipt page · both removals audited · non-loopback http 400 · OAuth exchange fake
 live idempotency 2026-11-03 UTC · real local HTTP on Postgres · same key and body replayed byte-identically with Idempotent-Replayed: true · different body 409 idempotency_conflict · exactly one settings.update audit row · receipt stored the fingerprint and 200 status · OAuth exchange fake
+live session lifecycle 2026-11-03 UTC · real local HTTP on Postgres · 4 idle minutes of a 5-minute window accepted and last_seen_at moved · 6 idle minutes 401 with the row deleted · one refresh call for two concurrent requests · rotated sealed refresh token and new access expiry stored · spent refresh token replay 401 with the row deleted · logout revoked the refresh grant · OAuth exchange/refresh/revoke fake
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -865,7 +886,7 @@ read that file.
 | --- | --- | --- | --- |
 | 1 | OAuth2 code + PKCE, sealed state and `iss` validation | `apps/web/src/web.test.ts`: missing state cookie, wrong issuer and wrong state all `400` before exchange | Real local HTTP + fake OAuth |
 | 2 | Opaque server-side session, not a browser token | `packages/db/src/web-store.test.ts`: round trip; `web.test.ts`: raw session id is not a key | **PGlite** + in-memory store |
-| 3 | No Discord credential reaches the browser | `web.test.ts`: HTML/JSON bodies do not contain the access token; the session stores only a sealed access token, with no refresh token | Real HTTP response assertions |
+| 3 | No Discord credential reaches the browser | `web.test.ts`: HTML/JSON bodies do not contain the access or refresh token; both are stored sealed, and no route returns either | Real HTTP response assertions |
 | 4 | Per-guild authorization, two checks | `web.test.ts`: non-admin `403`, cross-guild id `403`, guild without the bot `403`; `access.ts` BigInt tests | Real HTTP + fake OAuth/bot membership |
 | 5 | BigInt permission parsing | `web.test.ts`: bit 40 `MODERATE_MEMBERS` is not Manage Guild; invalid bitfield is false | Unit |
 | 6 | One real read path through repository seams | `web.test.ts`: `/api/v1/guilds/:id/overview` and the HTML page show guild-scoped counts; `packages/db/src/web-store.test.ts` proves a second guild does not leak | Real HTTP + **PGlite** |
@@ -891,11 +912,14 @@ read that file.
 | 26 | Owners-only instance actions refuse a guild admin | `web.test.ts`: instance page and revoke action are `401` anonymous, `403` for a manage-guild user and `200`/`302` for `WEB_OWNER_IDS`; deleting every row for a user signs that session out | Real local HTTP + **PGlite**, plus the Postgres `web-session-hardening` live check |
 | 27 | A webhook delivery is signed, retried with backoff and receipted | `webhooks.test.ts`: the URL rules, a sealed secret, `signWebhook`/`verifyWebhookSignature` including a stale timestamp, three attempts then terminal, event fan-out and receipt ordering; `webhook-store.test.ts` (PGlite): round trip, due/complete/retry and cascade; `web.test.ts`: create/list/test/delete behind the gate with audit rows | Unit + **PGlite**, plus the Postgres `web-webhooks` live check |
 | 28 | A keyed token write replays and a different body is refused | `web.test.ts`: second call `200` with `Idempotent-Replayed: true` and the same body, a different body `409 idempotency_conflict`, exactly one audit row; `idempotency.test.ts` (PGlite): the stored response replays as the same bytes, release and lease work | Real local HTTP + **PGlite**, plus the Postgres `web-idempotency-key` live check |
+| 29 | An idle session dies and its row is deleted, while activity keeps it alive | `web.test.ts`: a request 9 minutes into a 10-minute window moves `lastSeenAt`; 1 ms past the window returns `401` and `sessions.get` is undefined; `web-store.test.ts` (PGlite): `touch` updates one row and returns false when it is gone | Real local HTTP + in-memory/`PGlite`, plus the Postgres `web-session-idle-refresh` live check |
+| 30 | Two concurrent requests refresh once, and a spent refresh token is refused | `web.test.ts`: two parallel GETs return `200`, `refreshToken` is called once with the original token, the stored sealed refresh token and access token rotate; restoring the spent token returns `401` and deletes the row; `web-store.test.ts` (PGlite): `updateTokens` replaces the sealed pair in one write | Real local HTTP + in-memory/`PGlite`, plus the Postgres `web-session-idle-refresh` live check |
 
 This table proves the foundation, the narrow write path, the schema-widget
 editor, the fleet/built-in/saved template paths, the analytics read, session
-hardening, the scoped-token API, signed webhooks and keyed replay, not the exit
-demo. Live Discord OAuth and live Discord token revocation remain open.
+hardening, the scoped-token API, signed webhooks, keyed replay, and the session
+idle/refresh lifecycle, not the exit demo. Live Discord OAuth and live Discord
+token revocation remain open.
 A live Postgres-backed
 session is real — pass 44 applied the session table and `/healthz` runs with
 `database: postgres` — but an authenticated OAuth session has still not crossed
@@ -1074,7 +1098,8 @@ revocation, per-route limits and the `owners[]` instance console, pass 55
 added hashed scoped tokens, per-token limits, audited issue/revoke and the
 generated OpenAPI document, and pass 56 added signed webhook delivery with
 retries and receipts plus `Idempotency-Key` replay. The carrier decision is
-recorded in [[ADR-0016-dashboard-foundation]]. Next are an idle timeout and a
-refresh-token path, plus the live Discord OAuth round trip. Before
+recorded in [[ADR-0016-dashboard-foundation]]. P6 is complete in repo; the only
+remaining P6 item is the live Discord OAuth round trip (login, refresh and
+revocation against real credentials). Before
 launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

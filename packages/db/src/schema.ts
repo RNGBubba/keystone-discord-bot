@@ -697,8 +697,12 @@ export const webSessions = pgTable(
     userId: text("user_id").notNull(),
     username: text("username").notNull(),
     accessToken: text("access_token").notNull(),
+    /** Sealed; rotated by every refresh, so the row never holds a used token. */
+    refreshToken: text("refresh_token"),
+    accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
     csrfHash: text("csrf_hash").notNull(),
     createdAt: createdAt(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (table) => [index("web_sessions_expires_idx").on(table.expiresAt)],

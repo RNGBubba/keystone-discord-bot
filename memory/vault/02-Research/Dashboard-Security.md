@@ -24,8 +24,8 @@
   can be demoted in Discord at any moment; the session must be revocable now.
 - **The Discord access token stays server-side, encrypted at rest.** The browser
   never receives a Discord token. An XSS bug must not become a seven-day account
-  takeover. The current foundation stores no refresh token because it has no
-  refresh path; do not store one until rotation and single-flight exist.
+  takeover. Since pass 57 the refresh token is stored sealed, only when the
+  grant returns one, and only after rotation and single-flight exist.
 - **Rotation is implemented (pass 54).** On a safe `GET` past 15 minutes the
   opaque cookie and CSRF token are re-keyed in one `SessionStore.rotate`; the
   old value is a `401`. `createdAt` is the issue time of the current credential
@@ -34,9 +34,15 @@
 - **Logout revokes, then deletes (pass 54).** `DiscordOAuth.revokeToken` posts to
   Discord's revoke endpoint; the local row is deleted even when Discord fails.
   A remote revocation is best effort and is never claimed without a real token.
-- **Idle timeout and a refresh-token path remain open.** No refresh token is
-  stored until refresh exists with a per-session single-flight lock; storing one
-  earlier would be an unused credential.
+- **Idle timeout and refresh are implemented (pass 57).** A session unused for
+  `WEB_SESSION_IDLE_MS` (default 30 minutes, minimum 1) is refused and its row
+  deleted; activity moves `lastSeenAt` without extending `expiresAt`. An expired
+  access token refreshes from a sealed, rotating refresh token, with one
+  in-flight refresh per session. The single-flight map is in-process, which fits
+  the one-process carrier; multiple replicas would need a shared lock.
+- **Logout revokes the refresh grant (pass 57).** Revoking only the access token
+  would leave the grant able to mint a replacement, so the sealed refresh token
+  is revoked when present and the access token otherwise.
 
 ## Per-guild authorization: two checks, not one
 
