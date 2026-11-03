@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "live-2026-11-02",
-  "date": "2026-11-02",
-  "generatedAt": "2026-11-02T22:28:36.489Z",
+  "id": "live-2026-11-03",
+  "date": "2026-11-03",
+  "generatedAt": "2026-11-03T00:21:09.472Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1091ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1214ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 6b6b3d9106a8… matched after import ae345b7b",
+      "detail": "bundle checksum 142b41c0dfa9… matched after import 2ad6d0a2",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -111,6 +111,16 @@
       "status": "pass",
       "detail": "/healthz returned 200 with database=postgres on an ephemeral port",
       "features": []
+    },
+    {
+      "id": "web-schema-widgets",
+      "status": "pass",
+      "detail": "real local HTTP login/session/CSRF + the schema-generated form on Postgres: save 9 persisted, the audit row named the dashboard actor, 5000 was rejected at 400 with the field preserved and no second audit row; OAuth exchange itself used a fake port",
+      "features": [
+        "operations.dashboard-settings-writes",
+        "operations.dashboard-field-widgets",
+        "operations.settings-audit-trail"
+      ]
     }
   ]
 }

@@ -1,6 +1,8 @@
+import type { AuditEventRecord } from "@keystone/kernel";
 import type { DashboardModule, DashboardView } from "./overview";
 import type { DiscordGuild } from "./oauth";
 import { encodePathSegment } from "./http";
+import type { SettingsField, SettingsFormModel, SettingsGroup } from "./settings-form";
 
 function escapeHtml(value: string): string {
   return value
@@ -32,6 +34,13 @@ pre,textarea{white-space:pre-wrap;word-break:break-word;background:#0b0f14;borde
 textarea{font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}
 table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:8px;border-bottom:1px solid var(--line)}
 p.error{color:#ffb4b4}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:16px 0;padding:4px 16px 14px}legend{padding:0 6px;font-weight:600}
+.field{display:flex;flex-direction:column;gap:5px;margin:13px 0}.field.check{flex-direction:row;align-items:center;gap:9px;margin:10px 0}
+.field label,.field .label{font-weight:600}.field input[type=text],.field input[type=number],.field select{background:#0b0f14;border:1px solid var(--line);border-radius:7px;padding:8px 10px;color:var(--text);font:inherit;width:100%;max-width:520px}
+.field input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent)}.field textarea{max-width:100%}
+.field small{color:var(--muted);font-size:12px}.field p.error{margin:0;font-size:13px}
+.notice{border:1px solid #2ea043;background:#0f2417;color:#b7f7c4;border-radius:9px;padding:12px 14px;margin:14px 0}
+.form-error{border:1px solid #f85149;background:#2b1418;color:#ffd4d4;border-radius:9px;padding:12px 14px;margin:14px 0}
 </style>
 </head>
 <body>
@@ -130,26 +139,195 @@ export function renderOverview(
   );
 }
 
+function fieldId(path: string): string {
+  return `f-${path.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+function activeField(
+  field: SettingsField,
+  submitted: URLSearchParams | undefined,
+  rendered: ReadonlySet<string> | undefined,
+): boolean {
+  if (!submitted) return false;
+  return rendered ? rendered.has(field.path) : submitted.has(field.path);
+}
+
+function displayValue(
+  field: SettingsField,
+  submitted: URLSearchParams | undefined,
+  rendered: ReadonlySet<string> | undefined,
+): unknown {
+  if (!activeField(field, submitted, rendered)) return field.value;
+  if (field.kind === "boolean") return submitted?.has(field.path) ?? false;
+  return submitted?.get(field.path) ?? "";
+}
+
+function linesText(value: unknown): string {
+  return Array.isArray(value) ? value.map((entry) => String(entry)).join("\n") : "";
+}
+
+function jsonText(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? null, null, 2) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function renderField(
+  field: SettingsField,
+  submitted: URLSearchParams | undefined,
+  rendered: ReadonlySet<string> | undefined,
+  errors: ReadonlyMap<string, string> | undefined,
+): string {
+  const id = fieldId(field.path);
+  const value = displayValue(field, submitted, rendered);
+  const error = errors?.get(field.path);
+  const help = field.help ? `<small id="${id}-help">${escapeHtml(field.help)}</small>` : "";
+  const errorText = error ? `<p class="error" id="${id}-error">${escapeHtml(error)}</p>` : "";
+  const describedBy = [field.help ? `${id}-help` : "", error ? `${id}-error` : ""]
+    .filter(Boolean)
+    .join(" ");
+  const aria = `${describedBy ? ` aria-describedby="${describedBy}"` : ""}${error ? ' aria-invalid="true"' : ""}`;
+
+  if (field.kind === "boolean") {
+    const checked = value === true;
+    return `<div class="field check">
+      <input type="checkbox" id="${id}" name="${escapeHtml(field.path)}"${checked ? " checked" : ""}${aria}>
+      <label for="${id}">${escapeHtml(field.label)}</label>
+    </div>${help}${errorText}`;
+  }
+
+  if (field.kind === "literal") {
+    return `<input type="hidden" name="${escapeHtml(field.path)}" value="${escapeHtml(String(value ?? ""))}">
+      <div class="field"><span class="label">${escapeHtml(field.label)}</span><span class="muted">Fixed at ${escapeHtml(String(value ?? ""))}</span>${help}</div>${errorText}`;
+  }
+
+  const label = `<label for="${id}">${escapeHtml(field.label)}</label>`;
+  const common = `id="${id}" name="${escapeHtml(field.path)}"${aria}`;
+
+  if (field.kind === "number") {
+    const min = field.min !== undefined ? ` min="${field.min}"` : "";
+    const max = field.max !== undefined ? ` max="${field.max}"` : "";
+    const step = field.step !== undefined ? ` step="${field.step}"` : "";
+    return `<div class="field">${label}<input type="number" ${common}${min}${max}${step} value="${escapeHtml(String(value ?? ""))}">${help}${errorText}</div>`;
+  }
+
+  if (field.kind === "select") {
+    const blank = field.nullable || field.optional ? `<option value="">None</option>` : "";
+    const options = (field.options ?? [])
+      .map((option) => `<option value="${escapeHtml(option)}"${String(value) === option ? " selected" : ""}>${escapeHtml(option)}</option>`)
+      .join("");
+    return `<div class="field">${label}<select ${common}>${blank}${options}</select>${help}${errorText}</div>`;
+  }
+
+  if (field.kind === "textarea") {
+    return `<div class="field">${label}<textarea ${common} rows="4" spellcheck="false">${escapeHtml(String(value ?? ""))}</textarea>${help}${errorText}</div>`;
+  }
+
+  if (field.kind === "lines") {
+    return `<div class="field">${label}<textarea ${common} rows="3" spellcheck="false" placeholder="One value per line">${escapeHtml(linesText(value))}</textarea>${help}${errorText}</div>`;
+  }
+
+  if (field.kind === "json") {
+    return `<div class="field">${label}<textarea ${common} rows="5" spellcheck="false" aria-label="${escapeHtml(field.label)} JSON">${escapeHtml(jsonText(value))}</textarea>${help}${errorText}</div>`;
+  }
+
+  const maxLength = field.max !== undefined ? ` maxlength="${field.max}"` : "";
+  return `<div class="field">${label}<input type="text" ${common}${maxLength} value="${escapeHtml(String(value ?? ""))}">${help}${errorText}</div>`;
+}
+
+function renderGroup(
+  group: SettingsGroup,
+  submitted: URLSearchParams | undefined,
+  rendered: ReadonlySet<string> | undefined,
+  errors: ReadonlyMap<string, string> | undefined,
+): string {
+  const fields = group.fields.map((field) => renderField(field, submitted, rendered, errors)).join("");
+  const groups = group.groups
+    .map((child) => renderGroup(child, submitted, rendered, errors))
+    .join("");
+  if (!fields && !groups) return "";
+  return `<fieldset><legend>${escapeHtml(group.label)}</legend>${fields}${groups}</fieldset>`;
+}
+
+function auditChanges(record: AuditEventRecord): string {
+  const data = record.data;
+  const changes = data && typeof data === "object" ? (data as Record<string, unknown>).changes : undefined;
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)) return record.action;
+  const paths = Object.keys(changes);
+  if (paths.length === 0) return record.action;
+  return paths.length > 6 ? `${paths.slice(0, 6).join(", ")} +${paths.length - 6} more` : paths.join(", ");
+}
+
+function auditAction(record: AuditEventRecord): string {
+  if (record.action === "settings.update") return "Settings update";
+  if (record.action === "settings.reset") return "Settings reset";
+  return record.action;
+}
+
+function auditTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return `${parsed.toISOString().replace("T", " ").slice(0, 19)} UTC`;
+}
+
+function renderAudit(records: readonly AuditEventRecord[]): string {
+  if (records.length === 0) {
+    return `<div class="panel"><h2>Audit trail</h2><p class="muted">No settings changes have been recorded for this module yet.</p></div>`;
+  }
+  const rows = records
+    .map(
+      (record) =>
+        `<tr><td>${escapeHtml(auditTime(record.createdAt))}</td><td>${escapeHtml(record.actorId ?? "system")}</td><td>${escapeHtml(auditAction(record))}</td><td>${escapeHtml(auditChanges(record))}</td></tr>`,
+    )
+    .join("");
+  return `<div class="panel"><h2>Audit trail</h2>
+    <p class="muted">Newest first. Every accepted settings write appends one row; a rejected write writes nothing.</p>
+    <table><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Changed</th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+export interface SettingsRenderOptions {
+  readonly saved?: boolean;
+  readonly submitted?: URLSearchParams;
+  readonly rendered?: ReadonlySet<string>;
+  readonly fieldErrors?: ReadonlyMap<string, string>;
+  readonly formError?: string;
+  readonly history?: readonly AuditEventRecord[];
+}
+
 export function renderSettingsEditor(
   username: string,
   guild: DiscordGuild,
   module: DashboardModule,
+  form: SettingsFormModel,
   csrfToken: string,
+  options: SettingsRenderOptions = {},
 ): string {
   const action = `/dashboard/guilds/${encodePathSegment(guild.id)}/settings/${encodePathSegment(module.id)}`;
+  const notice = options.saved
+    ? `<div class="notice">Settings saved. The change is in the audit trail below.</div>`
+    : "";
+  const formError = options.formError
+    ? `<div class="form-error">${escapeHtml(options.formError)}</div>`
+    : "";
   return layout(
     `${module.name} settings`,
     `<p><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">← Back to ${escapeHtml(guild.name)}</a></p>
      <h1>${escapeHtml(module.name)} settings</h1>
-     <p class="muted">${escapeHtml(module.description)} · version ${escapeHtml(module.version)}</p>
+     <p class="muted">${escapeHtml(module.description)} · version ${escapeHtml(module.version)} · ${form.fields.length} fields · generated from this module's Zod schema</p>
+     ${notice}${formError}
      <div class="panel">
-       <p class="muted">The value is validated by this module's schema before it is stored. Send the complete settings object; unknown keys are ignored.</p>
+       <p class="muted">Every value is parsed by the same schema the bot uses. Invalid input is rejected before anything is stored.</p>
        <form method="post" action="${action}">
          <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
-         <textarea name="settings" rows="22" spellcheck="false" aria-label="Settings JSON">${escapeHtml(JSON.stringify(module.settings, null, 2))}</textarea>
+         <input type="hidden" name="__rendered" value="${escapeHtml(form.rendered.join(","))}">
+         ${form.groups.map((group) => renderGroup(group, options.submitted, options.rendered, options.fieldErrors)).join("")}
          <p><button type="submit">Save settings</button></p>
        </form>
      </div>
+     ${renderAudit(options.history ?? [])}
      ${logoutForm(csrfToken)}`,
     username,
   );

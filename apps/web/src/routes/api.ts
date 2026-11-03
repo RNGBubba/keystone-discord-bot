@@ -47,7 +47,10 @@ export async function settings(
     () => csrfHeader(ctx.req),
   );
   const patch = await parseApiSettings(ctx.req);
-  const module = await ctx.deps.dashboard.update(write.guild, moduleId, patch);
+  const module = await ctx.deps.dashboard.update(write.guild, moduleId, patch, {
+    actorId: write.session.userId,
+    source: "api",
+  });
   sendJson(ctx.res, 200, { guildId, module });
   return true;
 }

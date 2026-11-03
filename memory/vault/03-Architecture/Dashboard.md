@@ -7,7 +7,11 @@
 ## What runs today
 
 `apps/web` is a Node HTTP service with no UI framework. It proves the part that
-matters first: **who is allowed to see or change which guild**.
+matters first: **who is allowed to see or change which guild**. Pass 49 kept that
+carrier deliberately: the settings form is generated from each module's Zod
+schema and rendered as HTML on the server, so there is no client bundle, no
+second schema and no build pipeline to keep in sync. A different UI framework
+remains a later option, not a requirement for the P6 settings surface.
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
@@ -18,8 +22,8 @@ matters first: **who is allowed to see or change which guild**.
 | `POST /logout` | session + CSRF | Deletes the server-side session and clears cookies |
 | `GET /dashboard` | session | Guilds the user can manage |
 | `GET /dashboard/guilds/:id` | session + guild authz | Overview page |
-| `GET /dashboard/guilds/:id/settings/:module` | session + guild authz | Settings editor for one registered module |
-| `POST /dashboard/guilds/:id/settings/:module` | session + guild authz + CSRF | Save the editor's JSON through the module schema |
+| `GET /dashboard/guilds/:id/settings/:module` | session + guild authz | Schema-generated settings widgets plus the module audit trail |
+| `POST /dashboard/guilds/:id/settings/:module` | session + guild authz + CSRF | Parse named widgets, save through the module schema, re-render field errors on rejection |
 | `GET /api/v1/me` | session | The signed-in user; never a token |
 | `GET /api/v1/guilds` | session | Manageable guilds only |
 | `GET /api/v1/guilds/:id/overview` | session + guild authz | Counts, module settings, latest import |
@@ -42,9 +46,12 @@ GuildAccessService.authorize(accessToken, :guildId)
   │  1. user owner/admin/manage-guild?  (BigInt bitfield)
   │  2. bot in guild?                  (bot token)
   ▼
-DashboardService.view(guild)          DashboardService.update(guild, module, patch)
-  │  SettingsService + DashboardStore    │  SettingsService.update
+DashboardService.view(guild)          DashboardService.editor(guild, module)
+  │  SettingsService + DashboardStore    │  schema → widget model + current values
   ▼                                     ▼
+DashboardService.update(guild, module, patch, { actorId, source })
+  │  SettingsService.update → Zod parse → repository.set → audit.append
+  ▼
 HTML or JSON; no Discord token in either
 ```
 
@@ -54,6 +61,26 @@ writes go through one `requireSettingsWrite` gate: session -> guild
 authorization -> token read -> CSRF check. The API reads the token from its
 header; the HTML form reads it from its body, so parsing the form is part of the
 token-read callback.
+
+The HTML form is one model, not one renderer per module:
+
+1. `buildSettingsForm(module.settingsSchema, values)` walks the Zod schema and
+   produces fields (checkbox, number, select, text, textarea, lines, literal,
+   JSON fallback) and nested groups. Credential-shaped keys are never rendered.
+2. `renderSettingsEditor` writes those fields with a hidden `__rendered` path
+   list and the CSRF token.
+3. `parseSettingsForm` reads the named fields back into a nested patch. A field
+   the form rendered but left unchecked is `false`; a field it did not render is
+   untouched.
+4. `SettingsService.update` parses the merge against the owning schema. A Zod
+   issue is mapped back to its field and the same page re-renders at `400` with
+   the submitted value preserved. A successful change redirects to `?saved=1`.
+
+`SettingsService.update` and `reset` append to `audit_events` when an
+`AuditStore` is wired. The row carries the actor, the surface (`command`,
+`dashboard` or `api`), the module and the dotted-path before/after diff; a
+no-op or rejected write writes nothing. The settings page reads the newest rows
+through `DashboardService.history` and renders them as the audit trail.
 
 The guild list is fetched from Discord on each request, so a demotion or removal
 takes effect immediately. There is no browser-held permission cache. A
@@ -68,7 +95,8 @@ as well; the URL id alone is never enough.
 | `apps/web/src/oauth.ts` | The only Discord URL/HTTP adapter; a port for tests |
 | `apps/web/src/auth.ts` | OAuth completion, opaque sessions, CSRF |
 | `apps/web/src/access.ts` | BigInt permissions and the bot-membership check |
-| `apps/web/src/overview.ts` | View composition, settings update and schema-error mapping; filters credential-shaped settings |
+| `apps/web/src/settings-form.ts` | Zod-to-widget model, named-field parser, field-level validation error |
+| `apps/web/src/overview.ts` | View composition, editor/history, settings update and schema-error mapping; filters credential-shaped settings |
 | `apps/web/src/server.ts` | Error boundary, request context, route dispatch and the final method/404 fallback |
 | `apps/web/src/routes/index.ts` | Ordered route table, the shared guild/module patterns and matching |
 | `apps/web/src/routes/auth.ts` | Health, login, callback, logout and landing handlers |
@@ -80,8 +108,11 @@ as well; the URL id alone is never enough.
 | `apps/web/src/render.ts` | Layout, escaping and every HTML page renderer |
 | `apps/web/src/runtime.ts` | Composition root: Postgres or memory, OAuth or degraded |
 | `packages/kernel/src/web.ts` | `SessionStore`, `DashboardStore`, `WebSession` |
+| `packages/kernel/src/audit.ts` | `AuditStore`, in-memory adapter and the settings diff |
+| `packages/kernel/src/settings.ts` | Schema validation, optional clear, audit append |
 | `packages/db/src/web-session-store.ts` | Drizzle session adapter |
 | `packages/db/src/web-dashboard-store.ts` | Guild-scoped aggregate read model |
+| `packages/db/src/audit-store.ts` | Drizzle `audit_events` adapter |
 | `packages/module-catalog` | The one module list shared with the bot |
 
 The kernel owns the contracts; `packages/db` owns SQL; `apps/web` owns HTTP and
@@ -124,16 +155,14 @@ server or a browser.
 
 ## Deliberately not done yet
 
-- Schema-driven **field widgets**; the current editor is a validated JSON
-  textarea so it can cover every existing module setting without a second
-  settings concept.
 - A fleet view with bulk actions and templates.
 - Token refresh/rotation, Discord token revocation on logout, idle timeout.
   No refresh token is stored until that path exists; the session re-authenticates
   when its access token expires.
 - Public API tokens (`keystone_…`), scopes, per-token rate limits,
   `Idempotency-Key`, webhooks and an OpenAPI document.
-- Live OAuth against Discord and a Postgres-backed session smoke.
+- Live OAuth against Discord. The local probe drives a real Postgres session,
+  but it fakes the OAuth code exchange, so a Discord login is not claimed.
 
 The kill signal in [[Roadmap]] says read-only first if the authorization matrix
 cannot pass. That step is done; settings writes now reuse the same gate. This is

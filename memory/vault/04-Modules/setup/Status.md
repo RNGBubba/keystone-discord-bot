@@ -24,7 +24,7 @@ P1 complete; `/config` added in pass 30 and `/export` in pass 31 (2026-11-01).
 ```text
 pnpm typecheck
 pnpm vitest run modules/setup/src   # 27 tests / 3 files
-pnpm test                           # 471 tests / 71 files
+pnpm test                           # 488 tests / 73 files
 pnpm budget                         # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
 pnpm commands:doctor                # Registry 20 roots · 141 subcommands · 4 context menus
 ```
@@ -38,7 +38,7 @@ P1 exit evidence for `/setup`:
 - A repository spy that throws on `set`/`clear` proves the command never writes.
 - Proven at P1 exit with fixtures and a fake health probe; a live Postgres/Redis
   run was then outstanding. Pass 44 opened that window; since pass 46 it has
-  Postgres 16.15, Redis, 14 migrations and `pnpm probe:live` 13/13, including a
+  Postgres 16.15, Redis, 14 migrations and `pnpm probe:live` 14/14, including a
   settings row that survived a pool close/reopen. See
   [[06-Operations/Live-Window|Live window]].
 
@@ -104,8 +104,13 @@ it lacks for the rest.
 - `/config` validates shape, not referents: a syntactically valid channel id can
   be stored even if the channel no longer exists. That check belongs to the
   owning module.
-- Settings changes are not yet in the audit ledger, so `/config set` leaves no
-  who-changed-what row. It is visible through `/config get` and `export`.
+- `/config set` and `/setup reset` now append an `audit_events` row with the
+  command actor, module and dotted-path diff; a no-op or rejected write writes
+  nothing. The row is appended immediately after the settings write, not in the
+  same transaction, so a process crash in that gap could store a change without
+  its audit row. A single-transaction settings/audit port would close it.
+- The dashboard renders the newest settings audit rows. `/logging` does not yet
+  stream them into its channel ledger.
 - The pass-30 live run used memory mode because the configured local
   Postgres/Redis endpoints were closed; pass 44 has since opened them.
 - The MCP cannot invoke slash commands or render embeds, so the live proof is
@@ -122,8 +127,6 @@ it lacks for the rest.
 
 ## Next
 
-- Add a settings-change audit row (actor, guild, module, dotted key, old/new)
-  before `/config` is used in production.
 - P6: link the dashboard's setup page to the same health probe.
 - P7: `/help` can render the same manifest data as documentation.
 - Portability: store the current bundle as an import candidate so a large file

@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-49",
+    date: "2026-11-02",
+    summary:
+      "P6 settings widgets: the dashboard form is generated from each module's Zod schema, and every accepted settings change is written to the audit trail with its actor and diff.",
+    journal: "memory/journal/2026-11-02-pass-49.md",
+  },
+  {
     pass: "pass-48",
     date: "2026-11-02",
     summary:

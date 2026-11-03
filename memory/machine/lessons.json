@@ -122,7 +122,7 @@
       "proofCommands": ["pnpm probe:live"],
       "facts": [
         { "text": "14 migrations", "source": "migrations" },
-        { "text": "13 live checks", "source": "liveChecks" }
+        { "text": "14 live checks", "source": "liveChecks" }
       ]
     },
     {

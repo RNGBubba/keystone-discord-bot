@@ -1719,9 +1719,9 @@
           "phase": "P6",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Auth and settings-write foundation in repo; field widgets and the Next.js shell are pending",
+          "note": "Auth, schema-generated settings widgets and the audit trail are in repo; fleet actions, templates and a live Discord OAuth round trip are pending",
           "liveVerified": false,
-          "openReason": "Login, sessions, guild reads and schema-validated settings writes are built; field widgets, fleet actions and a live OAuth round trip are not."
+          "openReason": "Login, sessions, guild reads, schema-generated settings forms and audited writes are built; fleet actions, config templates and a live OAuth round trip are not."
         },
         {
           "id": "operations.dashboard-auth-foundation",
@@ -1757,13 +1757,68 @@
           "phase": "P6",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Module settings update through the bot's Zod schema, CSRF and the existing per-guild auth gate",
+          "note": "Module settings update through the bot's Zod schema, CSRF and the existing per-guild auth gate; the HTML surface is now generated from that schema",
           "evidence": [
             "apps/web/src/web.test.ts",
             "apps/web/src/overview.ts",
             "memory/vault/03-Architecture/Dashboard.md"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-schema-widgets"
+          ]
+        },
+        {
+          "id": "operations.dashboard-field-widgets",
+          "name": "Schema-driven settings widgets",
+          "competitors": {
+            "mee6": "✅",
+            "dyno": "✅",
+            "carl": "✅",
+            "ticket-tool": "✅",
+            "wick-security": "✅"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "The HTML editor is generated from each module's Zod settings schema: booleans, bounded numbers, enums, text/textarea, one-per-line arrays and a validated JSON fallback for records and arrays of objects. One parser turns named fields back into the patch `SettingsService.update` validates; there is no web-only schema. Live 2026-11-03: real local HTTP login/session/CSRF loaded the AI form on Postgres, saved 9, rejected 5000 at 400 with the field preserved and wrote one audit row; the OAuth exchange used a fake port.",
+          "evidence": [
+            "apps/web/src/settings-form.ts",
+            "apps/web/src/settings-form.test.ts",
+            "apps/web/src/web.test.ts",
+            "apps/web/src/render.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-schema-widgets"
+          ]
+        },
+        {
+          "id": "operations.settings-audit-trail",
+          "name": "Settings audit trail",
+          "competitors": {
+            "mee6": "❔",
+            "dyno": "❔",
+            "carl": "❔",
+            "ticket-tool": "❔",
+            "wick-security": "❔"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "Every accepted settings update and reset appends one `audit_events` row with the actor, surface, module and dotted-path before/after diff; a no-op or rejected write appends nothing. The dashboard shows the newest rows per module. `/config` passes its command actor. Live 2026-11-03: the dashboard save produced exactly one row naming the signed-in actor and source; the SQL store is PGlite-tested.",
+          "evidence": [
+            "packages/kernel/src/audit.ts",
+            "packages/kernel/src/settings.ts",
+            "packages/db/src/audit-store.ts",
+            "packages/db/src/audit-store.test.ts",
+            "apps/web/src/web.test.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-schema-widgets"
+          ]
         },
         {
           "id": "operations.multi-server-fleet",

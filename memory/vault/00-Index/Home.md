@@ -185,7 +185,7 @@ https://github.com/RNGBubba/keystone-discord-bot
   stopped, leaving one bot and one reply per command. The `.env` points at
   localhost Postgres/Redis; pass 44 started the compose services and applied the
   13 migrations then in the ledger, pass 45 added `0014_case_expiry`, and
-  `pnpm probe:live` now passes 13/13, so the SQL window is open. See
+  `pnpm probe:live` now passes 14/14, so the SQL window is open. See
   [[06-Operations/Live-Window|Live window]].
 - **Live 2026-11-01:** AI Team#5758 logged in, found four context menus missing,
   re-registered 17 roots with 108 subcommands plus 2 user and 2 message menus

@@ -11,24 +11,29 @@
  */
 import "dotenv/config";
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadEnv } from "@keystone/config";
-import { createLogger } from "@keystone/kernel";
+import { ModuleRegistry, SettingsService, createLogger } from "@keystone/kernel";
 import {
+  createAuditStore,
   createCaseStore,
   createCommunityStore,
+  createDashboardStore,
   createIdempotencyStore,
   createPanicStore,
   createPortabilityStore,
   createPostgresDatabase,
+  createSessionStore,
   createSettingsRepository,
   guilds,
   migrationStatus,
   probeDatabase,
   type PostgresHandle,
 } from "@keystone/db";
+import { modules } from "../packages/module-catalog/src/index";
 import {
   CaseService,
   TemporaryActionService,
@@ -42,9 +47,17 @@ import { PortabilityService } from "@keystone/importer";
 import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
 import { createWebRuntime } from "../apps/web/src/runtime";
+import { GuildAccessService } from "../apps/web/src/access";
+import { AuthService } from "../apps/web/src/auth";
+import { SecretBox } from "../apps/web/src/crypto";
+import { DashboardService } from "../apps/web/src/overview";
+import { createWebHandler } from "../apps/web/src/server";
+import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
 
 const root = path.resolve(import.meta.dirname, "..");
 const GUILD = "live-probe";
+const WEB_GUILD = "999999999999999999";
+const WEB_USER = "live-probe-web-user";
 const QUEUE = "keystone-live-probe";
 const DELAYED_QUEUE = "keystone-live-probe-delayed";
 const TEMPORARY_QUEUE = "keystone-live-probe-temporary";
@@ -82,6 +95,33 @@ function fail(message: string): never {
 
 function assert(ok: boolean, message: string): asserts ok {
   if (!ok) fail(message);
+}
+
+class WebProbeOAuth implements DiscordOAuth {
+  authorizationUrl(input: { state: string }): string {
+    return `https://discord.test/oauth?state=${encodeURIComponent(input.state)}`;
+  }
+
+  async exchangeCode(): Promise<{ accessToken: string }> {
+    return { accessToken: "live-probe-access-token" };
+  }
+
+  async fetchUser(): Promise<{ id: string; username: string }> {
+    return { id: WEB_USER, username: "Live probe admin" };
+  }
+
+  async fetchGuilds(): Promise<DiscordGuild[]> {
+    return [{ id: WEB_GUILD, name: "Live probe web", icon: null, owner: true, permissions: "0" }];
+  }
+
+  async botInGuild(): Promise<boolean> {
+    return true;
+  }
+}
+
+function responseCookie(response: Response, name: string): string | undefined {
+  const header = response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`));
+  return header?.split(";")[0];
 }
 
 function dockerVersion(): { version: string | null; running: boolean } {
@@ -526,9 +566,186 @@ async function main(): Promise<void> {
     await web.close();
   }
 
+  // --- Dashboard widgets over real HTTP, Postgres sessions/settings/audit ---
+  // The OAuth *port* is faked because the probe has no Discord client. Login,
+  // state validation, the session cookie, CSRF, the HTML form, the schema gate
+  // and the Postgres writes are all the real code paths, not service methods
+  // called directly.
+  {
+    const registry = new ModuleRegistry().registerAll(modules);
+    const auditStore = createAuditStore(database);
+    const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
+    const probeOAuth = new WebProbeOAuth();
+    const auth = new AuthService({
+      oauth: probeOAuth,
+      sessions: createSessionStore(database),
+      box: new SecretBox(randomBytes(32)),
+      config: {
+        clientId: "live-probe-client",
+        clientSecret: "live-probe-secret",
+        redirectUri: "http://127.0.0.1/auth/callback",
+        issuer: "https://discord.com",
+        sessionTtlMs: 60 * 60_000,
+      },
+    });
+    const handler = createWebHandler({
+      auth,
+      access: new GuildAccessService(probeOAuth),
+      dashboard: new DashboardService(
+        registry,
+        settings,
+        createDashboardStore(database),
+        auditStore,
+      ),
+      logger,
+      secureCookies: false,
+      databaseMode: "postgres",
+    });
+    const server = createServer(handler);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+
+    try {
+      const address = server.address();
+      assert(address !== null && typeof address === "object", "the widget server has no port");
+      const base = `http://127.0.0.1:${address.port}`;
+
+      const begin = await fetch(`${base}/login`, { redirect: "manual" });
+      assert(begin.status === 302, `login returned ${begin.status}`);
+      const stateCookie = responseCookie(begin, "keystone_oauth");
+      assert(stateCookie !== undefined, "login did not set a state cookie");
+      const state = new URL(begin.headers.get("location") ?? "https://invalid.test").searchParams.get(
+        "state",
+      );
+      assert(state !== null, "login URL has no state");
+
+      const callback = await fetch(
+        `${base}/auth/callback?code=live-probe&state=${encodeURIComponent(state)}&iss=${encodeURIComponent("https://discord.com")}`,
+        { redirect: "manual", headers: { cookie: stateCookie } },
+      );
+      assert(callback.status === 302, `OAuth callback returned ${callback.status}`);
+      const sessionCookie = responseCookie(callback, "keystone_session");
+      const csrfCookie = responseCookie(callback, "keystone_csrf");
+      assert(sessionCookie !== undefined && csrfCookie !== undefined, "callback did not set both session cookies");
+      const cookie = `${sessionCookie}; ${csrfCookie}`;
+      const csrf = csrfCookie.split("=")[1] ?? "";
+
+      const editor = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/settings/ai`, {
+        headers: { cookie },
+      });
+      assert(editor.status === 200, `settings page returned ${editor.status}`);
+      const editorHtml = await editor.text();
+      assert(editorHtml.includes('name="monthlyBudgetUsd"'), "the page has no number widget");
+      assert(editorHtml.includes('name="__rendered"'), "the page has no rendered-field marker");
+      assert(editorHtml.includes("Audit trail"), "the page has no audit trail");
+      assert(!editorHtml.includes('name="settings"'), "the page still posts one JSON blob");
+
+      const rendered = [
+        "enabled",
+        "chat",
+        "classification",
+        "deflection",
+        "explanations",
+        "summaries",
+        "monthlyBudgetUsd",
+        "monthlyRequests",
+        "maxOutputTokens",
+        "contextChunks",
+        "maxDocumentChars",
+        "chunkChars",
+        "temperature",
+        "retention",
+      ].join(",");
+      const widgetForm = (budget: string): URLSearchParams =>
+        new URLSearchParams({
+          csrf,
+          __rendered: rendered,
+          enabled: "on",
+          chat: "on",
+          monthlyBudgetUsd: budget,
+          monthlyRequests: "250",
+          maxOutputTokens: "300",
+          contextChunks: "3",
+          maxDocumentChars: "6000",
+          chunkChars: "1200",
+          temperature: "0.2",
+          retention: "none",
+        });
+
+      const saved = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/settings/ai`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: widgetForm("9").toString(),
+      });
+      assert(saved.status === 302, `valid form returned ${saved.status}`);
+      assert(
+        (saved.headers.get("location") ?? "").includes("?saved=1"),
+        "a successful save did not redirect with the saved marker",
+      );
+      const storedAi = await settings.get(WEB_GUILD, "ai");
+      assert(storedAi.monthlyBudgetUsd === 9, `stored budget is ${String(storedAi.monthlyBudgetUsd)}`);
+      assert(storedAi.chat === true, "stored chat flag is not true");
+
+      const auditRows = await auditStore.list(WEB_GUILD, 10);
+      assert(auditRows.length === 1, `expected one audit row, found ${auditRows.length}`);
+      assert(auditRows[0]?.actorId === WEB_USER, "the audit row has the wrong actor");
+      assert(auditRows[0]?.action === "settings.update", "the audit row has the wrong action");
+      assert(
+        (auditRows[0]?.data as { source?: string } | undefined)?.source === "dashboard",
+        "the audit row does not name the dashboard surface",
+      );
+
+      const after = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/settings/ai?saved=1`, {
+        headers: { cookie },
+      });
+      const afterHtml = await after.text();
+      assert(afterHtml.includes("Settings saved"), "the saved notice is missing");
+      assert(afterHtml.includes(WEB_USER), "the audit trail does not name the actor");
+      assert(afterHtml.includes("monthlyBudgetUsd"), "the audit trail does not name the changed field");
+
+      const rejected = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/settings/ai`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: widgetForm("5000").toString(),
+      });
+      assert(rejected.status === 400, `invalid form returned ${rejected.status}`);
+      const rejectedHtml = await rejected.text();
+      assert(rejectedHtml.includes("monthlyBudgetUsd"), "the rejection does not name the field");
+      assert(rejectedHtml.includes("1000"), "the rejection does not state the schema bound");
+      assert(rejectedHtml.includes('value="5000"'), "the rejection did not preserve the input");
+      assert(
+        (await settings.get(WEB_GUILD, "ai")).monthlyBudgetUsd === 9,
+        "a rejected form changed the stored budget",
+      );
+      assert((await auditStore.list(WEB_GUILD, 10)).length === 1, "a rejected form wrote an audit row");
+
+      record({
+        id: "web-schema-widgets",
+        status: "pass",
+        detail:
+          "real local HTTP login/session/CSRF + the schema-generated form on Postgres: save 9 persisted, the audit row named the dashboard actor, 5000 was rejected at 400 with the field preserved and no second audit row; OAuth exchange itself used a fake port",
+        features: [
+          "operations.dashboard-settings-writes",
+          "operations.dashboard-field-widgets",
+          "operations.settings-audit-trail",
+        ],
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }
+
   // --- Cleanup ---------------------------------------------------------------
   await database.runner.exec(`
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD}';
+    DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
+    DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';
     DELETE FROM job_receipts
       WHERE idempotency_key LIKE 'live-probe-%'
          OR idempotency_key = '${temporaryKey}';

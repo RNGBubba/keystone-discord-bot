@@ -5,7 +5,7 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**128 features** across 17 domains: **104 in repo**, **12 open**, **8 planned**. Live behaviour is marked separately; a green
+**130 features** across 17 domains: **106 in repo**, **12 open**, **8 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
@@ -22,7 +22,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Content | 7 | 6 | 0 | 0 |
 | Music | 4 | 1 | 1 | 0 |
 | AI | 7 | 6 | 1 | 0 |
-| Operations | 11 | 5 | 3 | 3 |
+| Operations | 13 | 7 | 3 | 3 |
 | Portability | 12 | 12 | 0 | 0 |
 | Invites | 3 | 3 | 0 | 0 |
 | Forms and applications | 3 | 3 | 0 | 0 |
@@ -169,9 +169,11 @@ box means the code and its tests exist, not that a live guild has run it.
 | Audit logging | P7 | ✅ in repo | `modules/logging/src/logging.test.ts`, `apps/bot/src/logging-events.test.ts`, `packages/db/src/logging-store.test.ts`, `memory/vault/04-Modules/logging/Status.md` · live verified |
 | Real subcommand surface | P7 | ✅ in repo | `packages/kernel/src/registry.test.ts`, `apps/bot/src/adapt.test.ts`, `apps/bot/src/command-sync.test.ts`, `apps/bot/src/interaction-harness.test.ts`, `modules/diagnostics/src/diagnostics.test.ts` · live verified |
 | In-bot configuration | P7 | ✅ in repo | `modules/setup/src/config.test.ts`, `modules/setup/src/commands/config.ts`, `packages/kernel/src/config.ts` · live verified |
-| Web dashboard | P6 | ◐ open | Login, sessions, guild reads and schema-validated settings writes are built; field widgets, fleet actions and a live OAuth round trip are not. |
+| Web dashboard | P6 | ◐ open | Login, sessions, guild reads, schema-generated settings forms and audited writes are built; fleet actions, config templates and a live OAuth round trip are not. |
 | Dashboard auth foundation | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `packages/db/src/web-store.test.ts`, `memory/vault/03-Architecture/Dashboard.md` · live unverified |
-| Dashboard settings writes | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `apps/web/src/overview.ts`, `memory/vault/03-Architecture/Dashboard.md` · live unverified |
+| Dashboard settings writes | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `apps/web/src/overview.ts`, `memory/vault/03-Architecture/Dashboard.md` · live verified |
+| Schema-driven settings widgets | P6 | ✅ in repo | `apps/web/src/settings-form.ts`, `apps/web/src/settings-form.test.ts`, `apps/web/src/web.test.ts`, `apps/web/src/render.ts`, `scripts/live-probe.ts` · live verified |
+| Settings audit trail | P6 | ✅ in repo | `packages/kernel/src/audit.ts`, `packages/kernel/src/settings.ts`, `packages/db/src/audit-store.ts`, `packages/db/src/audit-store.test.ts`, `apps/web/src/web.test.ts` · live verified |
 | Multi-server fleet | P6 | ◐ open | A user sees every guild they can manage, but there is no fleet action surface, template application or cross-guild write path yet. |
 | Config templates | P6 | ⏳ planned | Apply to N guilds |
 | Public API / webhooks | P6 | ◐ open | OAuth-session reads and settings writes are built; public token issuance, scopes, per-token rate limits, Idempotency-Key, webhooks and OpenAPI are not. |

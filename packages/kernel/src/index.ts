@@ -17,6 +17,7 @@ export * from "./budget";
 export * from "./cooldowns";
 export * from "./idempotency";
 export * from "./guards";
+export * from "./audit";
 export * from "./settings";
 export * from "./config";
 export * from "./telemetry";

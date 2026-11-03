@@ -146,7 +146,7 @@ checked. See [[Master-Plan]] for the research program.
 
 | Feature | MEE6 | Dyno | Carl | Ticket Tool | Wick / Security | Phase | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Web dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | P6 | Node/render first; field widgets and fleet open |
+| Web dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | P6 | Server-rendered Node app; schema-generated widgets and settings audit shipped pass 49; fleet/templates and live Discord OAuth open |
 | Real subcommand surface | ✅ | ✅ | ✅ | ✅ | ✅ | P7 | 20 roots / 141 subcommands; `/help` generated; shipped pass 26; synthetic nested-slash harness pass 27 (gateway still human); `/music` pass 32; `/setup` hub pass 34; `/appeal` hub pass 35; `/verify` hub pass 36; `/form` pass 40; `/event` pass 41; `/modmail` pass 42; pass 45 added `/mod temp-role`; pass 46 added `/mod panic` and `/tools goodbye`. The Master-Plan records 72 planned names across 14 built roots; all recorded names are registered, and the handoff's 18 / 160 still has 88 unrecorded names and no named 18th root |
 | Context menus | ❔ | ❔ | ❔ | ❔ | ❔ | P7 | 4 menus (Report message, Case history, Rank card, Explain with AI) registered live on the separate 15 + 15 budget; invocation is human-only because the MCP cannot right-click. Competitor presence not verified for every row |
 | In-bot configuration | ❔ | ❔ | ❔ | ❔ | ❔ | P7 | `/config` (list, get, set, export) over every module's own schema; shipped pass 30; live-proven. Competitor in-Discord config not verified (all surveyed bots also ship a web dashboard) |

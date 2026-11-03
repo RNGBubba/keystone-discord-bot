@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
+  InMemoryAuditStore,
   InMemoryCooldownStore,
   InMemorySettingsRepository,
   ModuleRegistry,
@@ -56,15 +57,16 @@ interface RunOptions {
 async function harness() {
   const registry = new ModuleRegistry().register(setupModule).register(fixtureModule);
   const repository = new InMemorySettingsRepository();
-  const settings = new SettingsService(repository, registry);
-  return { registry, repository, settings };
+  const audit = new InMemoryAuditStore();
+  const settings = new SettingsService(repository, registry, audit);
+  return { registry, repository, settings, audit };
 }
 
 async function run(
   subcommand: string,
   { permissions = ["ManageGuild"], options = {} }: RunOptions = {},
 ) {
-  const { registry, repository, settings } = await harness();
+  const { registry, repository, settings, audit } = await harness();
   const interaction = new FakeInteraction({
     commandName: "config",
     guildId: "guild-1",
@@ -86,7 +88,7 @@ async function run(
     interaction,
   );
 
-  return { outcome, interaction, repository, settings };
+  return { outcome, interaction, repository, settings, audit };
 }
 
 describe("/config command", () => {
@@ -126,7 +128,7 @@ describe("/config command", () => {
   });
 
   it("writes a nested dotted key through the owner's schema and preserves siblings", async () => {
-    const { outcome, interaction, settings } = await run("set", {
+    const { outcome, interaction, settings, audit } = await run("set", {
       options: { module: "fixture", key: "nested.flag", value: "false" },
     });
 
@@ -137,6 +139,17 @@ describe("/config command", () => {
       mode: "alert",
       nested: { flag: false, label: "keep" },
     });
+    expect(audit.records("guild-1")).toMatchObject([
+      {
+        actorId: "42",
+        action: "settings.update",
+        targetId: "fixture",
+        data: {
+          source: "command",
+          changes: { "nested.flag": { from: true, to: false } },
+        },
+      },
+    ]);
   });
 
   it("keeps a snowflake id as a string instead of rounding it through JSON", async () => {

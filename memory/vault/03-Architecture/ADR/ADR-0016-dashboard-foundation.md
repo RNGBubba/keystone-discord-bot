@@ -39,8 +39,10 @@ with the same ports-and-adapters shape as the bot:
 - `apps/web` is a workspace app, built as `dist/web.js` and optional in compose.
   A gateway-only self-host can omit it.
 
-The Next.js shell remains a P6 follow-up for schema-driven settings forms and the
-fleet view. It will consume this authorization layer, not replace it.
+A richer client shell (including Next.js) remains an option for the fleet view
+and later UI, and it would consume this authorization layer rather than replace
+it. Pass 49 showed that schema-driven settings forms do not require one: the
+server-rendered app generates them from the module schema.
 
 ## Alternatives
 
@@ -68,8 +70,9 @@ fleet view. It will consume this authorization layer, not replace it.
 
 **Costs and limits**
 
-- Plain HTML is intentionally minimal; schema-driven forms, modal editing and
-  fleet actions are still open.
+- Plain HTML is intentionally minimal. Settings forms are now generated from
+  each module's schema (pass 49); modal editing, fleet actions and templates are
+  still open.
 - No token refresh yet: a session that outlives the Discord access token needs a
   re-login. The unused refresh-token and rotation columns were removed in pass
   20 rather than storing a credential no code uses. Rotation/refresh is a P6
@@ -91,6 +94,11 @@ fleet view. It will consume this authorization layer, not replace it.
   leak into the counts.
 - The process boots in memory mode and serves `/healthz`, `/` and `/api/v1/...`
   with security headers and `no-store`.
+- (pass 49) Every registered module's schema maps to widgets without exposing a
+  credential-shaped key, a widget change persists through `SettingsService` and
+  appends one audit row, and a rejected value re-renders at `400` without a
+  write or an audit row — proved over real local HTTP and in the Postgres live
+  check `web-schema-widgets`.
 
 The live OAuth round trip and a Postgres-backed session are the next proof, not a
 claim of this pass.
@@ -102,3 +110,19 @@ and the HTML settings form call `SettingsService.update` with the module's own
 Zod schema, after `GuildAccessService.authorize()` and the session CSRF check.
 There is still no second schema, no browser-held permission cache and no direct
 repository write from a handler. See [[Dashboard]].
+
+## Follow-up (pass 49) — the carrier choice
+
+The settings editor is now generated from the module's Zod schema and rendered
+server-side in the existing `apps/web` app. This keeps the security boundary and
+the form model in one process: booleans, bounded numbers, enums, text/textarea,
+one-per-line arrays and a schema-validated JSON fallback are produced from the
+same schema `SettingsService.update` parses. A client framework (including the
+Next.js shell named in the original decision) stays a future option, not a
+requirement for this surface; nothing in P6's settings slice needs a client
+bundle or a second settings schema.
+
+The write path also appends one `audit_events` row per accepted update/reset,
+through `AuditStore`, with the actor, surface and dotted-path diff. Rejected and
+no-op writes append nothing. The settings page renders the newest rows. See
+[[Dashboard]].

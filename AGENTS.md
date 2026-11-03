@@ -124,7 +124,9 @@ rate-limited register leaves the app with no commands.
 
 - P0–P5 complete in-repo. P6 auth and settings-write foundation is in repo:
   OAuth2/PKCE, opaque Postgres sessions, per-guild BigInt authz, dashboard/API
-  reads and schema-validated module settings writes with CSRF.
+  reads, schema-generated settings widgets and audited settings writes with CSRF.
+  The carrier is the framework-free `apps/web` HTML app; a future Next.js shell
+  is not built and is not required for this slice.
 - P7 invite tracking is in repo as the sixth module: `/invites` leaderboard,
   stats and who-invited-whom, backed by `invite_joins` and advisory fake-join
   flags. A cold cache records an unknown inviter; the adapter test covers it.
@@ -245,8 +247,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 471
-  tests in 71 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 488
+  tests in 73 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -275,6 +277,19 @@ rate-limited register leaves the app with no commands.
   planned. The drift named by the completion plan is corrected, and the root
   CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT files plus issue/PR templates
   were added. No product behaviour changed.
+- Pass 49 built the P6 schema-widget slice. `apps/web/src/settings-form.ts`
+  derives checkboxes, bounded number inputs, selects, textareas, one-per-line
+  arrays and a validated JSON fallback from each module's own Zod schema; the
+  parser turns named fields back into the patch `SettingsService.update`
+  validates. The `AuditStore` port and its Drizzle adapter append one
+  `audit_events` row per accepted settings update/reset with actor, surface and
+  dotted-path diff; `/config` and `/setup` pass the command actor, and the
+  settings page shows the newest rows. The secret-key filter no longer hides
+  `maxOutputTokens`, and optional clears no longer persist as NULL. The live
+  probe is 14/14: `web-schema-widgets` drove real local HTTP
+  login/session/CSRF and the schema form on Postgres, saved a value, saw the
+  audit row, then rejected `5000` at `400` without a second row. The OAuth
+  exchange used a fake port; live Discord OAuth remains open.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in
@@ -310,7 +325,7 @@ rate-limited register leaves the app with no commands.
   with a fake OAuth port. Live Discord OAuth is open.
 - Environment: Docker Desktop **29.9.2** runs the repo's compose Postgres
   **16.15** and Redis; all 14 migrations are applied, and `pnpm probe:live`
-  passed 13/13 SQL/Redis/queue/service checks on 2026-11-02. `.env` points at
+  passed 14/14 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
   localhost. The machine evidence is `memory/machine/live.json`; run
   `pnpm probe:live` after touching a SQL, Redis, queue or web path. Memory mode
   is still a supported fallback, not the configured one. Local Ollama is up; a
@@ -320,8 +335,8 @@ rate-limited register leaves the app with no commands.
   mode, forms modal input and forms in the guild export bundle, live
   role/select/voice paths, a live Discord timer delivery and a live panic
   lockdown (the SQL/service halves are live-proven), a real member leave,
-  pgvector ANN benchmark, MEE6 live fetch, P6 field widgets/fleet/tokens and
-  the rest of P7.
+  pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth, the P6 fleet,
+  templates and scoped API tokens, and the rest of P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

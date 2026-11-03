@@ -636,6 +636,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-49",
+      "date": "2026-11-02",
+      "phase": "P6",
+      "summary": "P6 schema-driven settings widgets: the dashboard settings page is generated from each module's Zod schema (booleans, bounded numbers, enums, text/textarea, one-per-line arrays, validated JSON fallback), and named form fields parse back into the patch SettingsService validates. A new kernel AuditStore port, in-memory adapter and Drizzle audit_events adapter record every accepted update/reset with actor, source and dotted-path diff; /config and /setup pass the command actor, and the settings page shows the newest rows. The carrier remains the framework-free apps/web HTML app; no Next.js shell, packages/ui or second settings schema was added. Two defects fixed: the secret-key filter hid maxOutputTokens, and explicit undefined optional values could become NULL. Live probe is 14/14; the new web-schema-widgets check drove real local HTTP login/session/CSRF and the schema form on Postgres (save 9, audit row, 5000 rejected at 400 with no second row); OAuth exchange used a fake port, so live Discord OAuth remains open. Tests 488 / 73 files.",
+      "journal": "journal/2026-11-02-pass-49.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "488",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "14/14",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

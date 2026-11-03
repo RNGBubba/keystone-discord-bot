@@ -2,6 +2,7 @@ export * from "./schema";
 export * from "./client";
 export * from "./migrator";
 export * from "./settings-repository";
+export * from "./audit-store";
 export * from "./idempotency";
 export * from "./case-store";
 export * from "./member-store";

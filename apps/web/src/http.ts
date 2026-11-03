@@ -97,16 +97,19 @@ export async function parseApiSettings(
   return parseSettings(await parseBody(req, MAX_SETTINGS_BYTES));
 }
 
-export interface FormSettings {
-  csrf: string | undefined;
-  patch: Record<string, unknown>;
+export interface SettingsFormBody {
+  readonly csrf: string | undefined;
+  readonly params: URLSearchParams;
 }
 
-export async function parseFormSettings(req: IncomingMessage): Promise<FormSettings> {
-  const form = new URLSearchParams(await parseBody(req, MAX_SETTINGS_BYTES));
-  const raw = form.get("settings");
-  if (!raw) throw new HttpError(400, "The settings field is missing.", "settings_missing");
-  return { csrf: form.get("csrf") ?? undefined, patch: parseSettings(raw) };
+/**
+ * The HTML form posts named widgets, not one JSON blob. Parsing the body is
+ * part of reading the CSRF token, so the write gate can authorize before any
+ * field is interpreted or validated.
+ */
+export async function parseSettingsFormBody(req: IncomingMessage): Promise<SettingsFormBody> {
+  const params = new URLSearchParams(await parseBody(req, MAX_SETTINGS_BYTES));
+  return { csrf: params.get("csrf") ?? undefined, params };
 }
 
 export function csrfHeader(req: IncomingMessage): string | undefined {

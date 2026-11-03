@@ -120,10 +120,14 @@ before a UI framework was added; settings writes followed through the same gate.
   `SettingsService` + `DashboardStore` seams.
 - [x] Schema-validated module settings writes from the dashboard and API,
   through `SettingsService`, with CSRF and no mutation on invalid input.
-- [ ] Next.js shell (or keep server-rendered HTML) and schema-driven field
-  widgets; the current editor is a validated JSON textarea.
-- [ ] Fleet view and templates with an explicit preview; audit log;
-  import/export/drift surfaces; analytics aggregates.
+- [x] Schema-driven field widgets in the existing server-rendered HTML app
+  (pass 49). The form is generated from each module's Zod schema; a Next.js shell
+  remains a future option, not a requirement for this surface.
+- [x] Settings audit trail: every accepted update/reset appends one
+  `audit_events` row with actor, surface and dotted-path diff; the settings page
+  renders the newest rows (pass 49).
+- [ ] Fleet view and templates with an explicit preview; import/export/drift
+  surfaces; analytics aggregates.
 - [ ] Session refresh/rotation and Discord token revocation on logout; per-route
   rate limits; `owners[]` for instance-wide actions.
 - [ ] Public API v1: hashed scoped tokens, OpenAPI, `Idempotency-Key`, webhooks,

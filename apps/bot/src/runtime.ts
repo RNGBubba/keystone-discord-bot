@@ -1,7 +1,9 @@
 import {
+  InMemoryAuditStore,
   InMemoryIdempotencyStore,
   InMemorySettingsRepository,
   SettingsService,
+  type AuditStore,
   type CooldownStore,
   type HealthProbe,
   type HealthReport,
@@ -37,6 +39,7 @@ import {
 } from "@keystone/kernel";
 import type { Env } from "@keystone/config";
 import {
+  createAuditStore,
   createIdempotencyStore,
   createCaseStore,
   createMemberStore,
@@ -173,8 +176,9 @@ export async function createRuntime(
   }
 
   const cache = await createCooldownStore({ redisUrl: env.REDIS_URL, logger });
+  const audit: AuditStore = database ? createAuditStore(database) : new InMemoryAuditStore();
 
-  const settings = new SettingsService(repository, registry);
+  const settings = new SettingsService(repository, registry, audit);
   if (env.DEV_GUILD_ID && env.NODE_ENV !== "production" && !database) {
     await settings.update(env.DEV_GUILD_ID, "ai", { enabled: true, chat: true });
     await settings.update(env.DEV_GUILD_ID, "moderation", {

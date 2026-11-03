@@ -5,12 +5,12 @@
   "mission": "vault/01-Mission/Mission.md",
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-02",
-  "phase": "P7",
-  "lastPass": "journal/2026-11-02-pass-48.md",
-  "nextAction": "pass-49 — resume the approved completion plan at P6 capability work; the prose gate is current and deliberately did not start it",
+  "phase": "P6",
+  "lastPass": "journal/2026-11-02-pass-49.md",
+  "nextAction": "pass-50 — continue P6 after the schema-widget slice: fleet view and templates with preview, then session rotation/revocation and rate limits; the live Discord OAuth round trip is still the missing dashboard proof",
   "live": {
     "report": "machine/live.json",
-    "id": "live-2026-11-02"
+    "id": "live-2026-11-03"
   },
   "metrics": {
     "commands": 20,
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 471
+    "tests": 488
   },
   "modules": [
     {

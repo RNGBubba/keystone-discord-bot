@@ -121,7 +121,7 @@ case that arrived through the case observer rather than the message adapter.
 - Delivery failure, a deleted channel and a refused setup are unit-tested; only
   successful delivery and the moderation hook were exercised live.
 - Docker Desktop is installed and running here, and pass 44 started the compose
-  Postgres 16.15 and Redis containers. The SQL store is live-proven by the 13/13
+  Postgres 16.15 and Redis containers. The SQL store is live-proven by the 14/14
   probe; the earlier pass-28 window was memory mode.
 - `message_delete` records the message author as actor because Discord's gateway
   event does not name the moderator who deleted it. The audit-log API is not

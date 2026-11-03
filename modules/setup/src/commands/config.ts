@@ -236,7 +236,10 @@ export const config = defineCommand({
       const value = parseValue(raw);
       let updated: Record<string, unknown>;
       try {
-        updated = await settings.update(guildId, moduleId, patchFor(selectedModule.settings, key, value));
+        updated = await settings.update(guildId, moduleId, patchFor(selectedModule.settings, key, value), {
+          actorId: ctx.userId,
+          source: "command",
+        });
       } catch (error) {
         if (error instanceof ZodError) {
           const issues = error.issues

@@ -2,6 +2,22 @@
 
 ## Now
 
+**Pass 49 built the P6 schema-widget slice** (2026-11-02): the dashboard settings
+editor is generated from each module's own Zod schema — booleans, bounded
+numbers, enums, text/textarea, one-per-line arrays and a validated JSON fallback
+— and named fields parse back into the patch `SettingsService.update` validates.
+Every accepted settings update and reset now appends an `audit_events` row with
+the actor, surface, module and dotted-path diff; the page shows the newest rows,
+and `/config` and `/setup` pass the command actor. The carrier remains the
+framework-free `apps/web` HTML app; no Next.js shell, `packages/ui` or second
+settings schema was added. Two defects were fixed: `maxOutputTokens` was hidden
+by an over-broad secret filter, and an explicit `undefined` optional value could
+become SQL NULL. Tests are **488 / 73 files**; `pnpm probe:live` is **14/14**,
+with new check `web-schema-widgets` driving real local HTTP login/session/CSRF
+and the schema form on Postgres (save 9, one audit row, 5000 rejected at 400 with
+no second row). The OAuth exchange used a fake port; live Discord OAuth remains
+open. See [pass 49](../../journal/2026-11-02-pass-49.md).
+
 **Pass 48 made the memory gate read prose** (2026-11-02):
 `memory/machine/claims.json` names the documents that speak in the present tense,
 and `pnpm memory:check` now recomputes roots, subcommands, actions, context
@@ -12,8 +28,9 @@ i18n, the Next.js shell — must be marked planned. The drift named by the
 completion plan is corrected: README counts, the Gate block, every module ledger
 block, the stale Docker and expiry notes, and the V2/Next claims. The root
 CONTRIBUTING, GOVERNANCE, SECURITY and CODE_OF_CONDUCT files and the issue/PR
-templates now exist. No product behaviour changed; tests remain **471 / 71 files**
-and the live probe is **13/13**. See [pass 48](../../journal/2026-11-02-pass-48.md).
+templates now exist. No product behaviour changed. At pass 48 the suite was
+**471 / 71 files** and the live probe was **13/13**. See
+[pass 48](../../journal/2026-11-02-pass-48.md).
 
 **Pass 47 completed the teaching phase** (2026-11-02): all 14 lessons are
 written against the current code, and `memory/machine/lessons.json` makes them
@@ -420,9 +437,12 @@ schema-validated module settings writes from both the HTML form and
 handlers, one request context, shared render/HTTP modules and one settings-write
 CSRF gate. The browser never receives a Discord token; the session stores one
 sealed access token and no refresh token.
-This is the read-only auth step plus a narrow write path, not the
-full P6 exit demo: field widgets, fleet actions and scoped API tokens are still
-open. See [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
+Pass 49 generated the settings editor from each module's own schema and made
+every accepted settings change append an `audit_events` row, so an edit is one
+generic, schema-declared path rather than a hand-built form per module. The
+remaining P6 exit items are the fleet view and config templates, token refresh
+and revocation, and scoped API tokens. See [[Dashboard]] and
+[[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
 checksum and counts, transactional restore with post-import verification, a
@@ -494,13 +514,14 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 471 tests / 71 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 13/13 · memory current
+pnpm check        exit 0 · typecheck 0 · 488 tests / 73 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 14/14 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live substrate  2026-11-02 · Docker 29.9.2 · Postgres 16.15 with 14/14 migrations · Redis reachable · pnpm probe:live 13/13 · /healthz database=postgres · migration runner transaction defect fixed
+live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 14/14 migrations · Redis reachable · pnpm probe:live 14/14 · /healthz database=postgres · migration runner transaction defect fixed
+live web widgets 2026-11-03 UTC · real local HTTP login/session/CSRF · AI form generated from schema · saved 9 · one audit row actor live-probe-web-user source dashboard · 5000 rejected at 400 with field preserved · OAuth exchange fake, live Discord OAuth open
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -710,12 +731,15 @@ read that file.
 | 9 | A write is schema-validated by the bot's own contract | `web.test.ts`: `PATCH` and the form update AI settings through `SettingsService`; `monthlyBudgetUsd: 5000` is `400` and leaves the stored value unchanged | Real HTTP + in-memory repository |
 | 10 | Every write is CSRF-protected | `web.test.ts`: missing header/form token is `403`; a valid token writes | Real HTTP |
 | 11 | A write is guild-scoped and two-checked | `web.test.ts`: cross-guild, non-admin and bot-absent writes are `403`; no session is `401` | Real HTTP + fake OAuth |
+| 12 | The settings editor is generated from the bot's own schema | `settings-form.test.ts`: every registered module maps to widgets with no duplicate paths and no credential-shaped key; booleans, bounded numbers, enums, text/textarea, lines and records choose real widgets | Unit + the real module catalog |
+| 13 | A widget change persists and is audited, and a bad one changes nothing | `web.test.ts`: the AI form page renders named widgets and the audit trail; a submitted form saves 7, appends one `settings.update` row with the dashboard actor and dotted diff; `5000` and `not-a-number` are `400` with the submitted value preserved, the stored value unchanged and no audit row | Real local HTTP + in-memory repository, plus the Postgres `web-schema-widgets` live check |
 
-This table proves the foundation and the narrow write path, not the exit demo.
-Live OAuth, field widgets, fleet actions and scoped API tokens remain open. A
-live Postgres-backed session is now possible — pass 44 applied the session table
-and `/healthz` runs with `database: postgres` — but an authenticated OAuth
-session has still not crossed a real Discord login.
+This table proves the foundation, the narrow write path and the schema-widget
+editor, not the exit demo. The live OAuth round trip, a fleet view, token
+refresh/revocation and scoped API tokens remain open. A live Postgres-backed
+session is now possible — pass 44 applied the session table and `/healthz` runs
+with `database: postgres` — but an authenticated OAuth session has still not
+crossed a real Discord login.
 
 ## P5 acceptance evidence
 
@@ -882,9 +906,9 @@ playback (a voice/Lavalink client), forms modal input, scheduled event
 reminders/ICS, modmail DM relay and the planned Components V2 UI/i18n work.
 `automod.false-positive-report` is still the smallest useful moderation
 follow-up. P6 remains the active phase
-for the dashboard. The auth gate and settings writes are built;
-next are schema-driven field widgets, the planned Next.js shell (or a decision to
-keep server-rendered HTML), fleet actions/templates, token refresh and revocation,
-scoped API tokens, per-token rate limits, `Idempotency-Key`, webhooks and
-OpenAPI. Before launch, close the pgvector ANN gate and run the live
+for the dashboard. The auth gate, settings writes, schema-generated widgets and
+the settings audit trail are built in the existing `apps/web` HTML app; the
+carrier decision is recorded in [[ADR-0016-dashboard-foundation]]. Next are fleet
+actions/templates, token refresh and revocation, scoped API tokens, per-token
+rate limits, `Idempotency-Key`, webhooks and OpenAPI. Before launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

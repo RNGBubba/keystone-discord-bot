@@ -159,7 +159,10 @@ async function moduleAction(ctx: CommandContext): Promise<void> {
     return;
   }
 
-  const updated = await config.update(guildId, id, { enabled });
+  const updated = await config.update(guildId, id, { enabled }, {
+    actorId: ctx.userId,
+    source: "command",
+  });
   await ctx.interaction.reply({
     ephemeral: true,
     content: `\`${id}\` is now ${updated.enabled === false ? "disabled" : "enabled"}.`,
@@ -310,7 +313,7 @@ async function resetAction(ctx: CommandContext): Promise<void> {
   if (!id) throw new UserError("Choose the module to reset.");
 
   const before = findModule(await config.list(guildId), id);
-  await config.reset(guildId, id);
+  await config.reset(guildId, id, { actorId: ctx.userId, source: "command" });
   const after = findModule(await config.list(guildId), id);
 
   await ctx.interaction.reply({

@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  InMemoryAuditStore,
   InMemoryDashboardStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
@@ -63,6 +64,7 @@ interface Harness {
   oauth: FakeOAuth;
   sessions: SessionStore;
   settings: SettingsService;
+  audit: InMemoryAuditStore;
   close(): Promise<void>;
 }
 
@@ -78,8 +80,8 @@ async function harness(): Promise<Harness> {
     latestImport: { id: "import-1", source: "bundle", state: "applied", createdAt: "2026-01-02T00:00:00.000Z" },
   });
   const registry = new ModuleRegistry().registerAll(modules);
-  const settings = new SettingsService(new InMemorySettingsRepository(), registry);
-  await settings.update(GUILD_A, "ai", { enabled: true, chat: true });
+  const audit = new InMemoryAuditStore();
+  const settings = new SettingsService(new InMemorySettingsRepository(), registry, audit);
   const auth = new AuthService({
     oauth,
     sessions,
@@ -95,7 +97,7 @@ async function harness(): Promise<Harness> {
   const handler = createWebHandler({
     auth,
     access: new GuildAccessService(oauth),
-    dashboard: new DashboardService(registry, settings, dashboardStore),
+    dashboard: new DashboardService(registry, settings, dashboardStore, audit),
     logger: createSilentLogger(),
     secureCookies: false,
     databaseMode: "memory",
@@ -110,6 +112,7 @@ async function harness(): Promise<Harness> {
     oauth,
     sessions,
     settings,
+    audit,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -138,6 +141,56 @@ function patchSettings(
       "x-keystone-csrf": csrf,
     },
     body: JSON.stringify(body),
+  });
+}
+
+const AI_FIELDS = [
+  "enabled",
+  "chat",
+  "classification",
+  "deflection",
+  "explanations",
+  "summaries",
+  "monthlyBudgetUsd",
+  "monthlyRequests",
+  "maxOutputTokens",
+  "contextChunks",
+  "maxDocumentChars",
+  "chunkChars",
+  "temperature",
+  "retention",
+] as const;
+
+function aiForm(csrf: string, overrides: Record<string, string> = {}): URLSearchParams {
+  const form = new URLSearchParams({
+    csrf,
+    __rendered: AI_FIELDS.join(","),
+    enabled: "on",
+    chat: "on",
+    monthlyBudgetUsd: "7",
+    monthlyRequests: "250",
+    maxOutputTokens: "300",
+    contextChunks: "3",
+    maxDocumentChars: "6000",
+    chunkChars: "1200",
+    temperature: "0.2",
+    retention: "none",
+    ...overrides,
+  });
+  return form;
+}
+
+async function postSettingsForm(
+  test: Harness,
+  cookie: string,
+  path: string,
+  form: URLSearchParams,
+): Promise<Response> {
+  return fetch(`${test.base}${path}`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
   });
 }
 
@@ -310,7 +363,122 @@ describe("P6 web auth and authorization", () => {
     }
   });
 
-  it("writes module settings through the API and the dashboard form with the bot schema", async () => {
+  it("renders schema-driven widgets instead of one JSON textarea", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const editor = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/settings/ai`, {
+        headers: { cookie },
+      });
+      expect(editor.status).toBe(200);
+      const page = await editor.text();
+      expect(page).toContain('name="monthlyBudgetUsd"');
+      expect(page).toContain('min="0" max="1000"');
+      expect(page).toContain('step="any"');
+      expect(page).toContain('name="chat"');
+      expect(page).toContain('type="checkbox"');
+      expect(page).toContain('name="enabled"');
+      expect(page).toContain('name="__rendered"');
+      expect(page).toContain("Audit trail");
+      expect(page).not.toContain('name="settings"');
+      expect(page).not.toContain("Monthly Budget Usd");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("writes a dashboard widget change through the bot schema and records it in the audit trail", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const before = await test.settings.get(GUILD_A, "ai");
+      expect(before).toMatchObject({ chat: false, monthlyBudgetUsd: 1 });
+
+      const saved = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/settings/ai`,
+        aiForm(csrf),
+      );
+      expect(saved.status).toBe(302);
+      expect(saved.headers.get("location")).toContain("?saved=1");
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({
+        enabled: true,
+        chat: true,
+        classification: false,
+        monthlyBudgetUsd: 7,
+        monthlyRequests: 250,
+        retention: "none",
+      });
+
+      expect(test.audit.records(GUILD_A)).toMatchObject([
+        {
+          actorId: USER,
+          action: "settings.update",
+          targetId: "ai",
+          data: {
+            moduleId: "ai",
+            source: "dashboard",
+            changes: {
+              chat: { from: false, to: true },
+              monthlyBudgetUsd: { from: 1, to: 7 },
+            },
+          },
+        },
+      ]);
+
+      const after = await fetch(
+        `${test.base}/dashboard/guilds/${GUILD_A}/settings/ai?saved=1`,
+        { headers: { cookie } },
+      );
+      expect(after.status).toBe(200);
+      const page = await after.text();
+      expect(page).toContain("Settings saved");
+      expect(page).toContain("Audit trail");
+      expect(page).toContain("Settings update");
+      expect(page).toContain(USER);
+      expect(page).toContain("monthlyBudgetUsd");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("rejects a widget value the schema refuses and writes no audit row", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const before = await test.settings.get(GUILD_A, "ai");
+
+      const rejected = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/settings/ai`,
+        aiForm(csrf, { monthlyBudgetUsd: "5000" }),
+      );
+      expect(rejected.status).toBe(400);
+      const page = await rejected.text();
+      expect(page).toContain("monthlyBudgetUsd");
+      expect(page).toContain("1000");
+      expect(page).toContain('value="5000"');
+      expect(await test.settings.get(GUILD_A, "ai")).toEqual(before);
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+
+      const malformed = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/settings/ai`,
+        aiForm(csrf, { monthlyBudgetUsd: "not-a-number" }),
+      );
+      expect(malformed.status).toBe(400);
+      expect(await malformed.text()).toContain("Enter a valid number.");
+      expect(await test.settings.get(GUILD_A, "ai")).toEqual(before);
+      expect(test.audit.records(GUILD_A)).toEqual([]);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("writes module settings through the API and audits the actor and surface", async () => {
     const test = await harness();
     try {
       const { cookie, csrf } = await login(test);
@@ -329,6 +497,14 @@ describe("P6 web auth and authorization", () => {
         monthlyBudgetUsd: 5,
         retention: "none",
       });
+      expect(test.audit.records(GUILD_A)).toMatchObject([
+        {
+          actorId: USER,
+          action: "settings.update",
+          targetId: "ai",
+          data: { source: "api", changes: { monthlyBudgetUsd: { from: 1, to: 5 } } },
+        },
+      ]);
 
       const overview = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/overview`, {
         headers: { cookie },
@@ -341,31 +517,6 @@ describe("P6 web auth and authorization", () => {
         enabled: true,
         chat: true,
         monthlyBudgetUsd: 5,
-      });
-
-      const editor = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/settings/ai`, {
-        headers: { cookie },
-      });
-      expect(editor.status).toBe(200);
-      const editorPage = await editor.text();
-      expect(editorPage).toContain("<textarea");
-      expect(editorPage).toContain("&quot;monthlyBudgetUsd&quot;: 5");
-
-      const form = new URLSearchParams({
-        csrf,
-        settings: JSON.stringify({ enabled: true, chat: false, monthlyBudgetUsd: 7 }),
-      });
-      const saved = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/settings/ai`, {
-        method: "POST",
-        redirect: "manual",
-        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
-        body: form.toString(),
-      });
-      expect(saved.status).toBe(302);
-      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({
-        enabled: true,
-        chat: false,
-        monthlyBudgetUsd: 7,
       });
     } finally {
       await test.close();
@@ -399,7 +550,7 @@ describe("P6 web auth and authorization", () => {
         method: "POST",
         redirect: "manual",
         headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ settings: JSON.stringify({ enabled: false }) }).toString(),
+        body: aiForm("").toString(),
       });
       expect(formMissingCsrf.status).toBe(403);
 
@@ -424,16 +575,12 @@ describe("P6 web auth and authorization", () => {
         expect(response.status).toBe(403);
       }
 
-      const form = new URLSearchParams({
-        csrf,
-        settings: JSON.stringify({ enabled: true }),
-      });
-      const crossGuildForm = await fetch(`${test.base}/dashboard/guilds/${GUILD_B}/settings/ai`, {
-        method: "POST",
-        redirect: "manual",
-        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
-        body: form.toString(),
-      });
+      const crossGuildForm = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_B}/settings/ai`,
+        aiForm(csrf),
+      );
       expect(crossGuildForm.status).toBe(403);
 
       const noSession = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/settings/ai`, {

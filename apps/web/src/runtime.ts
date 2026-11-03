@@ -1,18 +1,21 @@
 import { randomBytes } from "node:crypto";
 import type { Env } from "@keystone/config";
 import {
+  InMemoryAuditStore,
   InMemoryDashboardStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
   ModuleRegistry,
   SettingsService,
   createLogger,
+  type AuditStore,
   type DashboardStore,
   type Logger,
   type SessionStore,
   type SettingsRepository,
 } from "@keystone/kernel";
 import {
+  createAuditStore,
   createDashboardStore,
   createPostgresDatabase,
   createSessionStore,
@@ -61,17 +64,20 @@ export function createWebRuntime(env: Env): WebRuntime {
   let settingsRepository: SettingsRepository;
   let sessions: SessionStore;
   let dashboardStore: DashboardStore;
+  let auditStore: AuditStore;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
     settingsRepository = createSettingsRepository(database);
     sessions = createSessionStore(database);
     dashboardStore = createDashboardStore(database);
+    auditStore = createAuditStore(database);
     logger.info("web data: postgres");
   } else {
-    logger.warn("DATABASE_URL is not set — web sessions and dashboard reads are process-local.");
+    logger.warn("DATABASE_URL is not set — web sessions, audit rows and dashboard reads are process-local.");
     settingsRepository = new InMemorySettingsRepository();
     sessions = new InMemorySessionStore();
     dashboardStore = new InMemoryDashboardStore();
+    auditStore = new InMemoryAuditStore();
   }
 
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
@@ -115,7 +121,12 @@ export function createWebRuntime(env: Env): WebRuntime {
     },
   });
   const access = new GuildAccessService(oauth ?? unavailableOAuth());
-  const dashboard = new DashboardService(registry, new SettingsService(settingsRepository, registry), dashboardStore);
+  const dashboard = new DashboardService(
+    registry,
+    new SettingsService(settingsRepository, registry, auditStore),
+    dashboardStore,
+    auditStore,
+  );
   const handler = createWebHandler({
     auth,
     access,

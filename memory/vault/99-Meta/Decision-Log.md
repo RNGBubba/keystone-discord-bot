@@ -96,7 +96,7 @@ including the small calls that did not deserve an ADR.
 | 57 | Read-only first: settings writes, fleet actions and scoped tokens are deferred until the authz matrix is proven | [[Roadmap]] |
 | 58 | No paid services, including paid GitHub plans/features; free/local only | [[01-Mission/Non-Negotiables\|Non-Negotiables]] |
 | 59 | Settings writes reuse the viewer's `GuildAccessService` gate, session CSRF and `SettingsService` schema; no second write path | [[Dashboard]] |
-| 60 | The first settings editor is a validated JSON textarea; richer field widgets remain P6 work | [[Dashboard]] |
+| 60 | The first settings editor is a validated JSON textarea; richer field widgets remain P6 work. **Superseded by #85** | [[Dashboard]] |
 
 ## 2026-11-01 — P7 invite tracking
 
@@ -146,6 +146,15 @@ including the small calls that did not deserve an ADR.
 | 82 | `/help` reads the registry catalog injected by dispatch; `pnpm commands:catalog` renders the same data to machine JSON and vault Markdown | [[Command-Catalog]] |
 | 83 | Boot sync compares name, description and the full option tree; a name-only comparison would miss subcommand changes | [[ADR-0018-real-subcommands]] |
 | 84 | The adapter flattens Discord's nested subcommand options; a top-level-only map silently drops every argument | `apps/bot/src/adapt.ts` |
+
+## 2026-11-02 — P6 schema-driven settings widgets
+
+| # | Decision | Where |
+| --- | --- | --- |
+| 85 | The dashboard carrier stays the framework-free `apps/web` HTML app; settings forms are generated server-side from the module schema, and a client/Next.js shell is deferred to the fleet-view UI rather than required for settings | [[ADR-0016-dashboard-foundation]], [[Dashboard]] |
+| 86 | The widget model is a projection of the module's Zod schema, never a second schema or web-only whitelist; unsupported shapes fall back to a JSON box the same schema validates | [[Dashboard]] |
+| 87 | Every accepted settings update/reset appends one `audit_events` row through the kernel `AuditStore` with actor, surface and dotted-path diff; a no-op or rejected write appends nothing | [[Dashboard]], `packages/kernel/src/audit.ts` |
+| 88 | Credential-shaped setting keys are matched by suffix (`token`, `secret`, `password`, `apiKey`), not any key containing `token`; the over-broad filter hid `maxOutputTokens` | [[Dashboard]] |
 
 ## How to add a decision
 

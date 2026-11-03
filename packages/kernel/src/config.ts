@@ -1,3 +1,5 @@
+import type { SettingsChangeContext } from "./audit";
+
 /**
  * The one settings surface a configuration command needs.
  *
@@ -18,7 +20,8 @@ export interface ConfigPort {
     guildId: string,
     moduleId: string,
     patch: Record<string, unknown>,
+    context?: SettingsChangeContext,
   ): Promise<Record<string, unknown>>;
   /** Remove this guild's stored record; the module's schema defaults apply again. */
-  reset(guildId: string, moduleId: string): Promise<void>;
+  reset(guildId: string, moduleId: string, context?: SettingsChangeContext): Promise<void>;
 }

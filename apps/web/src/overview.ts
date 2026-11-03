@@ -1,13 +1,22 @@
 import { ZodError } from "zod";
 import type {
+  AuditEventRecord,
+  AuditStore,
   DashboardOverview,
   DashboardStore,
   ModuleManifest,
   ModuleRegistry,
+  SettingsChangeContext,
   SettingsService,
 } from "@keystone/kernel";
 import { HttpError } from "./http-error";
 import type { DiscordGuild } from "./oauth";
+import {
+  SECRET_SETTING_KEY,
+  SettingsValidationError,
+  buildSettingsForm,
+  type SettingsFormModel,
+} from "./settings-form";
 
 export interface DashboardModule {
   id: string;
@@ -30,8 +39,6 @@ export interface DashboardView {
   latestImport: DashboardOverview["latestImport"];
   modules: DashboardModule[];
 }
-
-const SECRET_SETTING_KEY = /(token|secret|password|api[_-]?key)/i;
 
 /** Never ship a credential-shaped setting to a browser, even by accident. */
 function safeValue(value: unknown): unknown {
@@ -58,6 +65,11 @@ function zodIssues(error: unknown): ZodError["issues"] | undefined {
   return undefined;
 }
 
+export interface DashboardEditor {
+  readonly module: DashboardModule;
+  readonly form: SettingsFormModel;
+}
+
 /**
  * Composes the existing `SettingsService` with the dashboard read model and the
  * narrow settings write path. No SQL here: Postgres lives in
@@ -69,6 +81,7 @@ export class DashboardService {
     private readonly registry: ModuleRegistry,
     private readonly settings: SettingsService,
     private readonly store: DashboardStore,
+    private readonly audit?: AuditStore,
   ) {}
 
   private present(module: ModuleManifest, values: Record<string, unknown>): DashboardModule {
@@ -109,27 +122,58 @@ export class DashboardService {
   }
 
   /**
+   * The editable view: the browser-safe module summary plus the widget model
+   * derived from the same schema the write path validates against.
+   */
+  async editor(guild: DiscordGuild, moduleId: string): Promise<DashboardEditor> {
+    const module = this.registry.getModule(moduleId);
+    if (!module) throw new HttpError(404, "No such module.", "module_not_found");
+    const values = await this.settings.get(guild.id, moduleId);
+    return {
+      module: this.present(module, values),
+      form: buildSettingsForm(module.settingsSchema, values),
+    };
+  }
+
+  /** Newest-first audit rows for one guild, optionally filtered to one module. */
+  async history(
+    guildId: string,
+    options: { moduleId?: string; limit?: number } = {},
+  ): Promise<readonly AuditEventRecord[]> {
+    if (!this.audit) return [];
+    const rows = await this.audit.list(guildId, 100);
+    return rows
+      .filter((row) => !options.moduleId || row.targetId === options.moduleId)
+      .slice(0, Math.min(Math.max(options.limit ?? 8, 1), 20));
+  }
+
+  /**
    * The one write path for module settings. The module's own Zod schema is the
    * validator, so the dashboard cannot save a value the bot would reject. The
    * caller has already passed the OAuth/bot authorization gate and CSRF check.
+   * `SettingsService` appends the audit row; this method only shapes the view
+   * and turns schema issues into field-level errors.
    */
   async update(
     guild: DiscordGuild,
     moduleId: string,
     patch: Record<string, unknown>,
+    context: SettingsChangeContext = { source: "dashboard" },
   ): Promise<DashboardModule> {
     const module = this.registry.getModule(moduleId);
     if (!module) throw new HttpError(404, "No such module.", "module_not_found");
     try {
-      const values = await this.settings.update(guild.id, moduleId, patch);
+      const values = await this.settings.update(guild.id, moduleId, patch, context);
       return this.present(module, values);
     } catch (error) {
       const issues = zodIssues(error);
       if (issues) {
-        const details = issues
-          .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
-          .join("; ");
-        throw new HttpError(400, `Invalid settings: ${details}`, "settings_invalid");
+        throw new SettingsValidationError(
+          issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        );
       }
       throw error;
     }

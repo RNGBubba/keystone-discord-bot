@@ -1,6 +1,7 @@
 import type { Telemetry } from "@keystone/kernel";
 import type { PostgresHandle } from "./client";
 import { DrizzleSettingsRepository } from "./settings-repository";
+import { DrizzleAuditStore } from "./audit-store";
 import { PostgresIdempotencyStore } from "./idempotency";
 import { DrizzleCaseStore } from "./case-store";
 import { DrizzleMemberStore } from "./member-store";
@@ -29,6 +30,10 @@ export function createSettingsRepository(
   telemetry?: Telemetry,
 ): DrizzleSettingsRepository {
   return new DrizzleSettingsRepository(handle.db as never, telemetry);
+}
+
+export function createAuditStore(handle: PostgresHandle): DrizzleAuditStore {
+  return new DrizzleAuditStore(handle.db as never);
 }
 
 export function createIdempotencyStore(handle: PostgresHandle): PostgresIdempotencyStore {

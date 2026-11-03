@@ -1,7 +1,8 @@
 import { authorizeGuild, requireSession, requireSettingsWrite } from "../authorization";
-import { encodePathSegment, parseFormSettings, redirect, send, type FormSettings } from "../http";
+import { encodePathSegment, parseSettingsFormBody, redirect, send, type SettingsFormBody } from "../http";
 import { renderGuildList, renderOverview, renderSettingsEditor } from "../render";
 import type { RouteContext } from "../request-context";
+import { SettingsValidationError, parseSettingsForm } from "../settings-form";
 
 export async function dashboardList(ctx: RouteContext): Promise<boolean> {
   const active = requireSession(ctx.session);
@@ -34,11 +35,17 @@ export async function settingsPage(
 
   if (ctx.method === "GET") {
     const { session, guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
-    const module = await ctx.deps.dashboard.module(guild, moduleId);
+    const [{ module, form }, history] = await Promise.all([
+      ctx.deps.dashboard.editor(guild, moduleId),
+      ctx.deps.dashboard.history(guild.id, { moduleId }),
+    ]);
     send(
       ctx.res,
       200,
-      renderSettingsEditor(session.username, guild, module, ctx.csrfToken),
+      renderSettingsEditor(session.username, guild, module, form, ctx.csrfToken, {
+        saved: ctx.url.searchParams.get("saved") === "1",
+        history,
+      }),
       "text/html; charset=utf-8",
       { "Cache-Control": "no-store" },
     );
@@ -48,13 +55,65 @@ export async function settingsPage(
   if (ctx.method === "POST") {
     // The form carries its CSRF token in the body, so parsing is part of the
     // token read. The gate still runs session -> guild auth -> CSRF in order.
-    let form!: FormSettings;
+    let body!: SettingsFormBody;
     const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
-      form = await parseFormSettings(ctx.req);
-      return form.csrf;
+      body = await parseSettingsFormBody(ctx.req);
+      return body.csrf;
     });
-    await ctx.deps.dashboard.update(write.guild, moduleId, form.patch);
-    redirect(ctx.res, `/dashboard/guilds/${encodePathSegment(guildId)}`);
+
+    const [{ module, form }, history] = await Promise.all([
+      ctx.deps.dashboard.editor(write.guild, moduleId),
+      ctx.deps.dashboard.history(write.guild.id, { moduleId }),
+    ]);
+    const parsed = parseSettingsForm(form, body.params);
+
+    if (parsed.errors.size > 0) {
+      send(
+        ctx.res,
+        400,
+        renderSettingsEditor(write.session.username, write.guild, module, form, ctx.csrfToken, {
+          submitted: body.params,
+          rendered: parsed.rendered,
+          fieldErrors: parsed.errors,
+          formError: "Fix the highlighted fields. Nothing was saved.",
+          history,
+        }),
+        "text/html; charset=utf-8",
+        { "Cache-Control": "no-store" },
+      );
+      return true;
+    }
+
+    try {
+      await ctx.deps.dashboard.update(write.guild, moduleId, parsed.patch, {
+        actorId: write.session.userId,
+        source: "dashboard",
+      });
+    } catch (error) {
+      if (!(error instanceof SettingsValidationError)) throw error;
+      const fieldErrors = new Map(
+        error.issues.map((issue) => [issue.path, issue.message] as const),
+      );
+      send(
+        ctx.res,
+        400,
+        renderSettingsEditor(write.session.username, write.guild, module, form, ctx.csrfToken, {
+          submitted: body.params,
+          rendered: parsed.rendered,
+          fieldErrors,
+          formError: error.message,
+          history,
+        }),
+        "text/html; charset=utf-8",
+        { "Cache-Control": "no-store" },
+      );
+      return true;
+    }
+
+    redirect(
+      ctx.res,
+      `/dashboard/guilds/${encodePathSegment(guildId)}/settings/${encodePathSegment(moduleId)}?saved=1`,
+    );
     return true;
   }
 

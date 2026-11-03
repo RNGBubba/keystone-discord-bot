@@ -96,10 +96,14 @@ its store. `/config list` avoids that by asking `SettingsService` for each
 module, so it sees the same defaults and schema the owner sees. If you find
 yourself importing `modules/community/src/store.ts` into setup, stop.
 
-## Stretch
+## Stretch (shipped in pass 49)
 
-Record a settings-change audit row from `SettingsService.update` — actor,
-guild, module, dotted key, old value, new value — and add it to `/logging`'s
-event stream. The interesting design question is not the insert; it is whether
-the audit write belongs inside the settings transaction or after it. Write the
-answer down before the code.
+`SettingsService.update` and `reset` now append a settings-change row through
+`AuditStore` — actor, guild, module and the dotted-path before/after diff. The
+design question was whether the audit write belongs inside the settings
+transaction or after it. It currently happens immediately after the successful
+repository write, because the repository and audit ports are separate and the
+SQL settings adapter already owns its transaction. That leaves a small crash
+gap; the next improvement is a single port or transaction that commits both.
+Read `packages/kernel/src/settings.ts` and `packages/kernel/src/audit.ts`, then
+add a test that proves a rejected write still appends nothing.
