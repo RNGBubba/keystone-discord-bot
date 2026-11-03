@@ -846,6 +846,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-63",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "Correction pass for the pass-62 audit. Option copy is keyed per declaration: a subcommand's `command.<root>.<sub>.option.<name>` key wins and the shared root key is the default, which fixes `setup module`, `appeal case` and `logging channel` describing the wrong sibling; the coverage test derives the expected keys from the registry and fails when a shared key is used where siblings differ or a specific key is stale. English command text is no longer duplicated in the catalog at all: the command definition is the English sentence, so the three stale English rows and the ~500-line mirror are gone, and the German command copy moved into `de.ts` so German has one owner. `/rank daily` puts the service-owned English refusal on its own line above the translated balance instead of splicing them, and the transfer/purchase/gamble fallbacks are catalog keys. `/help changelog` states that its entries stay English and displays `Pass 62` instead of the machine id. `localeFor` and the unreachable German `error.guildOnly` were deleted, and `guildLocale` reads the setup row through the settings `get` rather than listing and parsing all 12 modules. The file classification now covers every `modules/*/src/commands` file (24: 6 translated, 18 English-only with a reason), so the claim is true tree-wide. Tests 633 / 92 files; live probe stays 27/27 with the extended `command-copy-localization`, which now also drives /rank leaderboard against a seeded levels row, the Rank card user menu, /ticket stats and a German permission refusal. A gateway InteractionCreate is not claimed.",
+      "journal": "journal/2026-11-03-pass-63.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "633",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "27/27",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

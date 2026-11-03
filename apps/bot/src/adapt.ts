@@ -559,18 +559,29 @@ function localizeCommand(json: CommandJsonNode, definition: CommandDefinition): 
         (entry) => entry.name === option.name && entry.type !== 1 && entry.type !== 2,
       );
       if (optionNode) {
-        applyDescription(optionNode, `command.${definition.name}.option.${option.name}`);
+        // A subcommand's own key wins when the same option name means something
+        // different under a sibling; the root-level key is the shared default.
+        applyDescription(optionNode, [
+          `command.${definition.name}.${subcommand.name}.option.${option.name}`,
+          `command.${definition.name}.option.${option.name}`,
+        ]);
       }
     }
   }
 }
 
-function applyDescription(node: CommandJsonNode, key: string): void {
+function applyDescription(node: CommandJsonNode, key: string | readonly string[]): void {
+  const keys = typeof key === "string" ? [key] : key;
   const localizations: Record<string, string> = {};
   for (const locale of SUPPORTED_LOCALES) {
     if (locale === DEFAULT_LOCALE) continue;
-    const text = lookupMessage(locale, `${key}.description`);
-    if (text) localizations[locale] = text;
+    for (const candidate of keys) {
+      const text = lookupMessage(locale, `${candidate}.description`);
+      if (text) {
+        localizations[locale] = text;
+        break;
+      }
+    }
   }
   if (Object.keys(localizations).length > 0) node.description_localizations = localizations;
 }

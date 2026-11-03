@@ -14,9 +14,13 @@ import {
 } from "./index";
 
 describe("catalog parity", () => {
-  it("has the same keys in every locale", () => {
-    const keys = Object.keys(en).sort();
-    expect(Object.keys(de).sort()).toEqual(keys);
+  it("has the same reply keys in every locale", () => {
+    // Command descriptions are not catalog keys in English: the command
+    // definition is the English sentence. German carries its own command map,
+    // checked against the registry by the bot's coverage test.
+    const replyKeys = (catalog: object) => Object.keys(catalog).filter((key) => !key.startsWith("command.")).sort();
+    expect(replyKeys(de)).toEqual(replyKeys(en));
+    expect(Object.keys(de).some((key) => key.startsWith("command."))).toBe(true);
   });
 
   it("declares the same argument count for every key", () => {

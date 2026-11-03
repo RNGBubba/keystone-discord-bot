@@ -100,7 +100,9 @@ describe("/help", () => {
     await help.execute(ctx);
 
     const embed = interaction.lastReply?.embeds?.[0];
-    expect(embed?.description).toContain(CHANGELOG[0]?.pass);
+    // The page shows a readable pass label; the id stays the machine truth.
+    const newest = CHANGELOG[0]?.pass.replace(/^pass-/, "Pass ");
+    expect(embed?.description).toContain(newest);
     expect(embed?.footer?.text).toBe(CHANGELOG[0]?.journal);
   });
 });

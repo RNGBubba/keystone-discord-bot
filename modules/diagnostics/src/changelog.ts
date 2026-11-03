@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-63",
+    date: "2026-11-03",
+    summary:
+      "P7 copy correction: an option's German description now follows its own subcommand, English command text lives only in the command definition, the daily refusal no longer mixes languages, and the changelog says why its entries stay English.",
+    journal: "memory/journal/2026-11-03-pass-63.md",
+  },
+  {
     pass: "pass-62",
     date: "2026-11-03",
     summary:

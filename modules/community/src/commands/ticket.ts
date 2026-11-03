@@ -98,7 +98,8 @@ export const ticket = defineCommand({
               stats.open,
               stats.claimed,
               stats.closed,
-              String(stats.averageCloseMinutes ?? "n/a"),
+              // A language-neutral dash beats "n/a Minuten" in German.
+              String(stats.averageCloseMinutes ?? "–"),
             ),
             color: 0x5865f2,
           },

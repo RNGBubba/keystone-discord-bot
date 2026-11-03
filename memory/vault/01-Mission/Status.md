@@ -2,11 +2,29 @@
 
 ## Now
 
+**Pass 63 corrected the command copy the audit found** (2026-11-03): option
+descriptions are keyed per declaration, so `setup module`, `appeal case` and
+`logging channel` no longer describe the wrong sibling; a subcommand key wins
+over the shared root key, and a registry-derived test fails when a shared key
+is used where siblings differ or a specific key goes stale. English command
+text is no longer duplicated in the catalog — the command definition is the
+English sentence — which removes the stale-row class and the ~500-line mirror;
+the German copy moved into `de.ts`, its one owner. `/rank daily` puts the
+service's English refusal on its own line above the translated balance,
+`/help changelog` states that its entries stay English, `localeFor` and the
+unreachable German `error.guildOnly` are gone, and `guildLocale` reads one
+settings row instead of listing every module. The English-only map now
+classifies every command file. Tests are **633 / 92 files**; `pnpm probe:live`
+is **27/27**, with `command-copy-localization` now also driving `/rank
+leaderboard`, the rank card, `/ticket stats` and a German permission refusal. A
+gateway `InteractionCreate` is not claimed. See
+[pass 63](../../journal/2026-11-03-pass-63.md).
+
 **Pass 62 closed P7's command-copy gap** (2026-11-03): every registered root,
-subcommand and option description now has a hand-written German entry in
-`packages/i18n/src/command-copy.ts` (253 keys generated once from the live
-registry), and the main member-facing replies for `/ping`, `/about`, `/help`,
-`/rank`, `/ticket` and the `Rank card` menu come from the same typed catalog,
+subcommand and option description gained a hand-written German entry (253 keys
+generated once from the live registry; the copy moved into `de.ts` in pass 63),
+and the main member-facing replies for `/ping`, `/about`, `/help`, `/rank`,
+`/ticket` and the `Rank card` menu come from the same typed catalog,
 so a translation that drops an interpolation does not compile. The coverage test
 derives the expected keys from the registry in both directions and classifies
 every command file as translated or deliberately English-only, scanning the
@@ -14,8 +32,8 @@ translated ones for reply literals; it also caught `localizeCommand` applying a
 shared option key to only the first `/help` subcommand node, which is fixed.
 The copy that is still English is named: community's operator configuration
 replies, the other ten modules' command replies, kernel guard and failure copy,
-service-owned economy reasons, and operator-owned greeting text. Tests are
-**636 / 92 files**; `pnpm probe:live` is **27/27**, adding
+service-owned economy reasons, and operator-owned greeting text. That pass
+reported **636 / 92 files**; `pnpm probe:live` was **27/27**, adding
 `command-copy-localization`: the real dispatcher rendered 384 German
 description nodes, `/ping`, `/about` and `/help browse` replied in German, a key
 no catalog defines returned the fallback sentence, and clearing the locale
@@ -772,7 +790,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 636 tests / 92 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 27/27 · memory current
+pnpm check        exit 0 · typecheck 0 · 633 tests / 92 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 27/27 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)

@@ -49,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**636 tests across 92 files** without a Discord token, database or network.
+**633 tests across 92 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -624,12 +624,13 @@ Everything below is free. No feature is moved behind a paywall.
   queue, `/form`, `/event`, `/modmail`, the four context menus and the typed
   rank/ticket/greeting surfaces are done; role, role-select, giveaway,
   suggestion and poll ids are now signed and routed too (pass 61). Every
-  registered command, subcommand and option description is translated, and
-  `/ping`, `/about`, `/help`, `/rank`, `/ticket` and the rank card reply in the
-  guild's locale (pass 62); the reply copy still English is named in that
-  journal. The rest is parity completion (role persistence), that remaining
-  reply copy, and the moderation `appeal`/`verify` ids, which still need a
-  signed DM payload that carries both guild and member. The Components V2 layer
+  registered command, subcommand and option description is translated, keyed
+  per declaration so two subcommands can describe the same option differently
+  (pass 63), and `/ping`, `/about`, `/help`, `/rank`, `/ticket` and the rank
+  card reply in the guild's locale (pass 62); the reply copy still English is
+  named in those journals. The rest is parity completion (role persistence),
+  that remaining reply copy, and the moderation `appeal`/`verify` ids, which
+  still need a signed DM payload that carries both guild and member. The Components V2 layer
   (`packages/ui`) and the form panel's modal submit landed in pass 58; i18n,
   `setup.locale` and derived command descriptions in pass 59; the rank card,
   ticket panel and welcome/goodbye greetings in pass 60.

@@ -75,12 +75,17 @@ export function lookupMessage(locale: string, key: string): string | undefined {
 /** The modules a locale lookup needs; `SettingsService` already satisfies it. */
 export interface LocaleSource {
   list(guildId: string): Promise<ReadonlyArray<{ readonly id: string; readonly settings: Record<string, unknown> }>>;
+  /** One module's settings. Present on `SettingsService`; avoids listing all. */
+  get?(guildId: string, moduleId: string): Promise<Record<string, unknown> | undefined>;
 }
 
 /**
  * Read the effective locale from the setup module's stored settings. An absent
  * or unreadable settings service is not an error a user should see: the bot
  * renders in English and keeps working.
+ *
+ * `get` is preferred where the source has it: `list` parses every module's
+ * schema and turns one locale read into a dozen queries on a large registry.
  */
 export async function guildLocale(
   source: LocaleSource | undefined,
@@ -88,6 +93,7 @@ export async function guildLocale(
 ): Promise<Locale> {
   if (!source) return DEFAULT_LOCALE;
   try {
+    if (source.get) return localeFromSettings(await source.get(guildId, "setup"));
     const view = await source.list(guildId);
     return localeFromSettings(view.find((module) => module.id === "setup")?.settings);
   } catch {

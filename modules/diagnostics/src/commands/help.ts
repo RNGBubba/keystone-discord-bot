@@ -45,6 +45,11 @@ function describe(locale: string, key: string, fallback: string): string {
   return lookupMessage(locale, key) ?? fallback;
 }
 
+/** `pass-62` is a machine id; a user reads "Pass 62". */
+function displayPass(pass: string): string {
+  return pass.replace(/^pass-/, "Pass ");
+}
+
 function searchLines(
   entries: readonly CommandCatalogEntry[],
   query: string,
@@ -220,9 +225,23 @@ export const help = defineCommand({
           {
             title: t(locale, "help.changelog.title"),
             description: [
-              t(locale, "help.changelog.latest", VERSION, CHANGELOG[0]?.pass ?? "unknown"),
+              t(
+                locale,
+                "help.changelog.latest",
+                VERSION,
+                displayPass(CHANGELOG[0]?.pass ?? "unknown"),
+              ),
+              // The entries are the bot's own English history. Saying so is
+              // better than wrapping English prose in German labels silently.
+              ...(locale === DEFAULT_LOCALE ? [] : [t(locale, "help.changelog.englishNote")]),
               ...CHANGELOG.slice(0, 3).map((entry) =>
-                t(locale, "help.changelog.entry", entry.pass, entry.date, entry.summary),
+                t(
+                  locale,
+                  "help.changelog.entry",
+                  displayPass(entry.pass),
+                  entry.date,
+                  entry.summary,
+                ),
               ),
             ].join("\n"),
             color: 0x5865f2,

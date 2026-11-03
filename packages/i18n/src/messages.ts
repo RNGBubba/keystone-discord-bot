@@ -1,5 +1,3 @@
-import { commandCopyEn } from "./command-copy";
-
 /**
  * The English catalog is the type source. Every other locale is declared as a
  * `Catalog`, so a translation must implement the same arguments as the English
@@ -60,7 +58,6 @@ export const en = {
     `You already have ${count} open ticket${count === 1 ? "" : "s"} (limit ${max}). Close one before opening another.`,
 
   // Refusals shared by the covered command flows.
-  "error.guildOnly": () => "This command only works in a server.",
   "error.permission": (permission: string) => `You need the ${permission} permission for that.`,
 
   // Member-facing command replies for the main flows. Admin-only module copy
@@ -100,6 +97,8 @@ export const en = {
   "help.privacy.body": () =>
     "Keystone stores guild configuration, cases, tickets, levels, ledger entries, invite joins and AI usage counters.\n\nPrompts and completions are **not** stored by default. Message content is only stored when a feature cannot work without it, such as a ticket transcript.\n\nEvery stored domain has a retention window in `memory/vault/01-Mission/Master-Plan.md`.\n\n`/export guild` and `/export delete` are the data-portability path; a deletion receipt keeps counts, not content.",
   "help.changelog.title": () => "Keystone changelog",
+  "help.changelog.englishNote": () =>
+    "Changelog entries stay in English so the bot's own history cannot drift in translation.",
   "help.changelog.latest": (version: string, pass: string) =>
     `**${version}** · latest: ${pass}`,
   "help.changelog.entry": (pass: string, date: string, summary: string) =>
@@ -122,11 +121,11 @@ export const en = {
     `<@${target}> has **${balance} ${currency}**.`,
   "rank.daily.ok": (amount: number, currency: string, balance: number) =>
     `You claimed **${amount} ${currency}**. Balance: **${balance}**.`,
-  "rank.daily.failed": (reason: string, balance: number) => `${reason} Balance: **${balance}**.`,
   "rank.daily.balance": (balance: number) => `Balance: **${balance}**.`,
   "rank.pay.missing": () => "Pay needs a user and an amount.",
   "rank.pay.ok": (amount: number, currency: string, target: string) =>
     `Sent **${amount} ${currency}** to <@${target}>.`,
+  "rank.transfer.failed": () => "The transfer failed.",
   "rank.shop.title": (currency: string) => `${currency} shop`,
   "rank.shop.empty": () => "The shop is empty.",
   "rank.shop.item": (name: string, price: number, id: string) =>
@@ -136,11 +135,13 @@ export const en = {
   "rank.buy.missingItem": () => "Name the shop item to buy.",
   "rank.buy.ok": (name: string, balance: number) =>
     `Bought **${name}**. Balance: **${balance}**.`,
+  "rank.purchase.failed": () => "The purchase failed.",
   "rank.gamble.missingAmount": () => "Name the amount to gamble.",
   "rank.gamble.won": (amount: number, balance: number) =>
     `You won **${amount}**. Balance: **${balance}**.`,
   "rank.gamble.lost": (amount: number, balance: number) =>
     `You lost **${amount}**. Balance: **${balance}**.`,
+  "rank.gamble.failed": () => "The gamble failed.",
   "rank.ledger.title": () => "Your ledger",
   "rank.ledger.empty": () => "No movements yet.",
   "rank.season.already": (key: string) =>
@@ -169,9 +170,6 @@ export const en = {
     `${summary}\n\nAI can be wrong. A human decides any action.`,
   "ticket.summary.model": (model: string) => `model ${model}`,
 
-  // Every registered root, subcommand and option description. The
-  // coverage test derives these keys from the manifests.
-  ...commandCopyEn,
 } as const;
 
 export type MessageKey = keyof typeof en;

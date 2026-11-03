@@ -25,6 +25,7 @@ import {
   createLogger,
   createSilentLogger,
   dispatchCommand,
+  type CommunityPort,
   type CommunityActions,
   type CommunityMessage,
   type ComponentInteractionLike,
@@ -3238,6 +3239,9 @@ async function main(): Promise<void> {
       extra: {
         subcommand?: string;
         userId?: string;
+        permissions?: string[];
+        commandType?: "chat-input" | "user" | "message";
+        targetId?: string;
         options?: Record<string, string | number | boolean | null>;
       } = {},
     ) => {
@@ -3246,12 +3250,14 @@ async function main(): Promise<void> {
       const interaction = {
         id: `probe-${commandName}-${extra.subcommand ?? "root"}`,
         commandName,
+        commandType: extra.commandType,
+        targetId: extra.targetId,
         guildId: GUILD,
         channelId: "live-probe-channel",
         userId: extra.userId ?? "live-probe-member",
         subcommand: extra.subcommand,
         options: extra.options ?? {},
-        permissions: [] as string[],
+        permissions: extra.permissions ?? [],
         get replied() {
           return replied;
         },
@@ -3279,12 +3285,33 @@ async function main(): Promise<void> {
     };
 
     let clock = Date.now();
+    await database.runner.exec(`
+      DELETE FROM levels WHERE guild_id = '${GUILD}';
+      DELETE FROM xp_events WHERE guild_id = '${GUILD}';
+      DELETE FROM tickets WHERE guild_id = '${GUILD}';
+    `);
+    const communityStore = createCommunityStore(database);
+    const communityPort = {
+      store: communityStore,
+      actions: {} as unknown as CommunityActions,
+    } as unknown as CommunityPort;
+    const leveling = new LevelingService(
+      communityStore,
+      {} as unknown as CommunityActions,
+      communitySettingsSchema.parse({}),
+      () => clock,
+      () => 0,
+    );
+    const awarded = await leveling.awardMessageXp(GUILD, "probe-copy-member", "probe-copy-message");
+    assert(awarded.awarded > 0, "the copy probe could not seed a level row");
+
     const deps = {
       registry,
       settings,
       config: settings,
       logger: createSilentLogger(),
       cooldowns: new InMemoryCooldownStore(),
+      community: communityPort,
       queue: { enqueue: async () => "probe", close: async () => undefined },
       timers: { enqueue: async () => "probe", close: async () => undefined },
       health: {
@@ -3357,6 +3384,66 @@ async function main(): Promise<void> {
       "the /help browse card did not render in German",
     );
 
+    // The other translated reply surfaces, through the same dispatcher.
+    const leaderboard = slash("rank", { subcommand: "leaderboard" });
+    const leaderboardOutcome = await dispatchCommand(deps, leaderboard.interaction);
+    assert(
+      leaderboardOutcome.status === "ok",
+      `the German rank leaderboard did not run: ${leaderboardOutcome.status}`,
+    );
+    const leaderboardEmbed = leaderboard.replies[0]?.embeds?.[0] as unknown as
+      | { title?: string; description?: string }
+      | undefined;
+    assert(
+      leaderboardEmbed?.title === "XP-Rangliste",
+      `the rank leaderboard title was ${String(leaderboardEmbed?.title)}`,
+    );
+    const [seededLevel] = await database.runner.query<{ xp: string; level: number }>(
+      `SELECT xp::text AS xp, level FROM levels
+        WHERE guild_id = '${GUILD}' AND user_id = 'probe-copy-member'`,
+    );
+    assert(seededLevel !== undefined, "the copy probe has no stored level row");
+    assert(
+      String(leaderboardEmbed?.description).includes("<@probe-copy-member>") &&
+        String(leaderboardEmbed?.description).includes(`Level ${seededLevel.level}`) &&
+        String(leaderboardEmbed?.description).includes(`(${seededLevel.xp} XP)`),
+      `the rank leaderboard did not read the stored level row: ${String(leaderboardEmbed?.description)}`,
+    );
+
+    const rankCard = slash("Rank card", {
+      commandType: "user",
+      targetId: "probe-copy-member",
+    });
+    await dispatchCommand(deps, rankCard.interaction);
+    assert(
+      String(JSON.stringify(rankCard.replies[0]?.v2)).includes("Rang"),
+      "the rank card did not render its German rank line",
+    );
+
+    const ticketStats = slash("ticket", {
+      subcommand: "stats",
+      permissions: ["ManageGuild"],
+    });
+    await dispatchCommand(deps, ticketStats.interaction);
+    const ticketEmbed = ticketStats.replies[0]?.embeds?.[0] as unknown as
+      | { title?: string; description?: string }
+      | undefined;
+    assert(
+      ticketEmbed?.title === "Ticket-Statistik",
+      `the ticket stats title was ${String(ticketEmbed?.title)}`,
+    );
+    assert(
+      String(ticketEmbed?.description).includes("Durchschnittliche Schließzeit"),
+      "the ticket stats body did not render in German",
+    );
+
+    const deniedStats = slash("ticket", { subcommand: "stats" });
+    await dispatchCommand(deps, deniedStats.interaction);
+    assert(
+      String(deniedStats.replies[0]?.content).includes("Berechtigung ManageGuild"),
+      `the permission refusal was ${String(deniedStats.replies[0]?.content)}`,
+    );
+
     // A key no catalog defines must reach a user as a sentence, and a locale
     // that lacks a key must fall back to English rather than to the key.
     assert(
@@ -3385,7 +3472,7 @@ async function main(): Promise<void> {
       id: "command-copy-localization",
       status: "pass",
       detail:
-        `real dispatcher on Postgres with setup.locale=de: all ${described} root, subcommand and option description nodes of the ${chatInput.length} chat-input roots carried German from the catalog and none reused its English text; /ping, /about and /help browse replied in German; a key no catalog defines returned the fallback sentence and a partial catalog fell back to English; resetting the setting restored the English reply. The dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate`,
+        `real dispatcher on Postgres with setup.locale=de: all ${described} root, subcommand and option description nodes of the ${chatInput.length} chat-input roots carried German from the catalog and none reused its English text; /ping, /about and /help browse replied in German, /rank leaderboard rendered the stored level row as "XP-Rangliste", the Rank card user menu rendered its German rank line, /ticket stats rendered its German title and average-close line, and the same command without ManageGuild was refused in German; a key no catalog defines returned the fallback sentence and a partial catalog fell back to English; resetting the setting restored the English reply. The dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate`,
       features: ["operations.i18n"],
     });
   }

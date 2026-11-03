@@ -268,17 +268,21 @@ rate-limited register leaves the app with no commands.
   adapter into a stored row, and expired, forged and cross-guild ids were
   refused before a write. Moderation's appeal/verify ids remain the one
   unsigned handler, scoped and named in the journal.
-- Pass 62 closed P7's command-copy gap: `packages/i18n/src/command-copy.ts`
-  holds a hand-written German description for every registered root,
-  subcommand and option (253 keys generated from the registry), and `/ping`,
-  `/about`, `/help`, `/rank`, `/ticket` and the rank card reply through the
-  same typed catalog. A coverage test derives the keys in both directions and
-  classifies every command file as translated or deliberately English-only, so
-  a new command cannot quietly ship English-only. The copy still English is
-  named in the journal: community's operator configuration replies, the other
-  ten modules' replies, kernel guard copy, service-owned economy reasons and
-  operator-owned greeting text.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 636
+- Pass 62 closed P7's command-copy gap: every registered root, subcommand and
+  option gained a hand-written German description, and `/ping`, `/about`,
+  `/help`, `/rank`, `/ticket` and the rank card reply through the same typed
+  catalog. The copy still English is named in the journal: community's
+  operator configuration replies, the other ten modules' replies, kernel guard
+  copy, service-owned economy reasons and operator-owned greeting text.
+- Pass 63 corrected that copy against the audit: option descriptions are keyed
+  per declaration (`command.<root>.<sub>.option.<name>` wins over the shared
+  root key), so two subcommands can describe the same option differently;
+  English command text lives only in the command definition, and the German
+  copy lives only in `packages/i18n/src/de.ts`. The coverage test derives the
+  expected keys from the registry and classifies every command file in the
+  tree as translated or deliberately English-only with a reason, so a new
+  command cannot quietly ship English-only.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 633
   tests in 92 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and

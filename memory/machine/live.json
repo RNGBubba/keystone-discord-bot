@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T09:46:33.359Z",
+  "generatedAt": "2026-11-03T10:18:33.952Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1185ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1153ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 3ac8d4af862b… matched after import f7e652c0",
+      "detail": "bundle checksum 50aaa8aa2b2b… matched after import ea030c3b",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -230,7 +230,7 @@
     {
       "id": "command-copy-localization",
       "status": "pass",
-      "detail": "real dispatcher on Postgres with setup.locale=de: all 384 root, subcommand and option descriptions rendered from the catalog (384 distinct German strings, none reusing the English), /ping, /about and /help browse replied in German, a key no catalog defines returned the fallback sentence and a partial catalog fell back to English, and resetting the setting restored the English reply. 20 chat-input roots covered; the dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate",
+      "detail": "real dispatcher on Postgres with setup.locale=de: all 384 root, subcommand and option description nodes of the 20 chat-input roots carried German from the catalog and none reused its English text; /ping, /about and /help browse replied in German, /rank leaderboard rendered the stored level row as \"XP-Rangliste\", the Rank card user menu rendered its German rank line, /ticket stats rendered its German title and average-close line, and the same command without ManageGuild was refused in German; a key no catalog defines returned the fallback sentence and a partial catalog fell back to English; resetting the setting restored the English reply. The dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate",
       "features": [
         "operations.i18n"
       ]

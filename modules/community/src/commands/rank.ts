@@ -143,11 +143,13 @@ export const rank = defineCommand({
     if (selected === "daily") {
       const result = await economy.daily(guildId, ctx.userId);
       await ctx.interaction.reply({
+        // The service owns its refusal sentence and returns it in English. It
+        // gets its own line, so the translated balance never attaches to it.
         content: result.ok
           ? t(locale, "rank.daily.ok", result.amount, settings.economy.currency, result.balance)
-          : result.reason
-            ? t(locale, "rank.daily.failed", result.reason, result.balance)
-            : t(locale, "rank.daily.balance", result.balance),
+          : [result.reason, t(locale, "rank.daily.balance", result.balance)]
+              .filter(Boolean)
+              .join("\n"),
         ephemeral: true,
       });
       return;
@@ -167,7 +169,7 @@ export const rank = defineCommand({
       await ctx.interaction.reply({
         content: result.ok
           ? t(locale, "rank.pay.ok", amount, settings.economy.currency, target)
-          : (result.reason ?? "Transfer failed."),
+          : (result.reason ?? t(locale, "rank.transfer.failed")),
         ephemeral: true,
       });
       return;
@@ -210,7 +212,7 @@ export const rank = defineCommand({
       await ctx.interaction.reply({
         content: result.ok
           ? t(locale, "rank.buy.ok", result.item?.name ?? itemId, result.balance ?? 0)
-          : (result.reason ?? "Purchase failed."),
+          : (result.reason ?? t(locale, "rank.purchase.failed")),
         ephemeral: true,
       });
       return;
@@ -225,7 +227,7 @@ export const rank = defineCommand({
           ? result.won
             ? t(locale, "rank.gamble.won", result.amount ?? amount, result.balance ?? 0)
             : t(locale, "rank.gamble.lost", amount, result.balance ?? 0)
-          : (result.reason ?? "Gamble failed."),
+          : (result.reason ?? t(locale, "rank.gamble.failed")),
         ephemeral: true,
       });
       return;

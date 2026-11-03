@@ -19,8 +19,9 @@ P0 complete; `/help` added in pass 26.
 - Pass 62 put `/ping`, `/about` and `/help` reply and embed copy in
   `packages/i18n`: the guild's `setup.locale` selects the German catalog and a
   missing key falls back to English, never to the key. The command
-  descriptions themselves come from the same catalog through the registry
-  (`command-copy.ts`), so a new option without German fails the coverage test.
+  descriptions come from the registry and the German copy lives in `de.ts`
+  (pass 63 removed the English mirror), so a new option without German fails
+  the coverage test.
 - Eight tests, no token required.
 
 ## Verified
