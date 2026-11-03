@@ -28,6 +28,22 @@ export async function authorizeGuild(
   return { session: active, guild };
 }
 
+/**
+ * Instance-wide actions are never implied by guild permissions: an admin of one
+ * server is not an operator of the deployment. `WEB_OWNER_IDS` is the only
+ * allow-list, checked against the Discord user id in the session.
+ */
+export function requireOwner(
+  deps: WebServerDeps,
+  session: WebSession | undefined,
+): WebSession {
+  const active = requireSession(session);
+  if (!deps.auth.isOwner(active)) {
+    throw new HttpError(403, "That action is limited to instance owners.", "owner_required");
+  }
+  return active;
+}
+
 export function requireCsrf(
   deps: WebServerDeps,
   session: WebSession,
@@ -51,6 +67,17 @@ export async function requireSessionWrite(
   readCsrfToken: () => Promise<string | undefined> | string | undefined,
 ): Promise<WebSession> {
   const active = requireSession(session);
+  requireCsrf(deps, active, await readCsrfToken());
+  return active;
+}
+
+/** Owner -> CSRF, in that order, for an instance-wide write. */
+export async function requireOwnerWrite(
+  deps: WebServerDeps,
+  session: WebSession | undefined,
+  readCsrfToken: () => Promise<string | undefined> | string | undefined,
+): Promise<WebSession> {
+  const active = requireOwner(deps, session);
   requireCsrf(deps, active, await readCsrfToken());
   return active;
 }

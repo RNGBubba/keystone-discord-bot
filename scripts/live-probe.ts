@@ -55,6 +55,7 @@ import { AuthService } from "../apps/web/src/auth";
 import { SecretBox } from "../apps/web/src/crypto";
 import { DashboardService } from "../apps/web/src/overview";
 import { createWebHandler } from "../apps/web/src/server";
+import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "../apps/web/src/rate-limit";
 import type { ConfigBundle } from "../apps/web/src/config-bundle";
 import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
 
@@ -62,7 +63,8 @@ const root = path.resolve(import.meta.dirname, "..");
 const GUILD = "live-probe";
 const WEB_GUILD = "999999999999999999";
 const WEB_GUILD_B = "888888888888888888";
-const WEB_USER = "live-probe-web-user";
+const WEB_USER = "777777777777777777";
+const WEB_NORMAL_USER = "777777777777777778";
 const QUEUE = "keystone-live-probe";
 const DELAYED_QUEUE = "keystone-live-probe-delayed";
 const TEMPORARY_QUEUE = "keystone-live-probe-temporary";
@@ -103,6 +105,10 @@ function assert(ok: boolean, message: string): asserts ok {
 }
 
 class WebProbeOAuth implements DiscordOAuth {
+  /** The probe has no Discord login, so it selects which user the fake returns. */
+  userId = WEB_USER;
+  readonly revocations: string[] = [];
+
   authorizationUrl(input: { state: string }): string {
     return `https://discord.test/oauth?state=${encodeURIComponent(input.state)}`;
   }
@@ -112,7 +118,11 @@ class WebProbeOAuth implements DiscordOAuth {
   }
 
   async fetchUser(): Promise<{ id: string; username: string }> {
-    return { id: WEB_USER, username: "Live probe admin" };
+    return { id: this.userId, username: `Live probe ${this.userId}` };
+  }
+
+  async revokeToken(accessToken: string): Promise<void> {
+    this.revocations.push(accessToken);
   }
 
   async fetchGuilds(): Promise<DiscordGuild[]> {
@@ -597,33 +607,51 @@ async function main(): Promise<void> {
     const analyticsStore = createAnalyticsStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
     const probeOAuth = new WebProbeOAuth();
+    let authClock = Date.now();
     const auth = new AuthService({
       oauth: probeOAuth,
       sessions: createSessionStore(database),
       box: new SecretBox(randomBytes(32)),
+      now: () => authClock,
       config: {
         clientId: "live-probe-client",
         clientSecret: "live-probe-secret",
         redirectUri: "http://127.0.0.1/auth/callback",
         issuer: "https://discord.com",
         sessionTtlMs: 60 * 60_000,
+        rotationIntervalMs: 60_000,
+        owners: [WEB_USER],
       },
     });
-    const handler = createWebHandler({
+    const access = new GuildAccessService(probeOAuth);
+    const dashboard = new DashboardService(
+      registry,
+      settings,
+      createDashboardStore(database),
+      auditStore,
+      baselineStore,
+      savedTemplateStore,
+      analyticsStore,
+    );
+    // This long script must not throttle itself: the deliberate 429 proof runs
+    // on a second handler with tight policies below.
+    const generousLimits: RateLimitPolicies = {
+      auth: { max: 1_000, windowMs: 60_000 },
+      dashboard: { max: 1_000, windowMs: 60_000 },
+      write: { max: 1_000, windowMs: 60_000 },
+      api: { max: 1_000, windowMs: 60_000 },
+    };
+    const serverDeps = {
       auth,
-      access: new GuildAccessService(probeOAuth),
-      dashboard: new DashboardService(
-        registry,
-        settings,
-        createDashboardStore(database),
-        auditStore,
-        baselineStore,
-        savedTemplateStore,
-        analyticsStore,
-      ),
+      access,
+      dashboard,
       logger,
       secureCookies: false,
-      databaseMode: "postgres",
+      databaseMode: "postgres" as const,
+    };
+    const handler = createWebHandler({
+      ...serverDeps,
+      rateLimiter: new RateLimiter(generousLimits),
     });
     const server = createServer(handler);
     await new Promise<void>((resolve, reject) => {
@@ -636,25 +664,31 @@ async function main(): Promise<void> {
       assert(address !== null && typeof address === "object", "the widget server has no port");
       const base = `http://127.0.0.1:${address.port}`;
 
-      const begin = await fetch(`${base}/login`, { redirect: "manual" });
-      assert(begin.status === 302, `login returned ${begin.status}`);
-      const stateCookie = responseCookie(begin, "keystone_oauth");
-      assert(stateCookie !== undefined, "login did not set a state cookie");
-      const state = new URL(begin.headers.get("location") ?? "https://invalid.test").searchParams.get(
-        "state",
-      );
-      assert(state !== null, "login URL has no state");
+      const signIn = async (): Promise<{ cookie: string; csrf: string }> => {
+        const begin = await fetch(`${base}/login`, { redirect: "manual" });
+        assert(begin.status === 302, `login returned ${begin.status}`);
+        const stateCookie = responseCookie(begin, "keystone_oauth");
+        assert(stateCookie !== undefined, "login did not set a state cookie");
+        const state = new URL(begin.headers.get("location") ?? "https://invalid.test").searchParams.get(
+          "state",
+        );
+        assert(state !== null, "login URL has no state");
 
-      const callback = await fetch(
-        `${base}/auth/callback?code=live-probe&state=${encodeURIComponent(state)}&iss=${encodeURIComponent("https://discord.com")}`,
-        { redirect: "manual", headers: { cookie: stateCookie } },
-      );
-      assert(callback.status === 302, `OAuth callback returned ${callback.status}`);
-      const sessionCookie = responseCookie(callback, "keystone_session");
-      const csrfCookie = responseCookie(callback, "keystone_csrf");
-      assert(sessionCookie !== undefined && csrfCookie !== undefined, "callback did not set both session cookies");
-      const cookie = `${sessionCookie}; ${csrfCookie}`;
-      const csrf = csrfCookie.split("=")[1] ?? "";
+        const callback = await fetch(
+          `${base}/auth/callback?code=live-probe&state=${encodeURIComponent(state)}&iss=${encodeURIComponent("https://discord.com")}`,
+          { redirect: "manual", headers: { cookie: stateCookie } },
+        );
+        assert(callback.status === 302, `OAuth callback returned ${callback.status}`);
+        const sessionCookie = responseCookie(callback, "keystone_session");
+        const csrfCookie = responseCookie(callback, "keystone_csrf");
+        assert(
+          sessionCookie !== undefined && csrfCookie !== undefined,
+          "callback did not set both session cookies",
+        );
+        return { cookie: `${sessionCookie}; ${csrfCookie}`, csrf: csrfCookie.split("=")[1] ?? "" };
+      };
+
+      const { cookie, csrf } = await signIn();
 
       const editor = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/settings/ai`, {
         headers: { cookie },
@@ -1393,6 +1427,212 @@ async function main(): Promise<void> {
           "real local HTTP on Postgres: seeded 7 audit rows, 3 cases, 2 invite joins, 3 tickets and 3 command runs in the real tables, then the dashboard API and page matched every aggregate (7 logged events, 2 active cases, 3 cases opened, 2 invite joins/1 retained, 3 command runs/2 ok/1 blocked/200ms avg, 2 open tickets, 120-minute average close and 1 SLA breach); the source table counts matched; an empty guild said no rows instead of inventing activity; days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange itself used a fake port",
         features: ["operations.dashboard-analytics"],
       });
+
+      // --- Session hardening: owners, limits, rotation and revocation ---------
+      probeOAuth.userId = WEB_NORMAL_USER;
+      const normal = await signIn();
+      probeOAuth.userId = WEB_USER;
+
+      assert(
+        (await fetch(`${base}/dashboard/instance`)).status === 401,
+        "the anonymous instance page was not refused at 401",
+      );
+      assert(
+        (await fetch(`${base}/dashboard/instance`, { headers: { cookie: normal.cookie } })).status === 403,
+        "a normal guild admin reached the instance console",
+      );
+      const ownerPage = await fetch(`${base}/dashboard/instance`, { headers: { cookie } });
+      assert(ownerPage.status === 200, `the owner instance page returned ${ownerPage.status}`);
+      const ownerHtml = await ownerPage.text();
+      assert(ownerHtml.includes("Session rotation"), "the owner page does not show session rotation");
+      assert(ownerHtml.includes(WEB_USER), "the owner page does not list the owner id");
+
+      const normalForbidden = await fetch(`${base}/dashboard/instance/sessions/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie: normal.cookie, "x-keystone-csrf": normal.csrf },
+        body: new URLSearchParams({ userId: WEB_USER }).toString(),
+      });
+      assert(normalForbidden.status === 403, `a normal admin revocation returned ${normalForbidden.status}`);
+
+      const ownerRevoked = await fetch(`${base}/dashboard/instance/sessions/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "x-keystone-csrf": csrf },
+        body: new URLSearchParams({ userId: WEB_NORMAL_USER }).toString(),
+      });
+      assert(ownerRevoked.status === 302, `owner session revocation returned ${ownerRevoked.status}`);
+      assert(
+        (ownerRevoked.headers.get("location") ?? "") === "/dashboard/instance?revoked=1",
+        `owner session revocation redirected to ${String(ownerRevoked.headers.get("location"))}`,
+      );
+      assert(
+        (await fetch(`${base}/api/v1/me`, { headers: { cookie: normal.cookie } })).status === 401,
+        "the revoked normal-admin session still works",
+      );
+
+      // A second handler with tight policies proves each route class returns
+      // 429 with Retry-After and recovers in the next fixed window. The clock is
+      // moved by the probe so the window does not need a real sleep.
+      let limitClock = Date.now();
+      const tightLimits: RateLimitPolicies = {
+        auth: { max: 2, windowMs: 1_500 },
+        dashboard: { max: 2, windowMs: 1_500 },
+        write: { max: 2, windowMs: 1_500 },
+        api: { max: 2, windowMs: 1_500 },
+      };
+      const limited = createServer(
+        createWebHandler({
+          ...serverDeps,
+          rateLimiter: new RateLimiter(tightLimits, () => limitClock),
+        }),
+      );
+      await new Promise<void>((resolve, reject) => {
+        limited.once("error", reject);
+        limited.listen(0, "127.0.0.1", () => resolve());
+      });
+      try {
+        const limitedAddress = limited.address();
+        assert(
+          limitedAddress !== null && typeof limitedAddress === "object",
+          "the rate-limited server has no port",
+        );
+        const limitedBase = `http://127.0.0.1:${limitedAddress.port}`;
+        const expect429 = async (response: Response, label: string): Promise<void> => {
+          assert(response.status === 429, `${label} did not return 429 (${response.status})`);
+          assert(
+            response.headers.get("retry-after") === "2",
+            `${label} did not return Retry-After: 2`,
+          );
+        };
+
+        for (let index = 0; index < 2; index += 1) {
+          assert(
+            (await fetch(`${limitedBase}/api/v1/me`, { headers: { cookie } })).status === 200,
+            "the API limit fired early",
+          );
+        }
+        await expect429(
+          await fetch(`${limitedBase}/api/v1/me`, { headers: { cookie } }),
+          "the API route",
+        );
+        limitClock += 1_500;
+        assert(
+          (await fetch(`${limitedBase}/api/v1/me`, { headers: { cookie } })).status === 200,
+          "the API route did not recover in a later window",
+        );
+
+        for (let index = 0; index < 2; index += 1) {
+          assert(
+            (await fetch(`${limitedBase}/dashboard`, { headers: { cookie } })).status === 200,
+            "the dashboard limit fired early",
+          );
+        }
+        await expect429(
+          await fetch(`${limitedBase}/dashboard`, { headers: { cookie } }),
+          "the dashboard route",
+        );
+        limitClock += 1_500;
+        assert(
+          (await fetch(`${limitedBase}/dashboard`, { headers: { cookie } })).status === 200,
+          "the dashboard route did not recover in a later window",
+        );
+
+        const previewForm = new URLSearchParams({ csrf, template: "strict-moderation" });
+        previewForm.append("guild", WEB_GUILD);
+        const preview = (): Promise<Response> =>
+          fetch(`${limitedBase}/dashboard/fleet/preview`, {
+            method: "POST",
+            redirect: "manual",
+            headers: {
+              cookie,
+              "x-keystone-csrf": csrf,
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: previewForm.toString(),
+          });
+        for (let index = 0; index < 2; index += 1) {
+          assert((await preview()).status === 200, "the write limit fired early");
+        }
+        await expect429(await preview(), "the write route");
+        limitClock += 1_500;
+        assert((await preview()).status === 200, "the write route did not recover in a later window");
+
+        for (let index = 0; index < 2; index += 1) {
+          assert(
+            (await fetch(`${limitedBase}/login`, { redirect: "manual" })).status === 302,
+            "the sign-in limit fired early",
+          );
+        }
+        await expect429(
+          await fetch(`${limitedBase}/login`, { redirect: "manual" }),
+          "the sign-in route",
+        );
+        limitClock += 1_500;
+        assert(
+          (await fetch(`${limitedBase}/login`, { redirect: "manual" })).status === 302,
+          "sign-in did not recover in a later window",
+        );
+
+        for (let index = 0; index < 3; index += 1) {
+          assert((await fetch(`${limitedBase}/healthz`)).status === 200, "the health check was limited");
+        }
+      } finally {
+        limited.closeAllConnections();
+        await new Promise<void>((resolve) => limited.close(() => resolve()));
+      }
+
+      authClock += 60_000;
+      const beforeRotation = cookie.split("; ").find((part) => part.startsWith("keystone_session="));
+      const rotatedResponse = await fetch(`${base}/api/v1/me`, { headers: { cookie } });
+      assert(rotatedResponse.status === 200, `rotation request returned ${rotatedResponse.status}`);
+      const rotatedSession = responseCookie(rotatedResponse, "keystone_session");
+      const rotatedCsrfCookie = responseCookie(rotatedResponse, "keystone_csrf");
+      assert(
+        rotatedSession !== undefined && rotatedCsrfCookie !== undefined,
+        "rotation did not set replacement session and CSRF cookies",
+      );
+      assert(rotatedSession !== beforeRotation, "rotation kept the old session cookie");
+      assert(
+        (await fetch(`${base}/api/v1/me`, { headers: { cookie } })).status === 401,
+        "the pre-rotation cookie still works",
+      );
+      const rotatedCookie = `${rotatedSession}; ${rotatedCsrfCookie}`;
+      assert(
+        (await fetch(`${base}/api/v1/me`, { headers: { cookie: rotatedCookie } })).status === 200,
+        "the rotated cookie does not work",
+      );
+
+      const loggedOut = await fetch(`${base}/logout`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie: rotatedCookie, "x-keystone-csrf": rotatedCsrfCookie.split("=")[1] },
+      });
+      assert(loggedOut.status === 302, `logout returned ${loggedOut.status}`);
+      assert(
+        probeOAuth.revocations.length === 1,
+        `expected one Discord revocation, saw ${probeOAuth.revocations.length}`,
+      );
+      assert(
+        probeOAuth.revocations[0] === "live-probe-access-token",
+        "logout did not revoke the session's Discord access token",
+      );
+      assert(
+        (await fetch(`${base}/api/v1/me`, { headers: { cookie: rotatedCookie } })).status === 401,
+        "the logged-out session still works",
+      );
+      assert(
+        (await fetch(`${base}/logout`, { method: "POST", redirect: "manual" })).status === 401,
+        "anonymous logout was not refused at 401",
+      );
+
+      record({
+        id: "web-session-hardening",
+        status: "pass",
+        detail:
+          "real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the access token and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed",
+        features: ["operations.dashboard-session-hardening"],
+      });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1414,7 +1654,7 @@ async function main(): Promise<void> {
     DELETE FROM command_usage WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
-    DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';
+    DELETE FROM web_sessions WHERE user_id IN ('${WEB_USER}', '${WEB_NORMAL_USER}');
     DELETE FROM job_receipts
       WHERE idempotency_key LIKE 'live-probe-%'
          OR idempotency_key = '${temporaryKey}';

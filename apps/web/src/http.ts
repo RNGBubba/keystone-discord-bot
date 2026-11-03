@@ -21,6 +21,16 @@ export function securityHeaders(res: ServerResponse): void {
   );
 }
 
+export function appendSetCookie(res: ServerResponse, cookie: string): void {
+  const existing = res.getHeader("Set-Cookie");
+  const prior = Array.isArray(existing)
+    ? existing.map(String)
+    : typeof existing === "string"
+      ? [existing]
+      : [];
+  res.setHeader("Set-Cookie", [...prior, cookie]);
+}
+
 export function send(
   res: ServerResponse,
   status: number,
@@ -30,7 +40,16 @@ export function send(
 ): void {
   res.statusCode = status;
   res.setHeader("Content-Type", contentType);
-  for (const [name, value] of Object.entries(headers)) res.setHeader(name, value);
+  for (const [name, value] of Object.entries(headers)) {
+    // A rotated session sets its replacement cookie before the route runs.
+    // Appending keeps that cookie when a route also sets one (for example a
+    // logout that clears it), instead of silently dropping the rotation.
+    if (name === "Set-Cookie") {
+      for (const cookie of Array.isArray(value) ? value : [value]) appendSetCookie(res, cookie);
+      continue;
+    }
+    res.setHeader(name, value);
+  }
   res.end(body);
 }
 

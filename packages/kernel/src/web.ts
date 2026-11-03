@@ -23,7 +23,14 @@ export interface WebSession {
 export interface SessionStore {
   create(session: WebSession): Promise<void>;
   get(id: string): Promise<WebSession | undefined>;
+  /**
+   * Re-key an existing row in one atomic step. Returns false when the old id is
+   * already gone, which is how a replayed pre-rotation cookie is refused.
+   */
+  rotate(id: string, next: WebSession): Promise<boolean>;
   delete(id: string): Promise<void>;
+  /** Delete every session for one user; returns how many rows were removed. */
+  deleteForUser(userId: string): Promise<number>;
 }
 
 export interface GuildCounts {
@@ -80,8 +87,25 @@ export class InMemorySessionStore implements SessionStore {
     return session ? { ...session } : undefined;
   }
 
+  async rotate(id: string, next: WebSession): Promise<boolean> {
+    if (!this.#sessions.has(id)) return false;
+    this.#sessions.delete(id);
+    this.#sessions.set(next.id, { ...next });
+    return true;
+  }
+
   async delete(id: string): Promise<void> {
     this.#sessions.delete(id);
+  }
+
+  async deleteForUser(userId: string): Promise<number> {
+    let removed = 0;
+    for (const [id, session] of this.#sessions) {
+      if (session.userId !== userId) continue;
+      this.#sessions.delete(id);
+      removed += 1;
+    }
+    return removed;
   }
 }
 

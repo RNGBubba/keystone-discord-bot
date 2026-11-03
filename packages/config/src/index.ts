@@ -61,6 +61,12 @@ export const envSchema = z.object({
   DISCORD_OAUTH_REDIRECT_URI: optionalString,
   DISCORD_OAUTH_ISSUER: z.string().url().default("https://discord.com"),
   SESSION_SECRET: optionalString,
+  /**
+   * Comma-separated Discord user ids allowed to act on the whole instance.
+   * Guild Manage Server is deliberately not enough; see the dashboard security
+   * contract. Empty means the owner console stays closed to everyone.
+   */
+  WEB_OWNER_IDS: optionalString,
 });
 
 export type Env = z.infer<typeof envSchema>;

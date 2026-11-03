@@ -19,6 +19,10 @@ export interface AuthConfig {
   redirectUri?: string;
   issuer: string;
   sessionTtlMs: number;
+  /** Re-key a signed-in session after this age on a safe GET. 0 disables. */
+  rotationIntervalMs?: number;
+  /** Discord user ids allowed to act on the whole instance. */
+  owners?: readonly string[];
 }
 
 export interface AuthDependencies {
@@ -46,6 +50,24 @@ export interface CompleteResult {
   csrfToken: string;
 }
 
+export interface SessionRotation {
+  sessionToken: string;
+  csrfToken: string;
+  /** Remaining absolute lifetime, so the new cookie cannot outlive the row. */
+  maxAgeMs: number;
+}
+
+export interface SessionResolution {
+  session: WebSession | undefined;
+  /** Present when the cookie was re-keyed during this request. */
+  rotated?: SessionRotation;
+}
+
+export interface LogoutResult {
+  /** True only when Discord accepted the revocation request. */
+  revoked: boolean;
+}
+
 /**
  * OAuth2 authorization-code + PKCE with a server-side opaque session.
  *
@@ -54,7 +76,7 @@ export interface CompleteResult {
  * hash is stored. The Discord access token is sealed before it reaches the
  * session store and is never returned by any route. No refresh token is kept:
  * the dashboard has no refresh path, so a session simply expires and the user
- * signs in again.
+ * signs in again. Rotation re-keys the opaque cookie, not the Discord grant.
  */
 export class AuthService {
   private readonly now: () => number;
@@ -74,6 +96,18 @@ export class AuthService {
 
   get ttlMs(): number {
     return this.deps.config.sessionTtlMs;
+  }
+
+  get rotationIntervalMs(): number {
+    return this.deps.config.rotationIntervalMs ?? 0;
+  }
+
+  get owners(): readonly string[] {
+    return this.deps.config.owners ?? [];
+  }
+
+  isOwner(session: WebSession): boolean {
+    return this.owners.includes(session.userId);
   }
 
   private requireOAuth(): DiscordOAuth {
@@ -161,6 +195,40 @@ export class AuthService {
     return session;
   }
 
+  /**
+   * Resolve the browser cookie and, on a safe GET past the rotation interval,
+   * re-key it. Rotation is deliberately limited to GET/HEAD: a POST carries a
+   * CSRF token minted for the old cookie, so rotating before checking it would
+   * turn a valid form into a 403. The absolute `expiresAt` never moves; only
+   * `createdAt` becomes the issue time of the current credential.
+   */
+  async resolve(sessionToken: string | undefined, method: string): Promise<SessionResolution> {
+    const session = await this.session(sessionToken);
+    if (!session) return { session: undefined };
+
+    const interval = this.rotationIntervalMs;
+    if (interval <= 0 || (method !== "GET" && method !== "HEAD")) return { session };
+    if (this.now() - Date.parse(session.createdAt) < interval) return { session };
+
+    const remaining = Date.parse(session.expiresAt) - this.now();
+    if (remaining <= 0) return { session: undefined };
+
+    const sessionTokenNext = randomToken(32);
+    const csrfToken = randomToken(24);
+    const next: WebSession = {
+      ...session,
+      id: sha256(sessionTokenNext),
+      csrfHash: sha256(csrfToken),
+      createdAt: new Date(this.now()).toISOString(),
+    };
+    if (!(await this.deps.sessions.rotate(session.id, next))) {
+      // Another request already rotated this credential; the presented value is
+      // one-use, so treat it as gone instead of reviving it.
+      return { session: undefined };
+    }
+    return { session: next, rotated: { sessionToken: sessionTokenNext, csrfToken, maxAgeMs: remaining } };
+  }
+
   accessToken(session: WebSession): string {
     try {
       return this.deps.box.open(session.accessToken);
@@ -173,7 +241,28 @@ export class AuthService {
     return Boolean(csrfToken) && constantTimeEqual(sha256(csrfToken as string), session.csrfHash);
   }
 
-  async logout(session: WebSession): Promise<void> {
+  /**
+   * Revoke at Discord first, then delete the local session. Revocation is
+   * best-effort: if Discord is unavailable the browser session must still die,
+   * and the caller can report that the remote token was not confirmed dead.
+   */
+  async logout(session: WebSession): Promise<LogoutResult> {
+    let revoked = false;
+    const oauth = this.deps.oauth;
+    if (this.oauthConfigured && oauth) {
+      try {
+        await oauth.revokeToken(this.accessToken(session));
+        revoked = true;
+      } catch {
+        revoked = false;
+      }
+    }
     await this.deps.sessions.delete(session.id);
+    return { revoked };
+  }
+
+  /** Instance-owner action: sign a user out of every dashboard session. */
+  async revokeUserSessions(userId: string): Promise<number> {
+    return this.deps.sessions.deleteForUser(userId);
   }
 }

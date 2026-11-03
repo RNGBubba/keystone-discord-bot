@@ -42,6 +42,12 @@ export interface DiscordOAuth {
   fetchUser(accessToken: string): Promise<DiscordUser>;
   fetchGuilds(accessToken: string): Promise<DiscordGuild[]>;
   botInGuild(guildId: string): Promise<boolean>;
+  /**
+   * Ask Discord to invalidate an access token. Logout calls this before it
+   * deletes the local session; the port keeps the request testable without a
+   * real Discord client.
+   */
+  revokeToken(accessToken: string): Promise<void>;
 }
 
 export interface DiscordOAuthOptions {
@@ -124,5 +130,24 @@ export class DiscordOAuthClient implements DiscordOAuth {
     if (response.status === 404 || response.status === 403) return false;
     if (!response.ok) throw new Error(`Discord guild check failed with HTTP ${response.status}.`);
     return true;
+  }
+
+  async revokeToken(accessToken: string): Promise<void> {
+    const body = new URLSearchParams({
+      client_id: this.options.clientId,
+      client_secret: this.options.clientSecret,
+      token: accessToken,
+      token_type_hint: "access_token",
+    });
+    const response = await fetch(`${DISCORD_API}/oauth2/token/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    // 400 means Discord no longer recognises the token, which is the outcome
+    // logout wants; anything else is a real failure the caller reports.
+    if (!response.ok && response.status !== 400) {
+      throw new Error(`Discord token revocation failed with HTTP ${response.status}.`);
+    }
   }
 }

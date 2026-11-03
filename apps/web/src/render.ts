@@ -11,6 +11,7 @@ import type { DiscordGuild } from "./oauth";
 import { encodePathSegment } from "./http";
 import { labelFor, type SettingsField, type SettingsFormModel, type SettingsGroup } from "./settings-form";
 import type { ConfigTemplate, TemplateGuildPlan, TemplatePlan } from "./templates";
+import type { RateLimitPolicies } from "./rate-limit";
 
 function escapeHtml(value: string): string {
   return value
@@ -62,7 +63,7 @@ function logoutForm(csrfToken: string): string {
   return `<form method="post" action="/logout"><input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}"><button type="submit">Sign out</button></form>`;
 }
 
-export function renderLanding(username?: string, csrfToken?: string): string {
+export function renderLanding(username?: string, csrfToken?: string, owner = false): string {
   if (!username) {
     return layout(
       "Welcome",
@@ -76,6 +77,7 @@ export function renderLanding(username?: string, csrfToken?: string): string {
     `<h1>Keystone dashboard</h1>
      <p>Signed in as <strong>${escapeHtml(username)}</strong>.</p>
      <p><a href="/dashboard">Open your servers</a></p>
+     ${owner ? `<p><a href="/dashboard/instance">Instance owner console</a></p>` : ""}
      ${csrfToken ? logoutForm(csrfToken) : ""}`,
     username,
   );
@@ -905,6 +907,76 @@ export function renderSettingsEditor(
        </form>
      </div>
      ${renderAudit(options.history ?? [])}
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface InstanceView {
+  readonly databaseMode: "memory" | "postgres";
+  readonly oauthConfigured: boolean;
+  readonly secureCookies: boolean;
+  readonly sessionTtlMs: number;
+  readonly rotationIntervalMs: number;
+  readonly owners: readonly string[];
+  readonly rateLimits: RateLimitPolicies;
+}
+
+function duration(value: number): string {
+  const seconds = Math.round(value / 1_000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 120 ? `${minutes}m` : `${Math.round(minutes / 60)}h`;
+}
+
+export function renderInstance(
+  username: string,
+  view: InstanceView,
+  csrfToken: string,
+  revoked?: number,
+): string {
+  const owners =
+    view.owners.length === 0
+      ? `<p class="muted">No owners are configured. Set <code>WEB_OWNER_IDS</code> and restart the web process.</p>`
+      : `<ul>${view.owners.map((owner) => `<li><code>${escapeHtml(owner)}</code></li>`).join("")}</ul>`;
+  const limits = (Object.keys(view.rateLimits) as Array<keyof RateLimitPolicies>)
+    .map((id) => {
+      const policy = view.rateLimits[id];
+      return `<tr><td>${escapeHtml(id)}</td><td>${policy.max}</td><td>${duration(policy.windowMs)}</td></tr>`;
+    })
+    .join("");
+  const notice =
+    revoked === undefined
+      ? ""
+      : `<div class="notice">Signed out ${revoked} dashboard session(s) for that user id.</div>`;
+  return layout(
+    "Instance",
+    `<p><a href="/">← Back to Keystone</a></p>
+     <h1>Instance</h1>
+     <p class="muted">Deployment-wide facts and actions. This page is limited to the Discord user ids in <code>WEB_OWNER_IDS</code>; managing one server is not instance ownership.</p>
+     ${notice}
+     <div class="panel"><h2>Deployment</h2>
+       <table><tbody>
+         <tr><th>Database</th><td>${escapeHtml(view.databaseMode)}</td></tr>
+         <tr><th>Discord OAuth</th><td>${view.oauthConfigured ? "configured" : "not configured"}</td></tr>
+         <tr><th>Secure cookies</th><td>${view.secureCookies ? "yes" : "no (local HTTP)"}</td></tr>
+         <tr><th>Session lifetime</th><td>${duration(view.sessionTtlMs)} absolute</td></tr>
+         <tr><th>Session rotation</th><td>${view.rotationIntervalMs > 0 ? `every ${duration(view.rotationIntervalMs)} on a page load` : "disabled"}</td></tr>
+       </tbody></table>
+     </div>
+     <div class="panel"><h2>Owners</h2>${owners}</div>
+     <div class="panel"><h2>Rate limits</h2>
+       <p class="muted">Fixed window per identity: a signed-in user, or the client address for anonymous routes. <code>/healthz</code> is exempt.</p>
+       <table><thead><tr><th>Route class</th><th>Requests</th><th>Window</th></tr></thead><tbody>${limits}</tbody></table>
+     </div>
+     <div class="panel"><h2>End a user's sessions</h2>
+       <p class="muted">Deletes every dashboard session row for the Discord user id and clears their cookies on the next request. Their Discord grant is untouched.</p>
+       <form method="post" action="/dashboard/instance/sessions/revoke">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="userId">Discord user id</label><input id="userId" name="userId" type="text" inputmode="numeric" autocomplete="off" required></div>
+         <p><button type="submit">Sign out every session</button></p>
+       </form>
+     </div>
      ${logoutForm(csrfToken)}`,
     username,
   );

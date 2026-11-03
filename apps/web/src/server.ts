@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { renderError } from "./render";
 import { securityHeaders, send, sendJson } from "./http";
 import { HttpError } from "./http-error";
+import { rateLimitClassFor, rateLimitError } from "./rate-limit";
 import {
   createRouteContext,
   type WebServerDeps,
@@ -48,6 +49,19 @@ async function handle(
   deps: WebServerDeps,
 ): Promise<void> {
   const ctx = await createRouteContext(req, res, deps);
+
+  // Limits run after the session is resolved so a signed-in user is budgeted
+  // by account, while an anonymous request falls back to its socket address.
+  const limitClass = rateLimitClassFor(ctx.method, ctx.path);
+  if (limitClass) {
+    const identity = ctx.session ? `user:${ctx.session.userId}` : `ip:${clientAddress(req)}`;
+    const decision = deps.rateLimiter.check(limitClass, identity);
+    if (!decision.allowed) {
+      res.setHeader("Retry-After", String(decision.retryAfterSeconds));
+      throw rateLimitError(decision);
+    }
+  }
+
   if (await dispatchRoutes(ctx)) return;
 
   if (ctx.method !== "GET" && ctx.method !== "POST") {
@@ -61,4 +75,8 @@ async function handle(
   }
 
   send(res, 404, renderError("Not found", "That page does not exist."), "text/html; charset=utf-8");
+}
+
+function clientAddress(req: IncomingMessage): string {
+  return req.socket.remoteAddress ?? "unknown";
 }

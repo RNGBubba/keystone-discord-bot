@@ -38,8 +38,11 @@ import { DiscordOAuthClient, type DiscordOAuth } from "./oauth";
 import { DashboardService } from "./overview";
 import { createWebHandler, type WebServerDeps } from "./server";
 import { HttpError } from "./http-error";
+import { DEFAULT_RATE_LIMITS, RateLimiter } from "./rate-limit";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
+/** Re-key the opaque cookie every 15 minutes; the absolute expiry does not move. */
+const SESSION_ROTATION_MS = 15 * 60_000;
 
 export interface WebRuntime {
   handler: ReturnType<typeof createWebHandler>;
@@ -61,6 +64,7 @@ function unavailableOAuth(): DiscordOAuth {
     fetchUser: fail,
     fetchGuilds: fail,
     botInGuild: fail,
+    revokeToken: fail,
   };
 }
 
@@ -99,6 +103,18 @@ export function createWebRuntime(env: Env): WebRuntime {
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
   const redirectUri = env.DISCORD_OAUTH_REDIRECT_URI ?? `${origin}/auth/callback`;
   const secureCookies = origin.startsWith("https://") || env.NODE_ENV === "production";
+  const owners = (env.WEB_OWNER_IDS ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  for (const owner of owners) {
+    if (!/^\d{15,20}$/.test(owner)) {
+      throw new Error(`WEB_OWNER_IDS contains an invalid Discord user id: ${owner}`);
+    }
+  }
+  if (owners.length === 0) {
+    logger.warn("WEB_OWNER_IDS is not set — the instance owner console stays closed.");
+  }
 
   let sessionKey: Buffer;
   let ephemeralSessionKey = false;
@@ -134,6 +150,8 @@ export function createWebRuntime(env: Env): WebRuntime {
       redirectUri,
       issuer: env.DISCORD_OAUTH_ISSUER,
       sessionTtlMs: SESSION_TTL_MS,
+      rotationIntervalMs: SESSION_ROTATION_MS,
+      owners,
     },
   });
   const access = new GuildAccessService(oauth ?? unavailableOAuth());
@@ -153,12 +171,17 @@ export function createWebRuntime(env: Env): WebRuntime {
     logger,
     secureCookies,
     databaseMode: database ? "postgres" : "memory",
+    rateLimiter: new RateLimiter(DEFAULT_RATE_LIMITS),
   });
 
   return {
     handler,
     logger,
-    mode: { database: database ? "postgres" : "memory", oauth: Boolean(oauth), secureCookies },
+    mode: {
+      database: database ? "postgres" : "memory",
+      oauth: Boolean(oauth),
+      secureCookies,
+    },
     ephemeralSessionKey,
     async close() {
       await database?.close();

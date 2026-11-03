@@ -711,6 +711,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-54",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 session hardening: the opaque Postgres session cookie is re-keyed every 15 minutes on a safe GET, so the previous cookie is dead immediately; logout asks the OAuth port to revoke the Discord access token before deleting the row (best effort, the local session always dies); fixed-window limits cover the auth, dashboard, write and API route classes with 429 + Retry-After and recovery in the next window; and WEB_OWNER_IDS gates an instance console plus a sign-out-every-user action that a guild admin cannot reach. Six new HTTP tests and one PGlite test cover rotation, replay, revocation ordering and failure, per-class limits, anonymous limits and the owner gate. Tests 540 / 80 files; live probe 19/19, adding web-session-hardening over real local HTTP and Postgres: 401 anonymous / 403 guild admin / 200 owner, the owner's revocation killed the admin cookie, all four classes returned 429 with Retry-After then recovered, /healthz stayed exempt, the rotated cookie replaced the old one, and logout revoked through the fake OAuth port. Token revocation is asserted at the port; no live Discord revocation or login is claimed.",
+      "journal": "journal/2026-11-03-pass-54.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "540",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "19/19",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

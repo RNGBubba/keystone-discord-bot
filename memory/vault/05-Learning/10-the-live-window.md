@@ -37,18 +37,20 @@ with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 18 live checks against 17
-migrations. The newest five drive real local HTTP on Postgres: the schema form
+into the Live-Window page. The last recorded run is 19 live checks against 17
+migrations. The newest six drive real local HTTP on Postgres: the schema form
 path (login, session, CSRF, save, reject), the fleet template path (list,
 preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
 guild), the config path (checksummed file export, multipart upload, preview
 that writes nothing, edited-checksum and stale-fingerprint refusals, one audited
 apply, a stored baseline and one reported drift), the saved-template path
 (save, list, two-guild preview, tampered/stale refusals, one audited write per
-guild, invalid-row refusal, audited delete), and the analytics path (seeded
+guild, invalid-row refusal, audited delete), the analytics path (seeded
 ledger rows checked against the API and page, an empty guild, invalid windows
-refused before the store is called). The numbers are checked against the
-report, not typed by hand.
+refused before the store is called), and the session-hardening path (owner
+console 401/403/200, owner revocation, every limited class returning 429 then
+recovering, the rotated cookie replaying as 401, and logout revoking at the
+OAuth port). The numbers are checked against the report, not typed by hand.
 
 The evidence levels are intentionally separate:
 

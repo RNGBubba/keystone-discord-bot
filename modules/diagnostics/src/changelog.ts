@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-54",
+    date: "2026-11-03",
+    summary:
+      "P6 session hardening: dashboard sessions rotate their opaque cookie, logout revokes the Discord grant through the OAuth port, per-route limits return 429 with Retry-After, and WEB_OWNER_IDS gates an instance console that can end a user's sessions.",
+    journal: "memory/journal/2026-11-03-pass-54.md",
+  },
+  {
     pass: "pass-53",
     date: "2026-11-03",
     summary:

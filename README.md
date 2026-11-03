@@ -46,7 +46,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**533 tests across 80 files** without a Discord token, database or network.
+**540 tests across 80 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -60,7 +60,7 @@ exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
 human client is still the next live check. Pass 44 opened the live SQL window.
 Since then Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and
-Redis, all 16 migrations are applied, and `pnpm probe:live` is 17/17 — settings survive a
+Redis, all 17 migrations are applied, and `pnpm probe:live` is 19/19 — settings survive a
 pool restart, cooldowns are shared through Redis, a BullMQ job runs once with a
 Postgres receipt, a delayed timer fires after its delay, a real case expires
 through `TemporaryActionService`, a reminder/scheduled record delivers once, a
@@ -464,10 +464,18 @@ fingerprint, re-authorization and per-module audit path; create, update and
 delete append their own `template.*` audit rows. There is no marketplace and no
 second settings store.
 
-This is still not the P6 exit demo: analytics aggregates, token refresh and
-revocation, per-route rate limits, public scoped API tokens, per-token rate
-limits, `Idempotency-Key`, webhooks, OpenAPI, and a live OAuth round trip against
-Discord remain open. See
+**Session hardening** rotates the opaque dashboard cookie every 15 minutes on a
+safe page load, so the previous value is refused immediately. Logout asks the
+OAuth port to revoke the Discord access token before deleting the session, and
+the local session dies even when Discord is unavailable. Fixed windows cap the
+auth, dashboard, write and API route classes with `429` + `Retry-After`, and
+`WEB_OWNER_IDS` gates an owner console whose sign-out-every-session action a
+guild admin cannot reach.
+
+This is still not the P6 exit demo: idle timeout, a Discord refresh-token path,
+public scoped API tokens, per-token rate limits, `Idempotency-Key`, webhooks,
+OpenAPI, and a live OAuth round trip (and live token revocation) against Discord
+remain open. See
 [Dashboard](memory/vault/03-Architecture/Dashboard.md) and
 [ADR-0016](memory/vault/03-Architecture/ADR/ADR-0016-dashboard-foundation.md).
 
@@ -584,11 +592,12 @@ Everything below is free. No feature is moved behind a paywall.
 
 ### Planned (honest roadmap)
 
-- **P6 remaining:** analytics aggregates, token refresh/revocation, per-route
-  rate limits, scoped public API tokens, per-token rate limits, idempotency,
-  webhooks and OpenAPI. Schema-driven widgets, the audit trail, the fleet view,
-  built-in and saved templates, and config export/import/drift are in repo; the
-  framework-free `apps/web` carrier is deliberate for now.
+- **P6 remaining:** idle timeout, a Discord refresh-token path, scoped public
+  API tokens, per-token rate limits, idempotency, webhooks and OpenAPI.
+  Schema-driven widgets, the audit trail, the fleet view, built-in and saved
+  templates, config export/import/drift, analytics aggregates, session rotation
+  and logout revocation, per-route limits, and the `owners[]` instance console
+  are in repo; the framework-free `apps/web` carrier is deliberate for now.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail` and the four context menus are done; the

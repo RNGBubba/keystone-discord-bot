@@ -1745,6 +1745,32 @@
           "liveVerified": false
         },
         {
+          "id": "operations.dashboard-session-hardening",
+          "name": "Dashboard session hardening",
+          "competitors": {
+            "mee6": "✅",
+            "dyno": "✅",
+            "carl": "✅",
+            "ticket-tool": "✅",
+            "wick-security": "✅"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "The opaque session cookie is re-keyed every 15 minutes on a safe GET, and the old value is dead immediately; logout asks the OAuth port to revoke the Discord access token before deleting the row; fixed-window limits cover the auth, dashboard, write and API classes with Retry-After; and WEB_OWNER_IDS gates the instance console and its sign-out-everywhere action. Live 2026-11-03 over real local HTTP and Postgres. Revocation is asserted at the port because the probe's OAuth exchange is fake; no live Discord revocation is claimed.",
+          "evidence": [
+            "apps/web/src/web.test.ts",
+            "apps/web/src/auth.ts",
+            "apps/web/src/rate-limit.ts",
+            "packages/db/src/web-store.test.ts",
+            "memory/vault/03-Architecture/Dashboard.md"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-session-hardening"
+          ]
+        },
+        {
           "id": "operations.dashboard-settings-writes",
           "name": "Dashboard settings writes",
           "competitors": {

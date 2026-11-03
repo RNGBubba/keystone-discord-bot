@@ -68,7 +68,14 @@ export async function logout(ctx: RouteContext): Promise<boolean> {
   const body = await parseBody(ctx.req);
   const submitted = csrfHeader(ctx.req) ?? new URLSearchParams(body).get("csrf") ?? undefined;
   requireCsrf(ctx.deps, active, submitted);
-  await ctx.deps.auth.logout(active);
+  const result = await ctx.deps.auth.logout(active);
+  if (ctx.deps.auth.oauthConfigured && !result.revoked) {
+    // The local session is gone either way; this only records that Discord did
+    // not confirm the remote grant was revoked. Never log the token itself.
+    ctx.deps.logger.warn("logout closed the session without confirming token revocation", {
+      userId: active.userId,
+    });
+  }
   redirect(ctx.res, "/", [
     clearCookie(SESSION_COOKIE, ctx.deps.secureCookies),
     clearCookie(CSRF_COOKIE, ctx.deps.secureCookies),
@@ -80,7 +87,11 @@ export async function landing(ctx: RouteContext): Promise<boolean> {
   send(
     ctx.res,
     200,
-    renderLanding(ctx.session?.username, ctx.session ? ctx.csrfToken : undefined),
+    renderLanding(
+      ctx.session?.username,
+      ctx.session ? ctx.csrfToken : undefined,
+      Boolean(ctx.session && ctx.deps.auth.isOwner(ctx.session)),
+    ),
     "text/html; charset=utf-8",
     { "Cache-Control": "no-store" },
   );

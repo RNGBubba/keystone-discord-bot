@@ -44,6 +44,41 @@ describe("Drizzle web stores", () => {
     }
   });
 
+  it("re-keys a session atomically and deletes every session for one user", async () => {
+    const harness = await createMigratedPglite();
+    try {
+      const store = new DrizzleSessionStore(harness.db);
+      const original = session();
+      await store.create(original);
+
+      const next: WebSession = {
+        ...original,
+        id: "next-hashed-id",
+        csrfHash: "next-hashed-csrf",
+        createdAt: new Date().toISOString(),
+      };
+      expect(await store.rotate(original.id, next)).toBe(true);
+      expect(await store.get(original.id)).toBeUndefined();
+      expect(await store.get(next.id)).toMatchObject({
+        userId: original.userId,
+        accessToken: "sealed-access-token",
+        csrfHash: "next-hashed-csrf",
+      });
+      expect(await store.rotate("already-gone", next)).toBe(false);
+
+      await store.create({
+        ...original,
+        id: "another-row",
+        userId: "999999999999999999",
+      });
+      expect(await store.deleteForUser(original.userId)).toBe(1);
+      expect(await store.get(next.id)).toBeUndefined();
+      expect(await store.get("another-row")).toBeDefined();
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("counts only the requested guild in the overview read model", async () => {
     const harness = await createMigratedPglite();
     try {

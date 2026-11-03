@@ -24,6 +24,8 @@ remains a later option, not a requirement for the P6 settings surface.
 | `GET /dashboard/fleet` | session | Fleet table: each manageable guild and its enabled modules |
 | `POST /dashboard/fleet/preview` | session + CSRF + per-guild authz | Schema-validated template diff across selected guilds; no writes |
 | `POST /dashboard/fleet/apply` | session + CSRF + per-guild authz | Apply the previewed plan; one audited settings write per module |
+| `GET /dashboard/instance` | session + owner | Deployment mode, session rotation, rate budgets, owner ids |
+| `POST /dashboard/instance/sessions/revoke` | session + owner + CSRF | Delete every dashboard session for a user id |
 | `GET /dashboard/guilds/:id` | session + guild authz | Overview page |
 | `GET /dashboard/guilds/:id/settings/:module` | session + guild authz | Schema-generated settings widgets plus the module audit trail |
 | `POST /dashboard/guilds/:id/settings/:module` | session + guild authz + CSRF | Parse named widgets, save through the module schema, re-render field errors on rejection |
@@ -40,13 +42,41 @@ Every response carries `X-Content-Type-Options`, `Referrer-Policy`,
 `X-Frame-Options`, `Cross-Origin-Opener-Policy` and a restrictive CSP.
 Authenticated responses are `Cache-Control: no-store`.
 
+## Sessions and limits
+
+`AuthService.resolve` reads the opaque cookie on every request. On a `GET` or
+`HEAD` past `rotationIntervalMs` (15 minutes in `runtime.ts`) it mints a new
+session token and CSRF token, keeps the sealed Discord token and the absolute
+expiry, and calls `SessionStore.rotate(oldId, next)`; the old id is gone in one
+step, so a replay is a `401`. `createdAt` means the issue time of the current
+credential. Rotation is never attempted on a `POST`: that request carries a CSRF
+token minted against the old hash.
+
+`POST /logout` calls `DiscordOAuth.revokeToken` first and deletes the local row
+second, even if Discord is down. The browser session is the thing under our
+control; remote revocation is best effort and is reported, never assumed.
+
+`RateLimiter` is a fixed window keyed by signed-in user or socket address, in
+`auth`, `dashboard`, `write` and `api` classes. `server.ts` applies it after the
+session is resolved and before routing; a refusal is `429` with `Retry-After`.
+`/healthz` is exempt. There is one map because `apps/web` is one process; a
+multi-process deployment would need a shared counter, which is not claimed.
+
+`WEB_OWNER_IDS` is the only instance-wide allow-list. Guild Administrator or
+Manage Server never implies it. The owner console exposes deployment mode and a
+sign-out-every-session action; it is not a settings write and appends no audit
+row.
+
 ## The request path
 
 ```text
 browser
   │  keystone_session cookie (random opaque value)
   ▼
-AuthService.session(sha256(cookie))
+RateLimiter.check(class, user-or-address)   → 429 + Retry-After when spent
+  ▼
+AuthService.resolve(sha256(cookie), method)
+  │  rotate on a safe GET past the interval
   │  WebSession { sealed Discord access token, csrf hash, expiry }
   ▼
 GuildAccessService.authorize(accessToken, :guildId)
@@ -288,14 +318,16 @@ server or a browser.
 
 ## Deliberately not done yet
 
-- Analytics aggregates and bulk actions beyond the built-in and saved templates.
-- Token refresh/rotation, Discord token revocation on logout, idle timeout.
-  No refresh token is stored until that path exists; the session re-authenticates
+- Bulk actions beyond the built-in and saved templates.
+- Idle timeout and a Discord refresh-token path. Rotation re-keys the opaque
+  session cookie; it does not extend the Discord grant. No refresh token is
+  stored until refresh and single-flight exist, so the session re-authenticates
   when its access token expires.
 - Public API tokens (`keystone_…`), scopes, per-token rate limits,
   `Idempotency-Key`, webhooks and an OpenAPI document.
-- Live OAuth against Discord. The local probe drives a real Postgres session,
-  but it fakes the OAuth code exchange, so a Discord login is not claimed.
+- Live OAuth against Discord and live Discord token revocation. The local probe
+  drives a real Postgres session and asserts revocation at the port, but it fakes
+  the OAuth code exchange, so neither is claimed.
 
 The kill signal in [[Roadmap]] says read-only first if the authorization matrix
 cannot pass. That step is done; settings writes now reuse the same gate. This is

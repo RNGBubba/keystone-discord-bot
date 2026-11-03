@@ -5,7 +5,7 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**132 features** across 17 domains: **110 in repo**, **11 open**, **7 planned**. Live behaviour is marked separately; a green
+**133 features** across 17 domains: **111 in repo**, **11 open**, **7 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
@@ -22,7 +22,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Content | 7 | 6 | 0 | 0 |
 | Music | 4 | 1 | 1 | 0 |
 | AI | 7 | 6 | 1 | 0 |
-| Operations | 15 | 11 | 2 | 2 |
+| Operations | 16 | 12 | 2 | 2 |
 | Portability | 12 | 12 | 0 | 0 |
 | Invites | 3 | 3 | 0 | 0 |
 | Forms and applications | 3 | 3 | 0 | 0 |
@@ -171,6 +171,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | In-bot configuration | P7 | ✅ in repo | `modules/setup/src/config.test.ts`, `modules/setup/src/commands/config.ts`, `packages/kernel/src/config.ts` · live verified |
 | Web dashboard | P6 | ◐ open | Login, sessions, guild reads, schema forms, audited writes, the fleet view, templates, config portability and analytics are built; a live Discord OAuth round trip is not. |
 | Dashboard auth foundation | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `packages/db/src/web-store.test.ts`, `memory/vault/03-Architecture/Dashboard.md` · live unverified |
+| Dashboard session hardening | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `apps/web/src/auth.ts`, `apps/web/src/rate-limit.ts`, `packages/db/src/web-store.test.ts`, `memory/vault/03-Architecture/Dashboard.md` · live verified |
 | Dashboard settings writes | P6 | ✅ in repo | `apps/web/src/web.test.ts`, `apps/web/src/overview.ts`, `memory/vault/03-Architecture/Dashboard.md` · live verified |
 | Schema-driven settings widgets | P6 | ✅ in repo | `apps/web/src/settings-form.ts`, `apps/web/src/settings-form.test.ts`, `apps/web/src/web.test.ts`, `apps/web/src/render.ts`, `scripts/live-probe.ts` · live verified |
 | Settings audit trail | P6 | ✅ in repo | `packages/kernel/src/audit.ts`, `packages/kernel/src/settings.ts`, `packages/db/src/audit-store.ts`, `packages/db/src/audit-store.test.ts`, `apps/web/src/web.test.ts` · live verified |

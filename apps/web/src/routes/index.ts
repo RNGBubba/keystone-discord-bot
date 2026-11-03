@@ -2,6 +2,7 @@ import type { RouteContext } from "../request-context";
 import * as api from "./api";
 import * as auth from "./auth";
 import * as dashboard from "./dashboard";
+import * as instance from "./instance";
 
 export type RouteHandler = (
   ctx: RouteContext,
@@ -36,6 +37,12 @@ const routes: readonly Route[] = [
     pattern: exact("/dashboard/fleet/apply"),
     methods: ["POST"],
     handler: dashboard.fleetApply,
+  },
+  { pattern: exact("/dashboard/instance"), methods: ["GET"], handler: instance.instancePage },
+  {
+    pattern: exact("/dashboard/instance/sessions/revoke"),
+    methods: ["POST"],
+    handler: instance.instanceRevokeSessions,
   },
   {
     pattern: exact(`/dashboard/guilds/${GUILD_ID}/config/export`),

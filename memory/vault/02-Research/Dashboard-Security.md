@@ -26,12 +26,17 @@
   never receives a Discord token. An XSS bug must not become a seven-day account
   takeover. The current foundation stores no refresh token because it has no
   refresh path; do not store one until rotation and single-flight exist.
-- When refresh is implemented, refresh lazily inside the request path with a
-  per-session single-flight lock, so two concurrent requests do not invalidate
-  each other. Revoking either token kills the whole authorization; logout should
-  revoke and delete the session.
-- Idle timeout and rotation when refresh exists; the current row records
-  created/expires only. Do not add a rotation column before the path uses it.
+- **Rotation is implemented (pass 54).** On a safe `GET` past 15 minutes the
+  opaque cookie and CSRF token are re-keyed in one `SessionStore.rotate`; the
+  old value is a `401`. `createdAt` is the issue time of the current credential
+  and `expiresAt` is the absolute end, so no rotation column was added. A `POST`
+  never rotates: it carries a CSRF token minted against the old hash.
+- **Logout revokes, then deletes (pass 54).** `DiscordOAuth.revokeToken` posts to
+  Discord's revoke endpoint; the local row is deleted even when Discord fails.
+  A remote revocation is best effort and is never claimed without a real token.
+- **Idle timeout and a refresh-token path remain open.** No refresh token is
+  stored until refresh exists with a per-session single-flight lock; storing one
+  earlier would be an unused credential.
 
 ## Per-guild authorization: two checks, not one
 
@@ -49,7 +54,8 @@ requireGuildAccess(guildId, requiredPerms):
 - A sub-resource (`channelId`, `roleId`) must belong to the authorized guild;
   otherwise a user can pass their own guild id with a victim's channel id.
 - `MANAGE_GUILD` in one guild is not instance admin. Instance-wide actions need
-  an `owners[]` allow-list.
+  the `WEB_OWNER_IDS` allow-list; `requireOwner` is separate from
+  `authorizeGuild` and checks the session user id only.
 - Never return `DISCORD_TOKEN`, `CLIENT_SECRET`, `JWT_SECRET` or env from any
   dashboard route, even to an admin. A `GET /api/config` is a credential leak
   waiting for a CVE.
@@ -65,6 +71,9 @@ requireGuildAccess(guildId, requiredPerms):
 | Token in browser | Response/CSP test asserts no Discord token |
 | Stored XSS | Discord display names rendered as text, CSP present |
 | Stale permission cache | Demotion re-check on write |
+| Session replay | A pre-rotation cookie is `401`; rotation is one atomic re-key |
+| Abuse of an authenticated read | Per-class fixed window returns `429` with `Retry-After` |
+| Guild admin reaching instance scope | `requireOwner` refuses a manage-guild user at `403` |
 | Replay | `Idempotency-Key` returns the stored response, 409 in flight |
 
 ## API tokens and idempotency
@@ -93,7 +102,12 @@ The trade-off and rejected SvelteKit alternative belong in the P6 ADR.
 
 - Authz matrix, including sub-resources.
 - CSRF, `state`, `iss` and redirect-URI tests.
-- Session rotation and revocation.
+- Session rotation and revocation. Rotation and local deletion are proven over
+  real HTTP; Discord revocation is asserted at the OAuth port, not against a
+  live token.
+- Per-class rate limits, including anonymous auth attempts and the health
+  exemption.
+- `owners[]` refusal for a guild admin and success for an owner.
 - CSP and no-token-in-browser assertions.
 - OpenAPI diff and idempotency replay.
 - A staging OAuth smoke, marked separately from fixture tests.

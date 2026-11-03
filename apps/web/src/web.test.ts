@@ -23,6 +23,7 @@ import { AuthService } from "./auth";
 import { SecretBox, sha256 } from "./crypto";
 import { createWebHandler } from "./server";
 import { DashboardService } from "./overview";
+import { DEFAULT_RATE_LIMITS, RateLimiter, type RateLimitPolicies } from "./rate-limit";
 import type { ConfigBundle } from "./config-bundle";
 import type { DiscordGuild, DiscordOAuth } from "./oauth";
 
@@ -114,6 +115,8 @@ class FixedAnalyticsStore implements AnalyticsStore {
 
 class FakeOAuth implements DiscordOAuth {
   exchanges = 0;
+  readonly revocations: string[] = [];
+  revokeFails = false;
   readonly guilds: DiscordGuild[] = [
     { id: GUILD_A, name: "Alpha <script>alert(1)</script>", icon: null, owner: false, permissions: String(1n << 5n) },
     { id: GUILD_B, name: "Beta", icon: null, owner: false, permissions: "0" },
@@ -142,6 +145,18 @@ class FakeOAuth implements DiscordOAuth {
   async botInGuild(guildId: string): Promise<boolean> {
     return this.botGuilds.has(guildId);
   }
+
+  async revokeToken(accessToken: string): Promise<void> {
+    this.revocations.push(accessToken);
+    if (this.revokeFails) throw new Error("Discord revocation failed");
+  }
+}
+
+interface HarnessOptions {
+  rotationIntervalMs?: number;
+  owners?: readonly string[];
+  rateLimiter?: RateLimiter;
+  now?: () => number;
 }
 
 interface Harness {
@@ -157,7 +172,7 @@ interface Harness {
   close(): Promise<void>;
 }
 
-async function harness(): Promise<Harness> {
+async function harness(options: HarnessOptions = {}): Promise<Harness> {
   const oauth = new FakeOAuth();
   const sessions = new InMemorySessionStore();
   const dashboardStore = new InMemoryDashboardStore().seed({
@@ -178,12 +193,15 @@ async function harness(): Promise<Harness> {
     oauth,
     sessions,
     box: new SecretBox(randomBytes(32)),
+    now: options.now,
     config: {
       clientId: "client-id",
       clientSecret: "client-secret",
       redirectUri: "http://localhost/auth/callback",
       issuer: "https://discord.com",
       sessionTtlMs: 7 * 24 * 60 * 60_000,
+      rotationIntervalMs: options.rotationIntervalMs,
+      owners: options.owners,
     },
   });
   const handler = createWebHandler({
@@ -201,6 +219,7 @@ async function harness(): Promise<Harness> {
     logger: createSilentLogger(),
     secureCookies: false,
     databaseMode: "memory",
+    rateLimiter: options.rateLimiter ?? new RateLimiter(DEFAULT_RATE_LIMITS),
   });
   const server = createServer(handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -1430,6 +1449,177 @@ describe("BigInt guild permissions", () => {
 
   it("rejects an invalid bitfield instead of throwing", () => {
     expect(canManageGuild({ owner: false, permissions: "not-a-number" })).toBe(false);
+  });
+});
+
+describe("P6 session hardening", () => {
+  it("rotates the opaque session cookie and refuses the old value", async () => {
+    let clock = Date.now();
+    const test = await harness({ rotationIntervalMs: 60_000, now: () => clock });
+    try {
+      const { cookie, csrf } = await login(test);
+      clock += 60_000;
+
+      const rotated = await fetch(`${test.base}/api/v1/me`, { headers: { cookie } });
+      expect(rotated.status).toBe(200);
+      const nextSession = cookieValue(rotated, "keystone_session");
+      const nextCsrf = cookieValue(rotated, "keystone_csrf");
+      expect(nextSession).toBeTruthy();
+      expect(nextCsrf).toBeTruthy();
+      expect(nextSession).not.toBe(
+        cookie.split("; ").find((part) => part.startsWith("keystone_session="))?.split("=")[1],
+      );
+      expect(nextCsrf).not.toBe(csrf);
+
+      const replay = await fetch(`${test.base}/api/v1/me`, { headers: { cookie } });
+      expect(replay.status).toBe(401);
+
+      const current = `keystone_session=${nextSession}; keystone_csrf=${nextCsrf}`;
+      const accepted = await fetch(`${test.base}/api/v1/me`, { headers: { cookie: current } });
+      expect(accepted.status).toBe(200);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("revokes the Discord token before deleting the local session", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const response = await fetch(`${test.base}/logout`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "x-keystone-csrf": csrf },
+      });
+      expect(response.status).toBe(302);
+      expect(test.oauth.revocations).toEqual([ACCESS_TOKEN]);
+      expect(await test.sessions.get(sha256(cookie.split("=")[1] as string))).toBeUndefined();
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("still deletes the session when Discord revocation fails", async () => {
+    const test = await harness();
+    try {
+      test.oauth.revokeFails = true;
+      const { cookie, csrf } = await login(test);
+      const response = await fetch(`${test.base}/logout`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "x-keystone-csrf": csrf },
+      });
+      expect(response.status).toBe(302);
+      expect(test.oauth.revocations).toEqual([ACCESS_TOKEN]);
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(401);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("returns 429 past a route limit and recovers in the next window", async () => {
+    let clock = 1_000_000;
+    const limits: RateLimitPolicies = {
+      ...DEFAULT_RATE_LIMITS,
+      api: { max: 2, windowMs: 60_000 },
+    };
+    const test = await harness({ rateLimiter: new RateLimiter(limits, () => clock) });
+    try {
+      const { cookie } = await login(test);
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+      const limited = await fetch(`${test.base}/api/v1/me`, { headers: { cookie } });
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("60");
+      expect(await limited.json()).toMatchObject({ error: { code: "rate_limited" } });
+
+      clock += 60_000;
+      expect((await fetch(`${test.base}/api/v1/me`, { headers: { cookie } })).status).toBe(200);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("limits anonymous sign-in attempts and never limits the health check", async () => {
+    let clock = 1_000_000;
+    const limits: RateLimitPolicies = {
+      ...DEFAULT_RATE_LIMITS,
+      auth: { max: 1, windowMs: 60_000 },
+    };
+    const test = await harness({ rateLimiter: new RateLimiter(limits, () => clock) });
+    try {
+      expect((await fetch(`${test.base}/login`, { redirect: "manual" })).status).toBe(302);
+      const limited = await fetch(`${test.base}/login`, { redirect: "manual" });
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("60");
+
+      for (let index = 0; index < 3; index += 1) {
+        expect((await fetch(`${test.base}/healthz`)).status).toBe(200);
+      }
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("refuses the instance console to a guild admin and allows an owner", async () => {
+    const admin = await harness({ owners: ["999999999999999999"] });
+    try {
+      const { cookie, csrf } = await login(admin);
+      expect((await fetch(`${admin.base}/dashboard/instance`, { headers: { cookie } })).status).toBe(403);
+      const refused = await fetch(`${admin.base}/dashboard/instance/sessions/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf, userId: "777777777777777777" }).toString(),
+      });
+      expect(refused.status).toBe(403);
+    } finally {
+      await admin.close();
+    }
+
+    const owner = await harness({ owners: [USER] });
+    try {
+      const { cookie, csrf } = await login(owner);
+      const page = await fetch(`${owner.base}/dashboard/instance`, { headers: { cookie } });
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain("Instance");
+      expect(html).toContain("Session rotation");
+      expect(html).toContain(USER);
+
+      await owner.sessions.create({
+        id: "other-session-id",
+        userId: "777777777777777777",
+        username: "Other",
+        accessToken: "sealed-other",
+        csrfHash: sha256("other-csrf"),
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const revoked = await fetch(`${owner.base}/dashboard/instance/sessions/revoke`, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          cookie,
+          "content-type": "application/x-www-form-urlencoded",
+          "x-keystone-csrf": csrf,
+        },
+        body: new URLSearchParams({ userId: "777777777777777777" }).toString(),
+      });
+      expect(revoked.status).toBe(302);
+      expect(revoked.headers.get("location")).toBe("/dashboard/instance?revoked=1");
+      expect(await owner.sessions.get("other-session-id")).toBeUndefined();
+    } finally {
+      await owner.close();
+    }
+
+    const anonymous = await harness();
+    try {
+      expect((await fetch(`${anonymous.base}/dashboard/instance`)).status).toBe(401);
+    } finally {
+      await anonymous.close();
+    }
   });
 });
 

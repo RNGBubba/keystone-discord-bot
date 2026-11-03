@@ -46,7 +46,29 @@ export class DrizzleSessionStore implements SessionStore {
     };
   }
 
+  async rotate(id: string, next: WebSession): Promise<boolean> {
+    const updated = await this.db
+      .update(webSessions)
+      .set({
+        id: next.id,
+        csrfHash: next.csrfHash,
+        createdAt: new Date(next.createdAt),
+        expiresAt: new Date(next.expiresAt),
+      })
+      .where(eq(webSessions.id, id))
+      .returning({ id: webSessions.id });
+    return updated.length > 0;
+  }
+
   async delete(id: string): Promise<void> {
     await this.db.delete(webSessions).where(eq(webSessions.id, id));
+  }
+
+  async deleteForUser(userId: string): Promise<number> {
+    const removed = await this.db
+      .delete(webSessions)
+      .where(eq(webSessions.userId, userId))
+      .returning({ id: webSessions.id });
+    return removed.length;
   }
 }

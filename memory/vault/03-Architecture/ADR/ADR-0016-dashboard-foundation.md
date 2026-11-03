@@ -74,12 +74,14 @@ server-rendered app generates them from the module schema.
   module's schema (pass 49) and the fleet view applies built-in templates (pass
   50); modal editing, custom saved templates and bulk actions beyond templates
   are still open.
-- No token refresh yet: a session that outlives the Discord access token needs a
-  re-login. The unused refresh-token and rotation columns were removed in pass
-  20 rather than storing a credential no code uses. Rotation/refresh is a P6
-  follow-up.
-- No per-token rate limit or public API tokens yet; `Idempotency-Key`, webhooks
-  and OpenAPI remain P6.
+- No Discord refresh-token path yet: a session that outlives the access token
+  needs a re-login. The unused refresh-token column was removed in pass 20 rather
+  than storing a credential no code uses. Pass 54 rotates the opaque session
+  cookie every 15 minutes and revokes the Discord grant on logout, but it does
+  not extend the grant.
+- Per-route fixed windows now cover auth, dashboard, write and API classes
+  (pass 54). Public API tokens and per-token limits are still open;
+  `Idempotency-Key`, webhooks and OpenAPI remain P6.
 - The live OAuth redirect has not been exercised against Discord; the tests use a
   fake OAuth port and a real local HTTP server.
 

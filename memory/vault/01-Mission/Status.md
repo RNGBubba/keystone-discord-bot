@@ -2,6 +2,21 @@
 
 ## Now
 
+**Pass 54 hardened the P6 session path** (2026-11-03): an opaque session cookie
+is re-keyed every 15 minutes on a safe `GET`, so the previous value is refused
+immediately; logout asks the OAuth port to revoke the Discord access token
+before deleting the row and still deletes it when Discord is unavailable; fixed
+windows cap the auth (20 / 5 min), dashboard (120 / min), write (30 / min) and
+API (60 / min) route classes with `429` + `Retry-After`; and `WEB_OWNER_IDS`
+gates `/dashboard/instance` and its sign-out-every-session action, which a guild
+admin cannot reach. Tests are **540 / 80 files**; `pnpm probe:live` is
+**19/19**, adding `web-session-hardening`: 401 anonymous / 403 guild admin / 200
+owner, the owner's revocation killed the admin session, every limited class
+returned `429` then recovered while `/healthz` stayed exempt, the rotated cookie
+replaced the old one, and logout revoked through the fake OAuth port. Live
+Discord token revocation and live Discord OAuth are not claimed. See
+[pass 54](../../journal/2026-11-03-pass-54.md).
+
 **Pass 53 added the P6 dashboard analytics aggregates** (2026-11-03):
 `GET /dashboard/guilds/:id/analytics` and
 `GET /api/v1/guilds/:id/analytics` reuse the existing `AnalyticsStore` over
@@ -11,8 +26,8 @@ bounded to 1–90 days; the page prints each source table's row count, marks ope
 tickets and active cases as current state, and says plainly when a window has no
 retained rows. A web process without a shared database adapter says analytics is
 unavailable instead of rendering an unexplained zero. Migration 0017 adds only
-the four missing guild/time indexes those window queries need. Tests are **533 /
-80 files**; `pnpm probe:live` is **18/18**, adding `web-analytics-aggregates`:
+the four missing guild/time indexes those window queries need. Tests are **540 /
+80 files**; `pnpm probe:live` is **19/19**, adding `web-analytics-aggregates`:
 seeded rows in the real Postgres tables matched every API and page aggregate, an
 empty guild was named, `days=91`/`abc` were refused at `400` and signed-out
 reads at `401`. The OAuth exchange used a fake port; live Discord OAuth remains
@@ -518,9 +533,11 @@ and apply through that same path. Pass 51 added checksummed config export, a
 previewed and audited import, and a baseline drift page through the same
 schemas and write path. Pass 52 added named saved templates and audited their
 create/update/delete through the same plan and writer. Pass 53 added read-only
-analytics aggregates over the existing ledgers. The remaining P6 exit items are
-session refresh/revocation, per-route rate limits, `owners[]`, scoped API tokens
-and the live Discord OAuth round trip. See
+analytics aggregates over the existing ledgers. Pass 54 added session rotation,
+logout revocation behind the OAuth port, per-route rate limits and the
+`owners[]` instance console. The remaining P6 exit items are idle timeout, a
+Discord refresh-token path, scoped API tokens and the live Discord OAuth round
+trip. See
 [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
@@ -593,13 +610,13 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 533 tests / 80 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 18/18 · memory current
+pnpm check        exit 0 · typecheck 0 · 540 tests / 80 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 19/19 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 17/17 migrations · Redis reachable · pnpm probe:live 18/18 · /healthz database=postgres · migration runner transaction defect fixed
+live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 17/17 migrations · Redis reachable · pnpm probe:live 19/19 · /healthz database=postgres · migration runner transaction defect fixed
 live web widgets 2026-11-03 UTC · real local HTTP login/session/CSRF · AI form generated from schema · saved 9 · one audit row actor live-probe-web-user source dashboard · 5000 rejected at 400 with field preserved · OAuth exchange fake, live Discord OAuth open
 live fleet     2026-11-03 UTC · real local HTTP fleet page listed two Postgres-backed guilds · strict-moderation preview diff · wrong fingerprint 409 · apply 302 · one moderation write + one dashboard audit row per guild · OAuth exchange fake
 live config portability 2026-11-03 UTC · real local HTTP on Postgres · 12-module checksummed file export · multipart import preview with no write · edited checksum 400 · wrong fingerprint 409 · apply 302, one audited AI write, baseline stored · no drift, then one changed value after an out-of-band update · OAuth exchange fake
@@ -820,13 +837,18 @@ read that file.
 | 15 | A template previews a diff and applies only after the preview, with one audit row per module | `templates.test.ts`: deep merge, schema rejection, no-write preview, fingerprint invalidation, audited apply and no-op; `web.test.ts`: two-guild preview, wrong fingerprint `409`, apply `302`, one row per guild, non-admin/bot-absent `403`, stale preview after an external change, missing CSRF `403` | Real local HTTP + in-memory repository, plus the Postgres `web-fleet-templates` live check |
 | 16 | A saved template is schema-validated on save and on apply, and its lifecycle is audited | `saved-templates.test.ts`: snapshot read through `SettingsService`, create/update/delete rows, stale preview after edit, invalid stored row reported and refused with no write; `config-template-store.test.ts`: PGlite round trip and case-insensitive unique name; `web.test.ts`: save, list, edit, two-guild apply with one audited row per guild, tampered/stale `409`, invalid row `400`, audited delete | Real local HTTP + in-memory repository and **PGlite**, plus the Postgres `web-saved-templates` live check |
 | 17 | Analytics is the existing read model, bounded and honest about sparse data | `analytics.test.ts`: the service passes a 30-day window to `AnalyticsStore`, refuses 0/91/7.5 before calling it, returns null in memory mode, and the renderer shows source rows, current-state labels and a no-rows notice; `web.test.ts`: page and API numbers, empty guild, `400` windows and authorization; `analytics-store.test.ts`: PGlite checks the four migration-0017 indexes | Real local HTTP + in-memory repository and **PGlite**, plus the Postgres `web-analytics-aggregates` live check |
+| 18 | The opaque session cookie rotates and the old value is dead | `web.test.ts`: past the interval a `GET` returns new session and CSRF cookies, the old cookie is `401` and the new one works; `web-store.test.ts`: `rotate` is one atomic re-key and a missing id returns false | Real local HTTP + **PGlite**, plus the Postgres `web-session-hardening` live check |
+| 19 | Logout revokes the Discord token before deleting the session, and deletes it even when revocation fails | `web.test.ts`: the fake port records the access token, the session is gone and `/api/v1/me` is `401`; with `revokeFails` the same happens and the failure is only logged | Real local HTTP + fake OAuth port; no live Discord revocation |
+| 20 | Each route class is limited and recovers; health is exempt | `web.test.ts`: API class `429` with `Retry-After`, next window `200`; anonymous sign-in `429`; `/healthz` stays `200`; `rate-limit.ts` has no per-URL bypass | Real local HTTP + a movable clock, plus the Postgres `web-session-hardening` live check |
+| 21 | Owners-only instance actions refuse a guild admin | `web.test.ts`: instance page and revoke action are `401` anonymous, `403` for a manage-guild user and `200`/`302` for `WEB_OWNER_IDS`; deleting every row for a user signs that session out | Real local HTTP + **PGlite**, plus the Postgres `web-session-hardening` live check |
 
 This table proves the foundation, the narrow write path, the schema-widget
-editor, the fleet/built-in/saved template paths and the analytics read, not the
-exit demo. The live OAuth round trip, token refresh/revocation, rate limits and
-scoped API tokens remain open. A live Postgres-backed session is now possible — pass 44 applied
-the session table and `/healthz` runs with `database: postgres` — but an
-authenticated OAuth session has still not crossed a real Discord login.
+editor, the fleet/built-in/saved template paths, the analytics read and session
+hardening, not the exit demo. Live Discord OAuth, live Discord token revocation,
+scoped API tokens and per-token idempotency remain open. A live Postgres-backed
+session is real — pass 44 applied the session table and `/healthz` runs with
+`database: postgres` — but an authenticated OAuth session has still not crossed
+a real Discord login, and revocation is asserted at the port only.
 
 ## P5 acceptance evidence
 
@@ -995,9 +1017,11 @@ reminders/ICS, modmail DM relay and the planned Components V2 UI/i18n work.
 follow-up. P6 remains the active phase
 for the dashboard. The auth gate, settings writes, schema-generated widgets and
 the settings audit trail are built in the existing `apps/web` HTML app; pass 50
-added the fleet view and built-in templates, and pass 52 added saved templates.
-The carrier decision is recorded in [[ADR-0016-dashboard-foundation]]. Next are
-token refresh and revocation, per-route rate limits, `owners[]`, scoped API
-tokens, per-token rate limits, `Idempotency-Key`, webhooks and OpenAPI. Before
+added the fleet view and built-in templates, pass 52 added saved templates, pass
+53 added analytics aggregates and pass 54 added session rotation, logout
+revocation, per-route limits and the `owners[]` instance console. The carrier
+decision is recorded in [[ADR-0016-dashboard-foundation]]. Next are scoped API
+tokens, per-token rate limits, `Idempotency-Key`, webhooks and OpenAPI, plus
+idle timeout and a refresh-token path. Before
 launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

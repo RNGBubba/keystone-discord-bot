@@ -128,8 +128,9 @@ rate-limited register leaves the app with no commands.
   and a fleet view with three built-in config templates that preview a
   schema-validated diff and apply only the previewed plan. The carrier is the
   framework-free `apps/web` HTML app; a future Next.js shell is not built and is
-  not required for this slice. Saved templates are in repo; analytics
-  aggregates, session hardening and scoped API tokens remain open.
+  not required for this slice. Saved templates, analytics aggregates and
+  session hardening are in repo; scoped API tokens and the live Discord OAuth
+  round trip remain open.
 - P7 invite tracking is in repo as the sixth module: `/invites` leaderboard,
   stats and who-invited-whom, backed by `invite_joins` and advisory fake-join
   flags. A cold cache records an unknown inviter; the adapter test covers it.
@@ -250,7 +251,7 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 533
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 540
   tests in 80 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
@@ -343,6 +344,17 @@ rate-limited register leaves the app with no commands.
   indexes. Live probe is 18/18: `web-analytics-aggregates` seeded real Postgres
   rows and matched every API/page aggregate, named an empty guild, and refused
   `days=91`/`abc` at `400`; OAuth exchange used a fake port.
+- Pass 54 hardened the P6 session path. The opaque Postgres session cookie is
+  re-keyed every 15 minutes on a safe `GET`, so the previous value is refused
+  immediately; logout asks the OAuth port to revoke the Discord access token
+  before deleting the row, and the local session still dies when Discord is
+  unavailable. Fixed windows cap the auth, dashboard, write and API route
+  classes with `429` + `Retry-After`; `/healthz` is exempt. `WEB_OWNER_IDS`
+  gates `/dashboard/instance` and its sign-out-every-session action, which a
+  guild admin cannot reach. Live probe is 19/19: `web-session-hardening`
+  proved the owner gate, session revocation, all four limited classes and the
+  rotation replay over real local HTTP and Postgres. The probe's OAuth exchange
+  is fake, so live Discord token revocation and live login are not claimed.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in
@@ -388,8 +400,8 @@ rate-limited register leaves the app with no commands.
   mode, forms modal input and forms in the guild export bundle, live
   role/select/voice paths, a live Discord timer delivery and a live panic
   lockdown (the SQL/service halves are live-proven), a real member leave,
-  pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth, analytics
-  aggregates, session hardening, scoped API tokens, and the rest of P7.
+  pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth and live token
+  revocation, scoped API tokens, and the rest of P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

@@ -2,8 +2,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Logger, WebSession } from "@keystone/kernel";
 import type { GuildAccessService } from "./access";
 import type { AuthService } from "./auth";
-import { CSRF_COOKIE, SESSION_COOKIE, parseCookies } from "./cookies";
+import { CSRF_COOKIE, SESSION_COOKIE, parseCookies, serializeCookie } from "./cookies";
+import { appendSetCookie } from "./http";
 import type { DashboardService } from "./overview";
+import type { RateLimiter } from "./rate-limit";
 
 export interface WebServerDeps {
   auth: AuthService;
@@ -12,6 +14,7 @@ export interface WebServerDeps {
   logger: Logger;
   secureCookies: boolean;
   databaseMode: "memory" | "postgres";
+  rateLimiter: RateLimiter;
 }
 
 export interface RouteContext {
@@ -38,7 +41,22 @@ export async function createRouteContext(
 ): Promise<RouteContext> {
   const url = new URL(req.url ?? "/", "http://localhost");
   const cookies = parseCookies(req.headers.cookie);
-  const session = await deps.auth.session(cookies.get(SESSION_COOKIE));
+  const method = req.method ?? "GET";
+  const resolution = await deps.auth.resolve(cookies.get(SESSION_COOKIE), method);
+
+  // Rotation happens before any route so the handler only ever sees the
+  // current session. The replacement cookies are appended now; a later
+  // redirect or logout merge keeps them instead of overwriting them.
+  if (resolution.rotated) {
+    const options = {
+      maxAgeMs: resolution.rotated.maxAgeMs,
+      httpOnly: true,
+      secure: deps.secureCookies,
+      sameSite: "Lax" as const,
+    };
+    appendSetCookie(res, serializeCookie(SESSION_COOKIE, resolution.rotated.sessionToken, options));
+    appendSetCookie(res, serializeCookie(CSRF_COOKIE, resolution.rotated.csrfToken, options));
+  }
 
   return {
     deps,
@@ -46,9 +64,9 @@ export async function createRouteContext(
     res,
     url,
     path: url.pathname,
-    method: req.method ?? "GET",
+    method,
     cookies,
-    session,
-    csrfToken: cookies.get(CSRF_COOKIE) ?? "",
+    session: resolution.session,
+    csrfToken: resolution.rotated?.csrfToken ?? cookies.get(CSRF_COOKIE) ?? "",
   };
 }

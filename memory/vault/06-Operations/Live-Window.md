@@ -6,7 +6,7 @@
 > A passing local suite does not prove a service; this page records the last
 > `pnpm probe:live` run against the configured Postgres and Redis.
 
-Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T02:08:07.015Z.
+Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T06:13:37.995Z.
 
 | Service | Result |
 | --- | --- |
@@ -22,12 +22,12 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T02:08:07.01
 | postgres-settings-restart | pass | one settings row written, pool closed and reopened, same value read back | operations.in-bot-config |
 | redis-shared-cooldown | pass | two clients: first allowed, second refused with 1999ms remaining |  |
 | bullmq-job-idempotency | pass | two enqueues with one idempotency key produced one handler call and a completed Postgres receipt |  |
-| bullmq-delayed-timer | pass | one delayed job fired once after 1211ms and wrote a completed receipt |  |
+| bullmq-delayed-timer | pass | one delayed job fired once after 1234ms and wrote a completed receipt |  |
 | temporary-moderation-expiry | pass | a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event |  |
 | panic-snapshot-persistence | pass | a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only |  |
 | content-timer-delivery | pass | a real community record delivered a reminder and a scheduled message once, and two concurrent claims produced exactly one send |  |
 | portability-dry-run | pass | dry run reported 1 added / 0 changed / 0 removed setting(s) | portability.dry-run-import-diff |
-| portability-import-verify | pass | bundle checksum a30d12e235d5… matched after import 28d0597f | portability.restore-and-config-hash, security.backup-restore |
+| portability-import-verify | pass | bundle checksum 58b82caee28f… matched after import 9892b24a | portability.restore-and-config-hash, security.backup-restore |
 | portability-rollback | pass | the applied import restored its pre-import backup; the destination has no settings rows | portability.rollback-window, security.backup-restore |
 | portability-deletion-receipt | pass | deletion receipt retained 1 setting(s) and the guild row is gone | portability.deletion-receipt |
 | web-health-postgres | pass | /healthz returned 200 with database=postgres on an ephemeral port |  |
@@ -36,6 +36,7 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T02:08:07.01
 | web-config-export-import-drift | pass | real local HTTP on Postgres: exported a 12-module checksummed bundle as a file; uploaded it to another guild via multipart and previewed the diff without writing; an edited checksum was refused at 400 and a wrong fingerprint at 409; apply wrote one AI row with one dashboard audit row and stored the baseline; drift showed no changes, then exactly one changed value after an out-of-band update; OAuth exchange itself used a fake port | operations.config-portability |
 | web-saved-templates | pass | real local HTTP on Postgres: saved a template from one guild, listed it, previewed a diff for two guilds without writing, refused a tampered fingerprint at 409 and a stale preview after an edit at 409, then applied one write per guild with one dashboard audit row each; an out-of-band schema-invalid row was reported and refused at 400; create/update/delete were audited; OAuth exchange itself used a fake port | operations.config-templates, operations.multi-server-fleet |
 | web-analytics-aggregates | pass | real local HTTP on Postgres: seeded 7 audit rows, 3 cases, 2 invite joins, 3 tickets and 3 command runs in the real tables, then the dashboard API and page matched every aggregate (7 logged events, 2 active cases, 3 cases opened, 2 invite joins/1 retained, 3 command runs/2 ok/1 blocked/200ms avg, 2 open tickets, 120-minute average close and 1 SLA breach); the source table counts matched; an empty guild said no rows instead of inventing activity; days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange itself used a fake port | operations.dashboard-analytics |
+| web-session-hardening | pass | real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the access token and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed | operations.dashboard-session-hardening |
 
 ## Rules
 
