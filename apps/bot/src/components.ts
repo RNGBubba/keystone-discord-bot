@@ -4,11 +4,13 @@ import {
   UserError,
   type ComponentInteractionLike,
   type ComponentSigner,
+  type ConfigPort,
   type FormStore,
   type Logger,
   type ModerationPort,
   type ModuleSettings,
 } from "@keystone/kernel";
+import { DEFAULT_LOCALE, guildLocale, t } from "@keystone/i18n";
 import {
   FORM_MODAL_TTL_MS,
   FormService,
@@ -29,6 +31,8 @@ export interface ComponentRuntimeDeps {
     readonly settings: ModuleSettings;
     readonly moderation: ModerationPort;
   };
+  /** Reads the setup module's per-guild locale; absent means English. */
+  readonly config?: ConfigPort;
   readonly logger: Logger;
   /** Injectable clock so id expiry and submission timestamps are deterministic. */
   readonly now?: () => number;
@@ -53,16 +57,22 @@ export function createFormRouter(deps: ComponentRuntimeDeps): ComponentRouter {
       action: "apply",
       kind: "button",
       guildOnly: true,
-      async handle({ interaction, payload, now: current }) {
+      async handle({ interaction, payload, now: current, locale }) {
         if (!interaction.guildId) return;
         if (!interaction.showModal) {
-          throw new UserError("This client cannot open a form. Run `/form submit` instead.");
+          throw new UserError(t(locale, "form.apply.noModal"));
         }
         const svc = await service(interaction.guildId);
         const form = await svc.panelForm(interaction.guildId, payload);
         if (!modalFits(form)) {
           await interaction.reply({
-            content: `This form has ${form.fields.length} questions and a Discord modal holds five. Submit with \`/form submit form:${form.key} answers:"${form.fields.map((field) => `${field.key}=...`).join("; ")}"\`.`,
+            content: t(
+              locale,
+              "form.apply.tooMany",
+              form.fields.length,
+              form.key,
+              form.fields.map((field) => `${field.key}=...`).join("; "),
+            ),
             ephemeral: true,
           });
           return;
@@ -79,20 +89,34 @@ export function createFormRouter(deps: ComponentRuntimeDeps): ComponentRouter {
       action: "submit",
       kind: "modal",
       guildOnly: true,
-      async handle({ interaction, payload }) {
+      async handle({ interaction, payload, locale }) {
         if (!interaction.guildId) return;
         const svc = await service(interaction.guildId);
         // panelForm also re-checks that the form is still open, so a form
         // closed while the modal was open cannot accept a late answer.
         const form = await svc.panelForm(interaction.guildId, payload);
+        const values = interaction.fields ?? {};
+        // Check required answers before the service so the refusal is localized;
+        // `FormService.submit` remains the final validator and the only writer.
+        const missing = form.fields
+          .filter((field) => field.required && !values[field.key]?.trim())
+          .map((field) => field.key);
+        if (missing.length > 0) {
+          throw new UserError(t(locale, "form.errors.missing", missing.join(", ")));
+        }
         const submission = await svc.submit(
           interaction.guildId,
           interaction.userId,
           form.key,
-          modalAnswers(form, interaction.fields ?? {}),
+          modalAnswers(form, values),
         );
         await interaction.reply({
-          content: `Submission received · \`${submission.id}\` · ${Object.keys(submission.answers).length} answers. Staff will review it; do not submit again while it is pending.`,
+          content: t(
+            locale,
+            "form.submit.received",
+            submission.id,
+            Object.keys(submission.answers).length,
+          ),
           ephemeral: true,
         });
       },
@@ -103,25 +127,31 @@ export function createFormRouter(deps: ComponentRuntimeDeps): ComponentRouter {
       kind: "button",
       guildOnly: true,
       permissions: ["ManageGuild"],
-      async handle({ interaction, payload }) {
+      async handle({ interaction, payload, locale }) {
         if (!interaction.guildId) return;
         const svc = await service(interaction.guildId);
         const pending = await svc.pending(interaction.guildId, payload);
         if (pending.length === 0) {
           await interaction.reply({
-            content: `No pending applications for \`${payload}\`. Review closed ones with \`/form review\`.`,
+            content: t(locale, "form.review.empty", payload),
             ephemeral: true,
           });
           return;
         }
         const lines = pending
           .slice(0, 10)
-          .map(
-            ({ submission, form }) =>
-              `\`${submission.id.slice(0, 8)}\` · ${form.key} · <@${submission.userId}> · ${Object.keys(submission.answers).length} answers`,
+          .map(({ submission, form }) =>
+            t(
+              locale,
+              "form.review.row",
+              submission.id.slice(0, 8),
+              form.key,
+              submission.userId,
+              Object.keys(submission.answers).length,
+            ),
           );
         await interaction.reply({
-          content: `${pending.length} pending application${pending.length === 1 ? "" : "s"} for \`${payload}\`:\n${lines.join("\n")}\nDecide with \`/form review submission:<id> decision:accept|deny\`.`,
+          content: t(locale, "form.review.pending", pending.length, payload, lines.join("\n")),
           ephemeral: true,
         });
       },
@@ -156,7 +186,17 @@ export function registerComponentInteractions(client: Client, deps: ComponentRun
         await handleModerationButton(like, deps.moderation);
         return;
       }
-      await router.dispatch(like, deps.signer, deps.now?.() ?? Date.now());
+      const locale = like.guildId
+        ? await guildLocale(deps.config, like.guildId)
+        : DEFAULT_LOCALE;
+      await router.dispatch(like, deps.signer, deps.now?.() ?? Date.now(), {
+        locale,
+        messages: {
+          expired: t(locale, "component.expired"),
+          noPermission: t(locale, "component.noPermission"),
+          guildOnly: t(locale, "component.guildOnly"),
+        },
+      });
     })().catch((error: unknown) => {
       deps.logger.error("component interaction failed", {
         kind: like.kind,

@@ -33,6 +33,8 @@ export interface ComponentRouteContext {
   readonly action: string;
   readonly payload: string;
   readonly now: number;
+  /** The guild's locale; handlers translate their own replies. */
+  readonly locale: string;
 }
 
 export interface ComponentRoute {
@@ -144,10 +146,23 @@ export function createComponentSigner(secret: string, clock: () => number = Date
 
 // --- router ---------------------------------------------------------------
 
-const EXPIRED =
-  "That panel has expired. Run the command again to get a fresh one.";
-const NO_PERMISSION = "You do not have permission to use that button.";
-const GUILD_ONLY = "That control only works inside a server.";
+/** The three refusals the router owns, already translated by the caller. */
+export interface ComponentMessages {
+  readonly expired: string;
+  readonly noPermission: string;
+  readonly guildOnly: string;
+}
+
+export const DEFAULT_COMPONENT_MESSAGES: ComponentMessages = {
+  expired: "That panel has expired. Run the command again to get a fresh one.",
+  noPermission: "You do not have permission to use that button.",
+  guildOnly: "That control only works inside a server.",
+};
+
+export interface ComponentDispatchOptions {
+  readonly locale?: string;
+  readonly messages?: ComponentMessages;
+}
 
 /**
  * Routes signed component ids to one handler, checking the kind, the route's
@@ -174,11 +189,13 @@ export class ComponentRouter {
     interaction: ComponentInteractionLike,
     signer: ComponentSigner,
     now: number = Date.now(),
+    options: ComponentDispatchOptions = {},
   ): Promise<boolean> {
+    const messages = options.messages ?? DEFAULT_COMPONENT_MESSAGES;
     const parsed = signer.parse(interaction.customId, now);
     if (!parsed.ok) {
       if (parsed.reason === "foreign") return false;
-      await refuse(interaction, EXPIRED);
+      await refuse(interaction, messages.expired);
       return true;
     }
 
@@ -191,14 +208,14 @@ export class ComponentRouter {
     if (!route) return false;
 
     if (route.guildOnly && !interaction.guildId) {
-      await refuse(interaction, GUILD_ONLY);
+      await refuse(interaction, messages.guildOnly);
       return true;
     }
     if (
       route.permissions?.length &&
       !route.permissions.some((permission) => interaction.permissions.includes(permission))
     ) {
-      await refuse(interaction, NO_PERMISSION);
+      await refuse(interaction, messages.noPermission);
       return true;
     }
 
@@ -209,6 +226,7 @@ export class ComponentRouter {
         action: parsed.action,
         payload: parsed.payload,
         now,
+        locale: options.locale ?? "en",
       });
     } catch (error) {
       if (error instanceof UserError) {

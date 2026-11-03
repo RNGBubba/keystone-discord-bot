@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-59",
+    date: "2026-11-03",
+    summary:
+      "P7 i18n: panels, modal receipts and shared refusals render in the guild's setup.locale from one typed catalog, /config and the dashboard validate the same locale list, and Discord command descriptions are generated from the catalog instead of a hand-maintained table. A missing translation falls back to English, then to a plain sentence rather than a raw key.",
+    journal: "memory/journal/2026-11-03-pass-59.md",
+  },
+  {
     pass: "pass-58",
     date: "2026-11-03",
     summary:

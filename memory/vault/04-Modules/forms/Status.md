@@ -28,6 +28,14 @@ table reached 59 of 59.
   field name. A form with more than five questions keeps the `/form submit`
   path and the button says so. The panel's **Review submissions** button
   requires `ManageGuild`.
+- **The panel and its component replies follow `setup.locale` (pass 59).**
+  `formPanel`, the Apply modal receipt, the missing-field refusal, the review
+  queue and the router's expired/permission refusals read their copy from
+  `@keystone/i18n`; `en` and `de` are hand-written, the `/form` command and
+  option descriptions carry `description_localizations` from the same catalog,
+  and a missing key falls back to English, then to a plain sentence. Only the
+  component/panel surface is translated: the `/form list`, `review` and
+  `export` command replies remain English.
 - Legacy moderation buttons still use their pre-pass-58 ids; new panels use
   HMAC-signed `k1:` ids whose signature, expiry, guild and route permission are
   checked before a handler runs.
@@ -43,7 +51,7 @@ pnpm vitest run modules/forms packages/db/src/form-store.test.ts
   ✓ modules/forms/src/forms.test.ts (12 tests)
   ✓ packages/db/src/form-store.test.ts (3 tests)
 pnpm test
-  604 tests / 89 files
+  620 tests / 91 files
 pnpm budget
   20/100 roots · 141 subcommands · 161 actions · 4 context menus, OK
 ```
@@ -155,6 +163,8 @@ including `form`, and no drift.
 - A form with more than five fields cannot use the modal; that is a Discord
   limit, not a silent truncation.
 - A human slash `InteractionCreate` was not observed; the bridge is message-based.
+- The German catalog covers this module's panel and component replies only;
+  other modules' panels and the remaining embed cards are still English.
 
 ## Next
 

@@ -52,6 +52,7 @@
   "devDependencies": {
     "@keystone/config": "workspace:*",
     "@keystone/db": "workspace:*",
+    "@keystone/i18n": "workspace:*",
     "@keystone/importer": "workspace:*",
     "@keystone/kernel": "workspace:*",
     "@keystone/module-forms": "workspace:*",

@@ -49,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**604 tests across 89 files** without a Discord token, database or network.
+**620 tests across 91 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -99,7 +99,7 @@ the documents that speak in the present tense, and `pnpm memory:check` recompute
 the roots, subcommands, actions, menus, modules, test count and pass count from
 the generated files. A current-tense sentence that disagrees fails the gate; a
 historical sentence is allowed only when it names its pass. A capability claim
-with no code behind it — i18n and the Next.js shell today — must
+with no code behind it — the Next.js shell as of pass 59 — must
 be marked planned. The same pass added the root governance and issue/PR files.
 See [pass 48](memory/journal/2026-11-02-pass-48.md).
 
@@ -622,9 +622,10 @@ Everything below is free. No feature is moved behind a paywall.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail` and the four context menus are done; the
-  rest is parity completion (role persistence), the planned i18n work, and the
-  panels still rendered as embeds. The Components V2 layer (`packages/ui`) and
-  the form panel's modal submit landed in pass 58.
+  rest is parity completion (role persistence), translating the remaining module
+  copy, and the panels still rendered as embeds. The Components V2 layer
+  (`packages/ui`) and the form panel's modal submit landed in pass 58; i18n,
+  `setup.locale` and derived command descriptions landed in pass 59.
 - **P8:** `/music` queue control ships disabled by default; bring-your-own
   Lavalink playback is the open piece (no bundled streamer).
 - **P9:** docs site, release workflow and self-host kit; the 14-lesson curriculum is already in `memory/vault/05-Learning/` and checked by `pnpm memory:check`.
@@ -659,7 +660,7 @@ See [the parity matrix](memory/vault/01-Mission/Parity-Matrix.md) and
 | P8 Music playback | **Open** | `play`, `skip` and `stop` refuse with the exact missing pieces (no voice/Lavalink client, no `LAVALINK_URL`); the refusal is live-proven, streaming is not shipped |
 | P7 Temporary moderation | Done in repo | `/mod ban duration:<minutes>` and `/mod temp-role` write `expires_at`; one delayed `moderation.expire` job, an atomic claim, a failed-release retry and startup recovery. Live SQL/service check; Discord action not live |
 | P7 Scheduled delivery | Done in repo | `/tools reminder` and `/tools schedule` enqueue `content.deliver`; an atomic claim lets exactly one of the timer and the sweep send, and a failed send releases it. Live SQL/service check; Discord delivery not live |
-| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail, temporary moderation, panic mode and goodbye shipped; real playback and UI/i18n open |
+| P7 Parity completion | **In progress** | Invite tracking, audit logging, link/profanity/zalgo filters, auto-responders, analytics, in-bot config, `/export`, forms, events, modmail, temporary moderation, panic mode and goodbye shipped; real playback, translating the remaining copy and migrating the remaining embeds open |
 
 Live evidence (2026-11-01): `AI Team#5758` connected and Discord reported 20
 global roots (including `/analytics`, `/config`, `/event`,

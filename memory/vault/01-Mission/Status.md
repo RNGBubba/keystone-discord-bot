@@ -2,6 +2,28 @@
 
 ## Now
 
+**Pass 59 added P7's i18n slice** (2026-11-03): `packages/i18n` is a
+framework-free catalog whose keys are typed from the English messages, so every
+translation must accept the same arguments — a translator cannot drop an
+interpolation or change a plural argument's type without a compile error. The
+shipped surfaces are translated into `en` and `de`: the form panel, the Apply
+modal receipt, the missing-field refusal, the component router's expired,
+permission and guild refusals, the review queue, and the ping/about/form command
+descriptions plus their options. The per-guild locale is `setup.locale`, an enum
+in the setup module's own schema, so `/config`, the dashboard widget and the API
+all validate it through one `SettingsService` write path; an unsupported value
+is refused and the stored locale is unchanged. Discord command descriptions
+carry `description_localizations` generated from the same catalog, and an
+untranslated command stays English-only rather than inventing text. A missing
+key falls back to English and then to a plain sentence, never to the raw key.
+Tests are **620 / 91 files**; `pnpm probe:live` is **24/24**, extending
+`web-component-panels`: a guild set to `de` rendered the panel, receipts,
+refusals and review list in German while the stored row stayed the only
+submission, `locale: "xx"` was rejected by the schema, a partial catalog fell
+back to English, an unknown key returned a sentence, and clearing the setting
+restored English. The rest of the modules' copy is still English. See
+[pass 59](../../journal/2026-11-03-pass-59.md).
+
 **Pass 58 opened P7 with the Components V2 layer** (2026-11-03): `packages/ui` now
 exists as a framework-free builder. `layout()` emits a typed container, text,
 section, separator and action-row tree and throws when a panel would exceed
@@ -18,10 +40,11 @@ the form's fields, a valid submit calls the same `FormService.submit`, a missing
 answer is refused by field name, and a form over five questions keeps the
 command path. `INTERACTION_SECRET` is optional; without it the signing key is
 per-process, so panels from before a restart are refused rather than sharing a
-default. Tests are **604 / 89 files**; `pnpm probe:live` is **24/24**, adding
+default. That pass reported **604 / 89 files**; `pnpm probe:live` was **24/24**, adding
 `web-component-panels` through the real discord.js adapter and router on
 Postgres. A live gateway click, right-click or modal submit is not claimed. i18n
-and the remaining embed panels are still open. See
+and the remaining embed panels were still open at that pass; pass 59 has since
+landed i18n. See
 [pass 58](../../journal/2026-11-03-pass-58.md).
 
 **Pass 57 closed P6's landable work with the session idle timeout and refresh-token
@@ -693,7 +716,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 604 tests / 89 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 24/24 · memory current
+pnpm check        exit 0 · typecheck 0 · 620 tests / 91 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 24/24 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -708,6 +731,7 @@ live dashboard analytics 2026-11-03 UTC · real local HTTP on Postgres · 7 audi
 live webhooks    2026-11-03 UTC · real local HTTP on Postgres · endpoint created, secret shown once and sealed at rest · local receiver verified t/v1 HMAC independently · settings.updated delivered with module/actor/source · always-500 receiver tried 3 times then failed with HTTP 500 on the receipt page · both removals audited · non-loopback http 400 · OAuth exchange fake
 live idempotency 2026-11-03 UTC · real local HTTP on Postgres · same key and body replayed byte-identically with Idempotent-Replayed: true · different body 409 idempotency_conflict · exactly one settings.update audit row · receipt stored the fingerprint and 200 status · OAuth exchange fake
 live session lifecycle 2026-11-03 UTC · real local HTTP on Postgres · 4 idle minutes of a 5-minute window accepted and last_seen_at moved · 6 idle minutes 401 with the row deleted · one refresh call for two concurrent requests · rotated sealed refresh token and new access expiry stored · spent refresh token replay 401 with the row deleted · logout revoked the refresh grant · OAuth exchange/refresh/revoke fake
+live i18n         2026-11-03 UTC · real discord.js adapter + signed router on Postgres · setup.locale=de rendered the form panel, modal receipt, missing-field/member/expired refusals and review list in German · locale=xx refused by the setup schema, effective locale stayed de · partial catalog fell back to English and an unknown key returned a sentence, not the key · clearing the setting restored English · form command description_localizations.de generated from the same catalog · gateway click/modal submit not claimed
 live components   2026-11-03 UTC · real discord.js adapter + signed router on Postgres · V2 form panel container with signed Apply/staff ids · Apply opened a modal with the form title and two inputs · valid submit wrote one form_submissions row · missing tz refused with no row · expired id refused before the handler · member refused, manager saw 1 pending · gateway click/modal submit not claimed
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command

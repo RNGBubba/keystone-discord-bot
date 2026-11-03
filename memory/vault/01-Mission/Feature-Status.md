@@ -5,7 +5,7 @@
 > Machine truth: [`features.json`](../../machine/features.json). This page is generated.
 > The competitor columns stay in [[Parity-Matrix]]; this page is the implementation status.
 
-**134 features** across 17 domains: **113 in repo**, **10 open**, **7 planned**. Live behaviour is marked separately; a green
+**134 features** across 17 domains: **114 in repo**, **10 open**, **6 planned**. Live behaviour is marked separately; a green
 box means the code and its tests exist, not that a live guild has run it.
 
 ## Domains
@@ -22,7 +22,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Content | 7 | 6 | 0 | 0 |
 | Music | 4 | 1 | 1 | 0 |
 | AI | 7 | 6 | 1 | 0 |
-| Operations | 17 | 14 | 1 | 2 |
+| Operations | 17 | 15 | 1 | 1 |
 | Portability | 12 | 12 | 0 | 0 |
 | Invites | 3 | 3 | 0 | 0 |
 | Forms and applications | 3 | 3 | 0 | 0 |
@@ -181,7 +181,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Config export, import and drift | P6 | ✅ in repo | `apps/web/src/config-bundle.ts`, `apps/web/src/config-bundle.test.ts`, `apps/web/src/overview.ts`, `apps/web/src/routes/dashboard.ts`, `apps/web/src/render.ts`, `packages/kernel/src/baselines.ts`, `packages/db/src/config-baseline-store.ts`, `packages/db/src/config-baseline-store.test.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
 | Scoped API tokens | P6 | ✅ in repo | `packages/kernel/src/api-tokens.ts`, `packages/db/src/api-token-store.ts`, `packages/db/src/migrations/0018-api-tokens.ts`, `packages/db/src/web-store.test.ts`, `apps/web/src/api-tokens.ts`, `apps/web/src/api-tokens.test.ts`, `apps/web/src/openapi.ts`, `apps/web/src/openapi.test.ts`, `apps/web/src/authorization.ts`, `apps/web/src/routes/tokens.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
 | Public API / webhooks | P6 | ✅ in repo | `packages/kernel/src/webhooks.ts`, `packages/db/src/webhook-store.ts`, `packages/db/src/migrations/0019-webhooks.ts`, `apps/web/src/webhooks.ts`, `apps/web/src/routes/webhooks.ts`, `apps/web/src/idempotency.ts`, `apps/web/src/routes/api.ts`, `apps/web/src/webhooks.test.ts`, `packages/db/src/webhook-store.test.ts`, `packages/db/src/idempotency.test.ts`, `scripts/live-probe.ts` · live verified |
-| i18n | P7 | ⏳ planned | i18next, per-guild locale |
+| i18n | P7 | ✅ in repo | `packages/i18n/src/messages.ts`, `packages/i18n/src/index.ts`, `packages/i18n/src/de.ts`, `packages/i18n/src/i18n.test.ts`, `modules/setup/src/settings.ts`, `modules/setup/src/settings.test.ts`, `modules/forms/src/panel.ts`, `modules/forms/src/commands/form.ts`, `apps/bot/src/components.ts`, `apps/bot/src/adapt.ts`, `apps/bot/src/adapt.test.ts`, `apps/web/src/settings-form.test.ts`, `scripts/live-probe.ts` · live verified |
 | Status page | P9 | ⏳ planned | Public incidents |
 
 ## Portability

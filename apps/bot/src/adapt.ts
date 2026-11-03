@@ -35,6 +35,7 @@ import {
   type TextInputComponent,
   type UserContextMenuCommandInteraction,
 } from "discord.js";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, lookupMessage } from "@keystone/i18n";
 import type {
   ActionRow,
   CommandDefinition,
@@ -514,7 +515,59 @@ export function buildCommandJson(
     for (const option of definition.options ?? []) addOption(builder, option);
   }
 
-  return builder.toJSON();
+  const json = builder.toJSON() as unknown as CommandJsonNode;
+  localizeCommand(json, definition);
+  return json as unknown as RESTPostAPIChatInputApplicationCommandsJSONBody;
+}
+
+interface CommandJsonNode {
+  name: string;
+  type?: number;
+  description?: string;
+  description_localizations?: Record<string, string>;
+  options?: CommandJsonNode[];
+}
+
+/**
+ * Discord displays a localized description when the client's locale matches;
+ * the command name stays the invocation identifier. Both the text and the
+ * locale list come from `@keystone/i18n`, so a description cannot drift into a
+ * second hand-maintained localization table. An untranslated command simply
+ * carries no localization map and renders in English.
+ */
+function localizeCommand(json: CommandJsonNode, definition: CommandDefinition): void {
+  applyDescription(json, `command.${definition.name}`);
+
+  const nodes = flattenOptionNodes(json.options);
+  for (const subcommand of definition.subcommands ?? []) {
+    const node = nodes.find((entry) => entry.name === subcommand.name && entry.type === 1);
+    if (node) applyDescription(node, `command.${definition.name}.${subcommand.name}`);
+  }
+
+  const optionNames = new Set<string>();
+  for (const option of definition.options ?? []) optionNames.add(option.name);
+  for (const subcommand of definition.subcommands ?? []) {
+    for (const option of subcommand.options ?? []) optionNames.add(option.name);
+  }
+  for (const name of optionNames) {
+    const node = nodes.find((entry) => entry.name === name && entry.type !== 1 && entry.type !== 2);
+    if (node) applyDescription(node, `command.${definition.name}.option.${name}`);
+  }
+}
+
+function flattenOptionNodes(options: readonly CommandJsonNode[] | undefined): CommandJsonNode[] {
+  if (!options?.length) return [];
+  return options.flatMap((option) => [option, ...flattenOptionNodes(option.options)]);
+}
+
+function applyDescription(node: CommandJsonNode, key: string): void {
+  const localizations: Record<string, string> = {};
+  for (const locale of SUPPORTED_LOCALES) {
+    if (locale === DEFAULT_LOCALE) continue;
+    const text = lookupMessage(locale, `${key}.description`);
+    if (text) localizations[locale] = text;
+  }
+  if (Object.keys(localizations).length > 0) node.description_localizations = localizations;
 }
 
 function addOption(

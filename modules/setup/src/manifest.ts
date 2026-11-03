@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { defineModule } from "@keystone/kernel";
 import { setup } from "./commands/setup";
+import { setupDefaultSettings, setupSettingsSchema } from "./settings";
 import { config } from "./commands/config";
 import { exportCommand } from "./commands/export";
 
@@ -19,10 +19,8 @@ export const setupModule = defineModule({
   name: "Setup",
   description: "First-run readiness checks and per-guild module settings.",
   version: "0.3.0",
-  settingsSchema: z.object({
-    enabled: z.boolean().default(true),
-  }),
-  defaultSettings: { enabled: true },
+  settingsSchema: setupSettingsSchema,
+  defaultSettings: setupDefaultSettings,
   intents: ["Guilds"],
   permissions: [],
   commands: [setup, config, exportCommand],

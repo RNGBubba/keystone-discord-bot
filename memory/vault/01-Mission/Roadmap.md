@@ -274,8 +274,13 @@ rest of this phase is open.
   gate, now covering the separate context-menu budgets.
 - Split `modules/community` into domain folders, then extract a module only if the
   "add a feature in an afternoon" test still fails.
-- `packages/i18n`: typed keys, per-guild locale, command localizations; no machine
-  translation.
+- `packages/i18n` (shipped in pass 59): typed keys whose argument lists come from
+  the English catalog, `setup.locale` as the one per-guild locale through the
+  setup schema, Discord command descriptions derived from the same catalog, and
+  an English-then-sentence fallback that never shows a raw key. `en` and a
+  hand-written `de` cover the form panel, its component replies and the shared
+  refusals; no machine translation. Translating the remaining modules and
+  migrating the remaining embeds is open.
 - AI invisible features: automod triage, semantic search, summaries; pgvector
   ANN benchmark remains a gate.
 

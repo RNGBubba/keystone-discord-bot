@@ -10,6 +10,7 @@ import {
   type FormFieldDefinition,
   type FormSubmission,
 } from "@keystone/kernel";
+import { guildLocale } from "@keystone/i18n";
 import { FormService, type FormExport, type FormSummary } from "../forms";
 import { FORM_MODAL_TTL_MS, formPanel } from "../panel";
 import { formSettingsSchema } from "../settings";
@@ -294,7 +295,7 @@ export const form = defineCommand({
 
       // V2 is a layout, so the message must be created by an edit: deferring
       // first also keeps the 3-second acknowledgement inside the budget.
-      const panel = formPanel(published, {
+      const panelActions = {
         apply: signer.sign({
           namespace: "form",
           action: "apply",
@@ -307,9 +308,10 @@ export const form = defineCommand({
           payload: published.key,
           ttlMs: FORM_MODAL_TTL_MS,
         }),
-      });
+      };
+      const locale = await guildLocale(ctx.config, guildId);
       await ctx.interaction.deferReply();
-      await ctx.interaction.editReply({ v2: panel });
+      await ctx.interaction.editReply({ v2: formPanel(published, panelActions, locale) });
       await svc.markPanel(guildId, published.id, channelId);
       return;
     }

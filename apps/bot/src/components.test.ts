@@ -8,7 +8,14 @@ import {
   type ModalSpec,
   type ReplyInput,
 } from "@keystone/kernel";
-import { InMemoryFormStore, FormService, formDefaultSettings, formModal } from "@keystone/module-forms";
+import { t } from "@keystone/i18n";
+import {
+  InMemoryFormStore,
+  FormService,
+  formDefaultSettings,
+  formModal,
+  formPanel,
+} from "@keystone/module-forms";
 import { createFormRouter, type ComponentRuntimeDeps } from "./components";
 
 const NOW = 1_800_000_000_000;
@@ -175,6 +182,33 @@ describe("form panel components", () => {
     await expect(
       service.submit(GUILD, "member-9", "staff", "one=1; two=2; three=3; four=4; five=5; six=6"),
     ).resolves.toMatchObject({ userId: "member-9" });
+  });
+
+  it("renders the panel and router refusals in German, with English still the default", async () => {
+    const { form, router, signer, signed } = await fixture();
+    const german = JSON.stringify(
+      formPanel(form, { apply: signed("apply", "staff"), review: signed("review", "staff") }, "de"),
+    );
+    expect(german).toContain("Bewerben");
+    expect(german).toContain("Fragen");
+    expect(german).toContain("Bewerbungen prüfen");
+
+    const expired = new FakeComponent({ customId: signed("apply", "staff", 1_000) });
+    await router.dispatch(expired, signer, NOW + 1_000, {
+      locale: "de",
+      messages: {
+        expired: t("de", "component.expired"),
+        noPermission: t("de", "component.noPermission"),
+        guildOnly: t("de", "component.guildOnly"),
+      },
+    });
+    expect(expired.replies[0]?.content).toContain("abgelaufen");
+
+    const english = JSON.stringify(
+      formPanel(form, { apply: signed("apply", "staff"), review: signed("review", "staff") }),
+    );
+    expect(english).toContain("Apply");
+    expect(english).toContain("Questions");
   });
 
   it("builds a modal only for forms that fit and refuses an empty one", () => {

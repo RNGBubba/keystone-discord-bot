@@ -294,6 +294,45 @@ describe("asInteractionLike", () => {
   });
 });
 
+describe("command localization", () => {
+  it("derives root, subcommand and option descriptions from the catalog", () => {
+    const json = buildCommandJson(
+      defineCommand({
+        name: "form",
+        description: "Build application forms, publish a panel and review submissions.",
+        subcommands: [
+          {
+            name: "submit",
+            description: "Submit answers to an open form; one pending submission per member.",
+            options: [
+              { type: "string", name: "answers", description: "key=value pairs separated by ; or newlines" },
+            ],
+          },
+        ],
+        execute: noop,
+      }),
+    ) as unknown as {
+      description_localizations?: Record<string, string>;
+      options?: Array<{
+        name: string;
+        description_localizations?: Record<string, string>;
+        options?: Array<{ name: string; description_localizations?: Record<string, string> }>;
+      }>;
+    };
+
+    expect(json.description_localizations?.de).toContain("Bewerbungsformulare");
+    expect(json.options?.[0]?.description_localizations?.de).toContain("Reicht Antworten");
+    expect(json.options?.[0]?.options?.[0]?.description_localizations?.de).toContain("key=value");
+  });
+
+  it("leaves an untranslated command English-only instead of inventing text", () => {
+    const json = buildCommandJson(
+      defineCommand({ name: "mod", description: "Moderation", execute: noop }),
+    ) as unknown as { description_localizations?: Record<string, string> };
+    expect(json.description_localizations).toBeUndefined();
+  });
+});
+
 describe("Components V2 adapter", () => {
   const panel: V2Component[] = layout((ui) => {
     ui.container({ accentColor: 0x5865f2 }, (box) => {

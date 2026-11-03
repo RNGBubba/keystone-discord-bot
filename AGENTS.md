@@ -241,8 +241,9 @@ rate-limited register leaves the app with no commands.
   feeds a nested `/mod ban` payload through the real `asInteractionLike` adapter,
   registry and dispatch; it is not a gateway `InteractionCreate` and does not
   replace a human slash check.
-- The rest of P7 (i18n and the panels still using embeds) is open; the
-  Components V2 layer is shipped (pass 58), and analytics, in-bot config,
+- The rest of P7 (translating the remaining module copy and the panels still
+  using embeds) is open; the Components V2 layer and i18n are shipped (passes
+  58 and 59), and analytics, in-bot config,
   `/export`, `/music`, forms, events, modmail,
   temporary moderation, scheduled delivery, panic mode, goodbye, the `/setup`,
   `/appeal` and `/verify` hubs and the context menus are shipped.
@@ -256,8 +257,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 604
-  tests in 89 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 620
+  tests in 91 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -282,7 +283,7 @@ rate-limited register leaves the app with no commands.
   names the governed documents, and `pnpm memory:check` checks current-tense
   counts against `commands.json`, the vitest report and the pass ledger. A
   historical sentence must name its pass; a current one must match. A capability
-  with no code evidence (i18n and the Next.js shell) must be marked planned. The drift named by the completion plan is corrected, and the root
+  with no code evidence (the Next.js shell) must be marked planned. The drift named by the completion plan is corrected, and the root
   CONTRIBUTING/GOVERNANCE/SECURITY/CODE_OF_CONDUCT files plus issue/PR templates
   were added. No product behaviour changed.
 - Pass 49 built the P6 schema-widget slice. `apps/web/src/settings-form.ts`

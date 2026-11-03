@@ -67,6 +67,17 @@ describe("schema-driven settings form", () => {
     ).toMatchObject({ kind: "json" });
   });
 
+  it("renders the setup locale as a select over the same list the bot validates", () => {
+    const setup = modules.find((module) => module.id === "setup");
+    if (!setup) throw new Error("setup module is missing");
+    const form = buildSettingsForm(setup.settingsSchema, setup.defaultSettings);
+    const locale = form.fields.find((field) => field.path === "locale");
+    expect(locale).toMatchObject({ kind: "select", options: ["en", "de"], value: "en" });
+    const parsed = parseSettingsForm(form, value({ __rendered: "locale", locale: "de" }));
+    expect(parsed.patch.locale).toBe("de");
+    expect(parsed.errors.size).toBe(0);
+  });
+
   it("uses human labels and avoids leaking raw camelCase in common acronyms", () => {
     expect(labelFor("monthlyBudgetUsd")).toBe("Monthly budget USD");
     expect(labelFor("modLogChannelId")).toBe("Mod log channel ID");

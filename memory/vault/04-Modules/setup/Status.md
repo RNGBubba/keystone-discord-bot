@@ -11,6 +11,13 @@ P1 complete; `/config` added in pass 30 and `/export` in pass 31 (2026-11-01).
 - `/config list | get | set | export` reads and writes any registered module's
   per-guild settings through `SettingsService` and the owning Zod schema. It has
   its own 8-test suite and no second settings store.
+- **`setup.locale` is the per-guild language (pass 59).** The setup module's
+  settings schema declares `locale` as an enum over `@keystone/i18n`'s
+  supported list (`en`, `de`), so `/config set`, the schema-generated dashboard
+  widget and the API all validate the same values through `SettingsService`.
+  An unsupported value is rejected by the schema and the stored locale is
+  unchanged; an absent or unreadable record resolves to `en`. The form panel
+  and the component-router refusals read it through `guildLocale(config, id)`.
 - `/export guild | user | import | delete | drift | rollback` puts the P5
   portability service above Discord. `guild` and `user` post the same verified
   `keystone.export` files the CLI writes; `import` previews by default;
@@ -23,8 +30,8 @@ P1 complete; `/config` added in pass 30 and `/export` in pass 31 (2026-11-01).
 
 ```text
 pnpm typecheck
-pnpm vitest run modules/setup/src   # 27 tests / 3 files
-pnpm test                           # 604 tests / 89 files
+pnpm vitest run modules/setup/src   # 29 tests / 4 files
+pnpm test                           # 620 tests / 91 files
 pnpm budget                         # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
 pnpm commands:doctor                # Registry 20 roots · 141 subcommands · 4 context menus
 ```
@@ -124,6 +131,17 @@ it lacks for the rest.
 - A memory-mode guild export omits member profiles and audit events because the
   in-memory stores never retained them. Settings are effective values, not raw
   override rows.
+
+Pass 59 evidence for the locale:
+
+- `modules/setup/src/settings.test.ts` proves the enum rejects `xx` with the
+  allowed list and defaults to `en`.
+- `apps/web/src/settings-form.test.ts` proves the dashboard derives a `select`
+  with `["en", "de"]` from that same schema and parses `locale=de` back into
+  the patch.
+- `pnpm probe:live` read the value back through `SettingsService`, saw
+  `locale:xx` refused while `de` stayed effective, and the form panel rendered
+  German; clearing the record restored English.
 
 ## Next
 

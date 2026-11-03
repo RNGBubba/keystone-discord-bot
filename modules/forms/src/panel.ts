@@ -1,4 +1,5 @@
 import type { FormDefinition, ModalSpec, V2Component } from "@keystone/kernel";
+import { DEFAULT_LOCALE, t } from "@keystone/i18n";
 import { layout, modal } from "@keystone/ui";
 
 /**
@@ -20,27 +21,34 @@ export interface FormPanelActions {
  * The public application panel. The module owns the copy and the shape; the
  * bot owns the signed ids because only it has the signing secret.
  */
-export function formPanel(form: FormDefinition, actions: FormPanelActions): V2Component[] {
+export function formPanel(
+  form: FormDefinition,
+  actions: FormPanelActions,
+  locale: string = DEFAULT_LOCALE,
+): V2Component[] {
   const questions = form.fields.map((field) => `**${field.label}**`).join("\n");
   return layout((ui) => {
     ui.container({ accentColor: 0x5865f2 }, (box) => {
       box.text(`## ${form.name}`);
-      box.text(
-        form.description ||
-          `Applications for **${form.name}** are open. Staff review every submission.`,
-      );
+      box.text(form.description || t(locale, "form.panel.description", form.name));
       box.separator();
-      box.text(`**Questions**\n${questions}`);
+      box.text(`${t(locale, "form.panel.questions")}\n${questions}`);
       box.text(
         form.fields.length <= MAX_MODAL_FIELDS
-          ? "Press **Apply** to answer in a form. One pending application per member."
-          : `This form has ${form.fields.length} questions; Discord modals hold ${MAX_MODAL_FIELDS}. Use \`/form submit form:${form.key}\` instead.`,
+          ? t(locale, "form.panel.hint")
+          : t(locale, "form.panel.tooMany", form.fields.length, form.key),
       );
-      box.actions([ui.button({ style: "primary", label: "Apply", customId: actions.apply })]);
       box.actions([
-        ui.button({ style: "secondary", label: "Review submissions", customId: actions.review }),
+        ui.button({ style: "primary", label: t(locale, "form.panel.apply"), customId: actions.apply }),
       ]);
-      box.text("Answers are stored in this server and read only by staff.");
+      box.actions([
+        ui.button({
+          style: "secondary",
+          label: t(locale, "form.panel.review"),
+          customId: actions.review,
+        }),
+      ]);
+      box.text(t(locale, "form.panel.privacy"));
     });
   });
 }

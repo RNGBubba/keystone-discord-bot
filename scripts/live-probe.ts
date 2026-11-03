@@ -60,9 +60,17 @@ import {
   communitySettingsSchema,
 } from "../modules/community/src/index";
 import { PortabilityService } from "@keystone/importer";
-import { FormService, formPanel, formSettingsSchema } from "@keystone/module-forms";
+import { FormService, form, formPanel, formSettingsSchema } from "@keystone/module-forms";
+import {
+  FALLBACK_MESSAGE,
+  de as deCatalog,
+  en as enCatalog,
+  guildLocale,
+  resolveMessage,
+  t,
+} from "@keystone/i18n";
 import { createFormRouter } from "../apps/bot/src/components";
-import { asComponentInteraction, toV2Components } from "../apps/bot/src/adapt";
+import { asComponentInteraction, buildCommandJson, toV2Components } from "../apps/bot/src/adapt";
 import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
 import { createWebRuntime } from "../apps/web/src/runtime";
@@ -2414,6 +2422,59 @@ async function main(): Promise<void> {
     });
     await formService.edit(GUILD, seeded.key, { state: "open" });
 
+    // The effective locale lives in the setup module's settings record and is
+    // written through the same SettingsService `/config` and the dashboard use.
+    const i18nRegistry = new ModuleRegistry().registerAll(modules);
+    const settings = new SettingsService(createSettingsRepository(database), i18nRegistry);
+    // The same write path `/config set` and the dashboard use, with the command
+    // surface named as the source so the audit row is honest about the caller.
+    await settings.update(
+      GUILD,
+      "setup",
+      { locale: "de" },
+      { actorId: "live-probe-operator", source: "command" },
+    );
+    const german = await guildLocale(settings, GUILD);
+    assert(german === "de", `the guild locale read back as ${german}`);
+    const [storedLocale] = await database.runner.query<{ value: string }>(
+      `SELECT value::text AS value FROM settings
+        WHERE guild_id = '${GUILD}' AND module = 'setup' AND key = 'locale'`,
+    );
+    assert(storedLocale?.value === '"de"', `the stored locale is ${storedLocale?.value ?? "missing"}`);
+    const germanMessages = {
+      expired: t("de", "component.expired"),
+      noPermission: t("de", "component.noPermission"),
+      guildOnly: t("de", "component.guildOnly"),
+    };
+    const germanDispatch = { locale: german, messages: germanMessages };
+
+    // An unsupported locale never reaches the store: the setup schema rejects
+    // it, and the effective locale stays whatever was already valid.
+    let rejectedLocale = false;
+    try {
+      await settings.update(GUILD, "setup", { locale: "xx" });
+    } catch {
+      rejectedLocale = true;
+    }
+    assert(rejectedLocale, "the setup schema accepted an unsupported locale");
+    assert((await guildLocale(settings, GUILD)) === "de", "a rejected locale changed the effective locale");
+
+    // A missing key falls back to English, and a key no catalog has becomes a
+    // sentence rather than a raw identifier.
+    const partialCatalog = {
+      en: enCatalog,
+      de: { "component.noPermission": deCatalog["component.noPermission"] },
+    };
+    assert(
+      resolveMessage(partialCatalog, "de", "component.expired") === enCatalog["component.expired"](),
+      "a missing German key did not fall back to English",
+    );
+    const missingKey = resolveMessage({}, "de", "form.not.a.real.key");
+    assert(
+      missingKey === FALLBACK_MESSAGE && !missingKey.includes("form.not.a.real.key"),
+      "a missing key reached the user as a raw identifier",
+    );
+
     const router: ComponentRouter = createFormRouter({
       signer,
       forms: formStore,
@@ -2508,7 +2569,11 @@ async function main(): Promise<void> {
     );
 
     // The panel is a valid V2 layout on the real builder path, not a mock.
-    const panel = formPanel(seeded, { apply: applyId, review: reviewId });
+    const panel = formPanel(seeded, { apply: applyId, review: reviewId }, german);
+    assert(
+      JSON.stringify(panel).includes("Bewerben") && JSON.stringify(panel).includes("Fragen"),
+      "the German panel did not render its translated copy",
+    );
     const panelJson = (toV2Components(panel)[0] as unknown as { toJSON(): unknown }).toJSON() as {
       type?: number;
       components?: Array<{ type: number; components?: Array<{ custom_id?: string }> }>;
@@ -2521,16 +2586,19 @@ async function main(): Promise<void> {
     assert(rowIds.includes(reviewId), "the staff button's signed id is missing from the panel");
 
     const apply = button(applyId);
-    assert(await router.dispatch(apply.like, signer, now), "the Apply button was not routed");
+    assert(
+      await router.dispatch(apply.like, signer, now, germanDispatch),
+      "the Apply button was not routed",
+    );
     assert(apply.captured.modal?.title === "Probe application", "the modal title was not the form name");
     const modalId = apply.captured.modal?.custom_id;
     assert(typeof modalId === "string", "the Apply button did not open a modal");
 
     const submit = modal(modalId as string, { why: "because", tz: "UTC" });
-    await router.dispatch(submit.like, signer, now);
+    await router.dispatch(submit.like, signer, now, germanDispatch);
     assert(
-      String(submit.captured.replies[0]?.content).includes("Submission received"),
-      "a valid modal submit did not reach FormService",
+      String(submit.captured.replies[0]?.content).includes("Einsendung erhalten"),
+      "a valid modal submit did not render its German receipt",
     );
     const [stored] = await database.runner.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM form_submissions WHERE guild_id = '${GUILD}'`,
@@ -2538,9 +2606,9 @@ async function main(): Promise<void> {
     assert(stored?.count === "1", "the modal submit did not write one submission row");
 
     const invalid = modal(modalId as string, { why: "because" });
-    await router.dispatch(invalid.like, signer, now);
+    await router.dispatch(invalid.like, signer, now, germanDispatch);
     assert(
-      String(invalid.captured.replies[0]?.content).includes("Missing required field: tz"),
+      String(invalid.captured.replies[0]?.content).includes("Pflichtfeld fehlt: tz"),
       "a bad modal submit was not re-prompted with the missing field",
     );
     const [stillOne] = await database.runner.query<{ count: string }>(
@@ -2553,33 +2621,59 @@ async function main(): Promise<void> {
       now,
     );
     const expired = button(expiredId);
-    await router.dispatch(expired.like, signer, now + 1_000);
+    await router.dispatch(expired.like, signer, now + 1_000, germanDispatch);
     assert(
-      String(expired.captured.replies[0]?.content).includes("expired"),
-      "an expired component id was not refused",
+      String(expired.captured.replies[0]?.content).includes("abgelaufen"),
+      "an expired component id was not refused in German",
     );
     assert(expired.captured.modal === undefined, "an expired button still opened a modal");
 
     const memberReview = button(reviewId);
-    await router.dispatch(memberReview.like, signer, now);
+    await router.dispatch(memberReview.like, signer, now, germanDispatch);
     assert(
-      String(memberReview.captured.replies[0]?.content).includes("permission"),
+      String(memberReview.captured.replies[0]?.content).includes("Berechtigung"),
       "a member without ManageGuild reached the review queue",
     );
 
     const staffReview = button(reviewId, ["ManageGuild"]);
-    await router.dispatch(staffReview.like, signer, now);
+    await router.dispatch(staffReview.like, signer, now, germanDispatch);
     assert(
-      String(staffReview.captured.replies[0]?.content).includes("1 pending application"),
-      "the staff button did not list the pending application",
+      String(staffReview.captured.replies[0]?.content).includes("1 offene Bewerbung"),
+      "the staff button did not list the pending application in German",
+    );
+
+    // Discord command localizations come from the same catalog; an untranslated
+    // command keeps its English description and carries no localization map.
+    const formCommand = buildCommandJson(form) as unknown as {
+      description_localizations?: Record<string, string>;
+    };
+    assert(
+      formCommand.description_localizations?.de?.includes("Bewerbungsformulare") === true,
+      "the form command did not carry its German description",
+    );
+
+    // Clearing the setting restores the default locale and the English copy.
+    await settings.reset(GUILD, "setup", { actorId: "live-probe-operator", source: "command" });
+    const cleared = await guildLocale(settings, GUILD);
+    assert(cleared === "en", `clearing the locale left ${cleared}`);
+    const englishPanel = JSON.stringify(formPanel(seeded, { apply: applyId, review: reviewId }, cleared));
+    assert(
+      englishPanel.includes("Apply") && !englishPanel.includes("Bewerben"),
+      "the default locale did not render English after the override was cleared",
+    );
+    const englishExpired = button(expiredId);
+    await router.dispatch(englishExpired.like, signer, now + 1_000, { locale: cleared });
+    assert(
+      String(englishExpired.captured.replies[0]?.content).includes("expired"),
+      "the default locale refusal was not English after the override was cleared",
     );
 
     record({
       id: "web-component-panels",
       status: "pass",
       detail:
-        "real discord.js adapter + signed component router on Postgres: the form panel rendered as a V2 container with signed Apply and staff ids; the Apply button opened a modal whose title and two inputs came from the form; a valid modal submit wrote one form_submissions row; a submit missing a required field was re-prompted with the field name and wrote nothing; an expired id was refused before the handler and opened no modal; a member without ManageGuild was refused while a manager saw the one pending application. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed",
-      features: ["forms.application-forms"],
+        "real discord.js adapter + signed component router on Postgres: with setup.locale=de the form panel, the Apply modal receipt, the missing-field refusal, the expired-id refusal, the member permission refusal and the staff pending list all rendered in German; the valid submit still wrote exactly one form_submissions row and the missing-field submit wrote none; the setup schema rejected locale=xx and left the effective locale at de; a partial German catalog fell back to English and a key no catalog has returned a sentence, not the key; clearing the setting restored English for the same panel and refusal; the form command carried its German description from the same catalog. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed",
+      features: ["forms.application-forms", "operations.i18n"],
     });
   }
 

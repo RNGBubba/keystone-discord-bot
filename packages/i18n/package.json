@@ -1,0 +1,10 @@
+{
+  "name": "@keystone/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed translation keys, per-guild locale and Discord command descriptions, with a fallback that never exposes a raw key.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

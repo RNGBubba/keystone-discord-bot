@@ -2040,10 +2040,28 @@
             "wick-security": "❔"
           },
           "phase": "P7",
-          "status": "planned",
+          "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "i18next, per-guild locale",
-          "liveVerified": false
+          "note": "One framework-free `packages/i18n` instead of i18next: message keys are typed from the English catalog, so a translation must accept the same arguments and cannot drop an interpolation or change a plural argument's type. `en` and a hand-written `de` cover the surfaces that ship (the form panel and its modal/review receipts, the component-router refusals and the ping/about/form command descriptions); an untranslated key falls back to English, then to a plain sentence, never the raw key. The per-guild locale is `setup.locale`, an enum validated by the setup module's own Zod schema through the one SettingsService write path, so `/config`, the dashboard widget and the API share it; an unsupported value is refused and the effective locale stays. Discord command descriptions carry locale maps generated from the same catalog, and an untranslated command stays English-only. The rest of the modules' copy is not translated yet. Live 2026-11-03 through the real discord.js adapter on Postgres.",
+          "evidence": [
+            "packages/i18n/src/messages.ts",
+            "packages/i18n/src/index.ts",
+            "packages/i18n/src/de.ts",
+            "packages/i18n/src/i18n.test.ts",
+            "modules/setup/src/settings.ts",
+            "modules/setup/src/settings.test.ts",
+            "modules/forms/src/panel.ts",
+            "modules/forms/src/commands/form.ts",
+            "apps/bot/src/components.ts",
+            "apps/bot/src/adapt.ts",
+            "apps/bot/src/adapt.test.ts",
+            "apps/web/src/settings-form.test.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-component-panels"
+          ]
         },
         {
           "id": "operations.status-page",

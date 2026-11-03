@@ -231,6 +231,7 @@ async function main(): Promise<void> {
       settings: runtime.settings.forModule("moderation"),
       moderation: runtime.moderation,
     },
+    config: runtime.settings,
     logger: logger.child("components"),
   });
 
