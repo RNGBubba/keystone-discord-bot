@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-62",
+    date: "2026-11-03",
+    summary:
+      "P7 command copy: every registered root, subcommand and option description, plus the /ping, /about, /help, /rank and /ticket replies, comes from the typed catalog in German, and a coverage test fails when a command ships English-only.",
+    journal: "memory/journal/2026-11-03-pass-62.md",
+  },
+  {
     pass: "pass-61",
     date: "2026-11-03",
     summary:

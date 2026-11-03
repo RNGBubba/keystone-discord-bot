@@ -268,8 +268,18 @@ rate-limited register leaves the app with no commands.
   adapter into a stored row, and expired, forged and cross-guild ids were
   refused before a write. Moderation's appeal/verify ids remain the one
   unsigned handler, scoped and named in the journal.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 626
-  tests in 91 files.
+- Pass 62 closed P7's command-copy gap: `packages/i18n/src/command-copy.ts`
+  holds a hand-written German description for every registered root,
+  subcommand and option (253 keys generated from the registry), and `/ping`,
+  `/about`, `/help`, `/rank`, `/ticket` and the rank card reply through the
+  same typed catalog. A coverage test derives the keys in both directions and
+  classifies every command file as translated or deliberately English-only, so
+  a new command cannot quietly ship English-only. The copy still English is
+  named in the journal: community's operator configuration replies, the other
+  ten modules' replies, kernel guard copy, service-owned economy reasons and
+  operator-owned greeting text.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 636
+  tests in 92 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live

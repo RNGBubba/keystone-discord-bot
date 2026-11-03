@@ -18,11 +18,13 @@ import path from "node:path";
 import { loadEnv } from "@keystone/config";
 import {
   ComponentRouter,
+  InMemoryCooldownStore,
   ModuleRegistry,
   SettingsService,
   createComponentSigner,
   createLogger,
   createSilentLogger,
+  dispatchCommand,
   type CommunityActions,
   type CommunityMessage,
   type ComponentInteractionLike,
@@ -3212,6 +3214,179 @@ async function main(): Promise<void> {
         "community.suggestions",
         "community.polls",
       ],
+    });
+  }
+
+  // --- Command copy: one catalog for descriptions and replies ---------------
+  {
+    const registry = new ModuleRegistry().registerAll(modules);
+    const settings = new SettingsService(createSettingsRepository(database), registry);
+    await settings.update(
+      GUILD,
+      "setup",
+      { locale: "de" },
+      { actorId: "live-probe-operator", source: "command" },
+    );
+    const german = await guildLocale(settings, GUILD);
+    assert(german === "de", `the command-copy locale read back as ${german}`);
+
+    // A minimal InteractionLike: the dispatcher does not care which client
+    // built it, which is why this exercises the same pipeline as a slash
+    // command without a gateway connection.
+    const slash = (
+      commandName: string,
+      extra: {
+        subcommand?: string;
+        userId?: string;
+        options?: Record<string, string | number | boolean | null>;
+      } = {},
+    ) => {
+      const replies: ReplyInput[] = [];
+      let replied = false;
+      const interaction = {
+        id: `probe-${commandName}-${extra.subcommand ?? "root"}`,
+        commandName,
+        guildId: GUILD,
+        channelId: "live-probe-channel",
+        userId: extra.userId ?? "live-probe-member",
+        subcommand: extra.subcommand,
+        options: extra.options ?? {},
+        permissions: [] as string[],
+        get replied() {
+          return replied;
+        },
+        get deferred() {
+          return false;
+        },
+        async reply(input: ReplyInput) {
+          replied = true;
+          replies.push(input);
+          return undefined;
+        },
+        async deferReply() {
+          return undefined;
+        },
+        async editReply(input: ReplyInput) {
+          replies.push(input);
+          return undefined;
+        },
+        async followUp(input: ReplyInput) {
+          replies.push(input);
+          return undefined;
+        },
+      };
+      return { interaction, replies };
+    };
+
+    let clock = Date.now();
+    const deps = {
+      registry,
+      settings,
+      config: settings,
+      logger: createSilentLogger(),
+      cooldowns: new InMemoryCooldownStore(),
+      queue: { enqueue: async () => "probe", close: async () => undefined },
+      timers: { enqueue: async () => "probe", close: async () => undefined },
+      health: {
+        async probe() {
+          return {
+            database: { configured: true, reachable: true, migrated: true },
+            cache: { configured: true, reachable: true, detail: "memory" },
+          };
+        },
+      },
+      now: () => clock,
+    };
+
+    // Every registered chat-input root carries a German description, and so
+    // does every subcommand and option below it.
+    const chatInput = modules
+      .flatMap((entry) => entry.commands)
+      .filter((command) => (command.type ?? "chat-input") === "chat-input");
+    interface Node {
+      name: string;
+      type?: number;
+      description?: string;
+      description_localizations?: Record<string, string>;
+      options?: Node[];
+    }
+    let localized = 0;
+    let described = 0;
+    const untranslated: string[] = [];
+    const walk = (node: Node, path: string): void => {
+      described += 1;
+      const germanText = node.description_localizations?.de;
+      if (germanText && germanText !== node.description) localized += 1;
+      else untranslated.push(path);
+      for (const option of node.options ?? []) walk(option, `${path} ${option.name}`);
+    };
+    for (const command of chatInput) {
+      walk(buildCommandJson(command) as unknown as Node, `/${command.name}`);
+    }
+    assert(
+      untranslated.length === 0,
+      `these command descriptions have no German: ${untranslated.slice(0, 5).join(", ")}`,
+    );
+    assert(localized === described, "a node fell back to its English description");
+
+    const pong = slash("ping");
+    const pongOutcome = await dispatchCommand(deps, pong.interaction);
+    assert(pongOutcome.status === "ok", `the German ping did not run: ${pongOutcome.status}`);
+    assert(
+      String(pong.replies[0]?.content).startsWith("Pong! Keystone ist seit"),
+      `the German ping reply was ${String(pong.replies[0]?.content)}`,
+    );
+
+    const about = slash("about");
+    await dispatchCommand(deps, about.interaction);
+    const aboutEmbed = about.replies[0]?.embeds?.[0] as unknown as
+      | { description?: string }
+      | undefined;
+    assert(
+      String(aboutEmbed?.description).includes("quelloffener") === true,
+      "the /about card did not render its German description",
+    );
+
+    const help = slash("help", { subcommand: "browse" });
+    await dispatchCommand(deps, help.interaction);
+    const helpEmbed = help.replies[0]?.embeds?.[0] as unknown as
+      | { title?: string; description?: string }
+      | undefined;
+    assert(
+      helpEmbed?.title === "Keystone-Befehle" && String(helpEmbed?.description).includes("Befehle"),
+      "the /help browse card did not render in German",
+    );
+
+    // A key no catalog defines must reach a user as a sentence, and a locale
+    // that lacks a key must fall back to English rather than to the key.
+    assert(
+      resolveMessage({ en: enCatalog, de: deCatalog }, "de", "no.such.key") === FALLBACK_MESSAGE,
+      "a missing key did not resolve to the fallback sentence",
+    );
+    assert(
+      resolveMessage({ en: { "probe.englishOnly": () => "English only." } }, "de", "probe.englishOnly") ===
+        "English only.",
+      "a partial catalog did not fall back to English",
+    );
+
+    // Clearing the setting restores English for the same command pipeline.
+    await settings.reset(GUILD, "setup", { actorId: "live-probe-operator", source: "command" });
+    const cleared = await guildLocale(settings, GUILD);
+    assert(cleared === "en", `clearing the locale left ${cleared}`);
+    clock += 10_000;
+    const englishPing = slash("ping", { userId: "live-probe-member-english" });
+    await dispatchCommand(deps, englishPing.interaction);
+    assert(
+      String(englishPing.replies[0]?.content).startsWith("Pong! Keystone has been up for"),
+      `the English ping reply was ${String(englishPing.replies[0]?.content)}`,
+    );
+
+    record({
+      id: "command-copy-localization",
+      status: "pass",
+      detail:
+        `real dispatcher on Postgres with setup.locale=de: all ${described} root, subcommand and option description nodes of the ${chatInput.length} chat-input roots carried German from the catalog and none reused its English text; /ping, /about and /help browse replied in German; a key no catalog defines returned the fallback sentence and a partial catalog fell back to English; resetting the setting restored the English reply. The dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate`,
+      features: ["operations.i18n"],
     });
   }
 

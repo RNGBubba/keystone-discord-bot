@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P7",
-  "lastPass": "journal/2026-11-03-pass-61.md",
-  "nextAction": "P7's remaining copy outside the form/community panels is still English, and the moderation appeal/verify button ids still use their own unsigned handler because their DM payload (guild + member) does not fit the signed-id budget. A live gateway click, right-click, modal submit or member join still needs a human Discord client. P8 playback needs a Lavalink node; P9/P10 need outside input.",
+  "lastPass": "journal/2026-11-03-pass-62.md",
+  "nextAction": "P7's remaining reply copy is named in pass 62: community's operator configuration replies and the other ten modules' command replies are still English, service-owned economy reasons keep their own sentences, and kernel guard copy has no locale. Moderation's appeal/verify button ids still use their own unsigned handler because the verify DM payload (guild + member) does not fit the signed-id budget. A live gateway click, right-click, modal submit or member join still needs a human Discord client. P8 playback needs a Lavalink node; P9/P10 need outside input.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 626
+    "tests": 636
   },
   "modules": [
     {

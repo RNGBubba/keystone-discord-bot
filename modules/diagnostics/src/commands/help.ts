@@ -5,11 +5,12 @@ import {
   type CommandContext,
   type EmbedField,
 } from "@keystone/kernel";
+import { DEFAULT_LOCALE, guildLocale, lookupMessage, t } from "@keystone/i18n";
 import { CHANGELOG, VERSION } from "../changelog";
 
-function catalog(ctx: CommandContext): readonly CommandCatalogEntry[] {
+function catalog(ctx: CommandContext, locale: string): readonly CommandCatalogEntry[] {
   if (ctx.catalog.length === 0) {
-    throw new UserError("The command catalog is not wired in this process.");
+    throw new UserError(t(locale, "help.catalogMissing"));
   }
   // Context menus are discovered by right-clicking, not by typing `/`.
   return ctx.catalog.filter((entry) => (entry.type ?? "chat-input") === "chat-input");
@@ -35,24 +36,45 @@ function rootField(entry: CommandCatalogEntry): EmbedField {
   };
 }
 
-function searchLines(entries: readonly CommandCatalogEntry[], query: string): string[] {
+/**
+ * A command's own description, translated when the locale has one. The search
+ * matches both languages, so a German word finds the command whose German
+ * description contains it and an English word still works.
+ */
+function describe(locale: string, key: string, fallback: string): string {
+  return lookupMessage(locale, key) ?? fallback;
+}
+
+function searchLines(
+  entries: readonly CommandCatalogEntry[],
+  query: string,
+  locale: string,
+): string[] {
   const needle = query.toLowerCase();
   const lines: string[] = [];
   for (const entry of entries) {
+    const description = describe(locale, `command.${entry.name}.description`, entry.description);
     if (
       entry.name.toLowerCase().includes(needle) ||
       entry.description.toLowerCase().includes(needle) ||
+      description.toLowerCase().includes(needle) ||
       entry.moduleId.toLowerCase().includes(needle)
     ) {
-      lines.push(`**/${entry.name}** — ${entry.description}`);
+      lines.push(`**/${entry.name}** — ${description}`);
     }
     for (const subcommand of entry.subcommands) {
       const path = [entry.name, subcommand.group, subcommand.name].filter(Boolean).join(" ");
+      const localized = describe(
+        locale,
+        `command.${entry.name}.${subcommand.name}.description`,
+        subcommand.description,
+      );
       if (
         path.toLowerCase().includes(needle) ||
-        subcommand.description.toLowerCase().includes(needle)
+        subcommand.description.toLowerCase().includes(needle) ||
+        localized.toLowerCase().includes(needle)
       ) {
-        lines.push(`\`/${path}\` — ${subcommand.description}`);
+        lines.push(`\`/${path}\` — ${localized}`);
       }
     }
   }
@@ -83,10 +105,11 @@ export const help = defineCommand({
   ],
   async execute(ctx: CommandContext): Promise<void> {
     const selected = ctx.commandPath[0] ?? "browse";
+    const locale = ctx.guildId ? await guildLocale(ctx.config, ctx.guildId) : DEFAULT_LOCALE;
     // `privacy` and `changelog` describe the bot, not the registry, so they must
     // answer even in a process where no catalog was injected.
     const needsCatalog = selected === "browse" || selected === "commands" || selected === "search";
-    const entries = needsCatalog ? catalog(ctx) : [];
+    const entries = needsCatalog ? catalog(ctx, locale) : [];
     const moduleFilter = String(ctx.interaction.options.module ?? "").toLowerCase();
     const visible = moduleFilter
       ? entries.filter((entry) => entry.moduleId === moduleFilter)
@@ -95,11 +118,14 @@ export const help = defineCommand({
     if (selected === "browse") {
       if (visible.length === 0) {
         await ctx.interaction.reply({
-          content: `No module named \`${moduleFilter}\` is registered.`,
+          content: t(locale, "help.noModule", moduleFilter),
           ephemeral: true,
         });
         return;
       }
+      const contextMenus = ctx.catalog.some(
+        (entry) => (entry.type ?? "chat-input") !== "chat-input",
+      );
       const fields = [...moduleGroups(visible)].map(([moduleId, roots]) => ({
         name: moduleId,
         value: roots.map((entry) => `\`/${entry.name}\``).join(" · ").slice(0, 1_024),
@@ -110,8 +136,10 @@ export const help = defineCommand({
         ephemeral: true,
         embeds: [
           {
-            title: "Keystone commands",
-            description: `${visible.length} roots · ${subcommands} subcommands. Pick a root, then a subcommand. Use \`/help commands\` for the full list.${ctx.catalog.some((entry) => (entry.type ?? "chat-input") !== "chat-input") ? " Context menus live under right-click → Apps." : ""}`,
+            title: t(locale, "help.browse.title"),
+            description:
+              t(locale, "help.browse.description", visible.length, subcommands) +
+              (contextMenus ? t(locale, "help.browse.contextHint") : ""),
             color: 0x5865f2,
             fields,
           },
@@ -123,7 +151,7 @@ export const help = defineCommand({
     if (selected === "commands") {
       if (visible.length === 0) {
         await ctx.interaction.reply({
-          content: `No module named \`${moduleFilter}\` is registered.`,
+          content: t(locale, "help.noModule", moduleFilter),
           ephemeral: true,
         });
         return;
@@ -134,15 +162,15 @@ export const help = defineCommand({
         ephemeral: true,
         embeds: [
           {
-            title: "Command catalog",
-            description: `${visible.length} roots · ${total} subcommands. Type \`/\` and choose a root to see these actions.`,
+            title: t(locale, "help.commands.title"),
+            description: t(locale, "help.commands.description", visible.length, total),
             color: 0x5865f2,
             fields,
             footer: {
               text:
                 visible.length > 25
-                  ? `Showing 25 of ${visible.length} roots; filter with /help browse module:id.`
-                  : "Generated from the live registry, never a hand-edited list.",
+                  ? t(locale, "help.commands.footer.limit", 25, visible.length)
+                  : t(locale, "help.commands.footer.generated"),
             },
           },
         ],
@@ -152,17 +180,20 @@ export const help = defineCommand({
 
     if (selected === "search") {
       const query = String(ctx.interaction.options.query ?? "").trim();
-      if (!query) throw new UserError("Give a word to search for.");
-      const lines = searchLines(entries, query);
+      if (!query) throw new UserError(t(locale, "help.search.noQuery"));
+      const lines = searchLines(entries, query, locale);
       if (lines.length === 0) {
         await ctx.interaction.reply({
-          content: `No command matches \`${query}\`. Try \`/help browse\`.`,
+          content: t(locale, "help.search.empty", query),
           ephemeral: true,
         });
         return;
       }
       await ctx.interaction.reply({
-        content: `Matches for \`${query}\`:\n${lines.slice(0, 20).join("\n")}`.slice(0, 1_900),
+        content: t(locale, "help.search.matches", query, lines.slice(0, 20).join("\n")).slice(
+          0,
+          1_900,
+        ),
         ephemeral: true,
       });
       return;
@@ -173,13 +204,8 @@ export const help = defineCommand({
         ephemeral: true,
         embeds: [
           {
-            title: "Data and privacy",
-            description: [
-              "Keystone stores guild configuration, cases, tickets, levels, ledger entries, invite joins and AI usage counters.",
-              "Prompts and completions are **not** stored by default. Message content is only stored when a feature cannot work without it, such as a ticket transcript.",
-              "Every stored domain has a retention window in `memory/vault/01-Mission/Master-Plan.md`.",
-              "`/export guild` and `/export delete` are the data-portability path; a deletion receipt keeps counts, not content.",
-            ].join("\n\n"),
+            title: t(locale, "help.privacy.title"),
+            description: t(locale, "help.privacy.body"),
             color: 0x57f287,
           },
         ],
@@ -192,11 +218,11 @@ export const help = defineCommand({
         ephemeral: true,
         embeds: [
           {
-            title: "Keystone changelog",
+            title: t(locale, "help.changelog.title"),
             description: [
-              `**${VERSION}** · latest: ${CHANGELOG[0]?.pass ?? "unknown"}`,
-              ...CHANGELOG.slice(0, 3).map(
-                (entry) => `**${entry.pass}** (${entry.date}) — ${entry.summary}`,
+              t(locale, "help.changelog.latest", VERSION, CHANGELOG[0]?.pass ?? "unknown"),
+              ...CHANGELOG.slice(0, 3).map((entry) =>
+                t(locale, "help.changelog.entry", entry.pass, entry.date, entry.summary),
               ),
             ].join("\n"),
             color: 0x5865f2,
@@ -207,7 +233,7 @@ export const help = defineCommand({
       return;
     }
 
-    throw new UserError("Unknown help action. Use /help browse.");
+    throw new UserError(t(locale, "help.unknown"));
   },
   help: {
     category: "Getting started",

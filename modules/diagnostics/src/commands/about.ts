@@ -1,4 +1,5 @@
 import { defineCommand, requireGuild } from "@keystone/kernel";
+import { guildLocale, t } from "@keystone/i18n";
 import { VERSION } from "../changelog";
 
 export const about = defineCommand({
@@ -11,25 +12,30 @@ export const about = defineCommand({
 
     const settings = await ctx.settings.get(guildId);
     const enabled = settings.enabled === true;
+    const locale = await guildLocale(ctx.config, guildId);
 
     await ctx.interaction.reply({
       ephemeral: true,
       embeds: [
         {
+          // i18n-exempt: the product name is not translated.
           title: "Keystone",
-          description:
-            "An open-source, teach-by-default all-in-one Discord bot. Free forever, no feature is ever moved behind a paywall.",
+          description: t(locale, "about.description"),
           color: 0x5865f2,
           fields: [
-            { name: "Version", value: VERSION, inline: true },
-            { name: "Module", value: "diagnostics", inline: true },
-            { name: "Enabled here", value: enabled ? "yes" : "no", inline: true },
+            { name: t(locale, "about.field.version"), value: VERSION, inline: true },
+            { name: t(locale, "about.field.module"), value: "diagnostics", inline: true },
             {
-              name: "Learn how this works",
+              name: t(locale, "about.field.enabled"),
+              value: t(locale, enabled ? "about.enabled.yes" : "about.enabled.no"),
+              inline: true,
+            },
+            {
+              name: t(locale, "about.field.learn"),
               value: "`memory/vault/04-Modules/diagnostics/Spec.md`",
             },
           ],
-          footer: { text: "Settings are validated by this module's Zod schema." },
+          footer: { text: t(locale, "about.footer") },
         },
       ],
     });

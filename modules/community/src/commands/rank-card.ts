@@ -5,7 +5,7 @@ import {
   requireGuild,
   type CommandContext,
 } from "@keystone/kernel";
-import { guildLocale } from "@keystone/i18n";
+import { guildLocale, t } from "@keystone/i18n";
 import { LevelingService } from "../progress";
 import { rankPanel } from "../panels";
 import { port, settingsFor } from "./helpers";
@@ -22,13 +22,13 @@ export const rankCard = defineCommand({
   guards: [requireGuild, cooldown(3_000)],
   async execute(ctx: CommandContext): Promise<void> {
     const target = ctx.interaction.targetId;
-    if (!target) throw new UserError("That menu did not include a member.");
     const guildId = ctx.guildId as string;
+    const locale = await guildLocale(ctx.config, guildId);
+    if (!target) throw new UserError(t(locale, "rank.card.noTarget"));
     const { store, actions } = port(ctx);
     const settings = await settingsFor(ctx);
     const leveling = new LevelingService(store, actions, settings, ctx.now);
     const result = await leveling.rank(guildId, target);
-    const locale = await guildLocale(ctx.config, guildId);
     await ctx.interaction.reply({
       v2: rankPanel(
         {

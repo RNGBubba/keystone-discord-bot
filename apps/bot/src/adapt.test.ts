@@ -327,7 +327,7 @@ describe("command localization", () => {
 
   it("leaves an untranslated command English-only instead of inventing text", () => {
     const json = buildCommandJson(
-      defineCommand({ name: "mod", description: "Moderation", execute: noop }),
+      defineCommand({ name: "unregistered-probe", description: "Probe", execute: noop }),
     ) as unknown as { description_localizations?: Record<string, string> };
     expect(json.description_localizations).toBeUndefined();
   });

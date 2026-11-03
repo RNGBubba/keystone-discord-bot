@@ -66,7 +66,7 @@ describe("fallbacks", () => {
 
   it("returns undefined for a command description a locale does not ship", () => {
     expect(lookupMessage("de", "command.form.description")).toContain("Bewerbungsformulare");
-    expect(lookupMessage("de", "command.mod.description")).toBeUndefined();
+    expect(lookupMessage("de", "command.unregistered-probe.description")).toBeUndefined();
     expect(SUPPORTED_LOCALES).toEqual(["en", "de"]);
   });
 });

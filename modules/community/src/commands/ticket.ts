@@ -40,15 +40,15 @@ export const ticket = defineCommand({
     const settings = await settingsFor(ctx);
     const service = new TicketService(store, actions, settings, ctx.now);
     const guildId = ctx.guildId as string;
+    const locale = await guildLocale(ctx.config, guildId);
     const selected = ctx.commandPath[0] ?? text(ctx, "action");
 
     if (selected === "panel") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const parent = channelId(ctx, "channel");
-      if (!parent) throw new UserError("Choose a channel for the panel.");
+      if (!parent) throw new UserError(t(locale, "ticket.panel.noChannel"));
       const signer = ctx.componentSigner;
-      if (!signer) throw new UserError("Interactive panels are not configured on this bot.");
-      const locale = await guildLocale(ctx.config, guildId);
+      if (!signer) throw new UserError(t(locale, "ticket.panel.noSigner"));
       const openCustomId = signer.sign(
         {
           namespace: "ticket",
@@ -61,14 +61,16 @@ export const ticket = defineCommand({
         ctx.now(),
       );
       const result = await service.panel(guildId, parent, openCustomId, text(ctx, "title"), locale);
-      await ctx.interaction.reply({ content: `Ticket panel posted (${result.messageId}).`, ephemeral: true });
+      await ctx.interaction.reply({
+        content: t(locale, "ticket.panel.posted", result.messageId),
+        ephemeral: true,
+      });
       return;
     }
 
     if (selected === "open") {
       const parent = ctx.interaction.channelId;
-      if (!parent) throw new UserError("Open a ticket from a normal channel, not a DM.");
-      const locale = await guildLocale(ctx.config, guildId);
+      if (!parent) throw new UserError(t(locale, "ticket.open.noChannelHere"));
       const record = await service.open(
         guildId,
         ctx.userId,
@@ -84,13 +86,20 @@ export const ticket = defineCommand({
     }
 
     if (selected === "stats") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const stats = await service.stats(guildId);
       await ctx.interaction.reply({
         embeds: [
           {
-            title: "Ticket statistics",
-            description: `Open **${stats.open}** · Claimed **${stats.claimed}** · Closed **${stats.closed}**\nAverage close: **${stats.averageCloseMinutes ?? "n/a"} minutes**`,
+            title: t(locale, "ticket.stats.title"),
+            description: t(
+              locale,
+              "ticket.stats.body",
+              stats.open,
+              stats.claimed,
+              stats.closed,
+              String(stats.averageCloseMinutes ?? "n/a"),
+            ),
             color: 0x5865f2,
           },
         ],
@@ -103,38 +112,39 @@ export const ticket = defineCommand({
       (entry) => entry.channelId === ctx.interaction.channelId,
     );
     const ticketId = text(ctx, "ticket") ?? found?.id;
-    if (!ticketId) throw new UserError("Use this inside a ticket thread or pass a ticket id.");
+    if (!ticketId) throw new UserError(t(locale, "ticket.missingThread"));
 
     if (selected === "claim") {
       const record = await service.claim(guildId, ticketId, ctx.userId);
-      await ctx.interaction.reply({ content: `Claimed ticket ${record.id}.`, ephemeral: true });
+      await ctx.interaction.reply({ content: t(locale, "ticket.claim.done", record.id), ephemeral: true });
       return;
     }
 
     if (selected === "close") {
       const current = await store.getTicket(guildId, ticketId);
-      if (!current) throw new UserError("That ticket does not exist.");
+      if (!current) throw new UserError(t(locale, "ticket.close.missing"));
       const support =
         current.openerId === ctx.userId ||
         ctx.interaction.permissions.includes("ManageChannels");
-      if (!support) throw new UserError("Only the opener or a support member can close this ticket.");
+      if (!support) throw new UserError(t(locale, "ticket.close.notAllowed"));
       const record = await service.close(guildId, ticketId, ctx.userId);
-      await ctx.interaction.reply({ content: `Closed ticket ${record.id}.`, ephemeral: true });
+      await ctx.interaction.reply({ content: t(locale, "ticket.close.done", record.id), ephemeral: true });
       return;
     }
 
     if (selected === "add") {
       const target = userId(ctx, "user");
-      if (!target) throw new UserError("Choose a member to add.");
+      if (!target) throw new UserError(t(locale, "ticket.add.missing"));
       await service.addParticipant(guildId, ticketId, ctx.userId, target);
-      await ctx.interaction.reply({ content: `Added <@${target}>.`, ephemeral: true });
+      await ctx.interaction.reply({ content: t(locale, "ticket.add.done", target), ephemeral: true });
       return;
     }
 
     if (selected === "transcript") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const result = await service.transcript(guildId, ticketId);
       await ctx.interaction.reply({
+        // i18n-exempt: stored ticket text inside a code fence, not our copy.
         content: `\`\`\`\n${result.text.slice(0, 1_900)}\n\`\`\``,
         ephemeral: true,
       });
@@ -142,17 +152,17 @@ export const ticket = defineCommand({
     }
 
     if (selected === "summary") {
-      requirePermission(ctx, "ManageGuild");
-      if (!ctx.ai) throw new UserError("AI services are not wired.");
+      requirePermission(ctx, "ManageGuild", locale);
+      if (!ctx.ai) throw new UserError(t(locale, "ticket.summary.noAi"));
       const result = await service.transcript(guildId, ticketId);
       const summary = await ctx.ai.summarize(guildId, result.text);
       await ctx.interaction.reply({
         embeds: [
           {
-            title: "Ticket summary",
-            description: `${summary.text.slice(0, 3_500)}\n\nAI can be wrong. A human decides any action.`,
+            title: t(locale, "ticket.summary.title"),
+            description: t(locale, "ticket.summary.body", summary.text.slice(0, 3_500)),
             color: 0x5865f2,
-            footer: { text: `model ${summary.model}` },
+            footer: { text: t(locale, "ticket.summary.model", summary.model) },
           },
         ],
         ephemeral: true,

@@ -49,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**626 tests across 91 files** without a Discord token, database or network.
+**636 tests across 92 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -623,13 +623,16 @@ Everything below is free. No feature is moved behind a paywall.
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail`, the four context menus and the typed
   rank/ticket/greeting surfaces are done; role, role-select, giveaway,
-  suggestion and poll ids are now signed and routed too (pass 61). The rest is
-  parity completion (role persistence), translating the remaining module copy,
-  and the moderation `appeal`/`verify` ids, which still need a signed DM payload
-  that carries both guild and member. The Components V2 layer (`packages/ui`)
-  and the form panel's modal submit landed in pass 58; i18n, `setup.locale` and
-  derived command descriptions in pass 59; the rank card, ticket panel and
-  welcome/goodbye greetings in pass 60.
+  suggestion and poll ids are now signed and routed too (pass 61). Every
+  registered command, subcommand and option description is translated, and
+  `/ping`, `/about`, `/help`, `/rank`, `/ticket` and the rank card reply in the
+  guild's locale (pass 62); the reply copy still English is named in that
+  journal. The rest is parity completion (role persistence), that remaining
+  reply copy, and the moderation `appeal`/`verify` ids, which still need a
+  signed DM payload that carries both guild and member. The Components V2 layer
+  (`packages/ui`) and the form panel's modal submit landed in pass 58; i18n,
+  `setup.locale` and derived command descriptions in pass 59; the rank card,
+  ticket panel and welcome/goodbye greetings in pass 60.
 - **P8:** `/music` queue control ships disabled by default; bring-your-own
   Lavalink playback is the open piece (no bundled streamer).
 - **P9:** docs site, release workflow and self-host kit; the 14-lesson curriculum is already in `memory/vault/05-Learning/` and checked by `pnpm memory:check`.

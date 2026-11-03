@@ -831,6 +831,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-62",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "P7's command copy gap is closed for every registered description and the main member-facing replies. `packages/i18n/src/command-copy.ts` holds 253 keys generated once from the live registry (20 roots, 141 subcommands, 92 distinct option names) with hand-written German, and the English object is the type source so a missing or differently-argued key does not compile. The English catalog gains reply keys for /ping, /about, /help, /rank, /ticket and the Rank card menu, and the community helper's guild-only and permission refusals take the caller's locale. The coverage test derives the expected keys from the registry in both directions and classifies every command file as translated or deliberately English-only, scanning the translated ones for reply literals, so a command cannot quietly ship English-only; it also caught `localizeCommand` applying a shared option key to only the first matching JSON node, which is fixed. The remaining English copy is named in the journal: community's operator configuration replies, the other ten modules' replies, kernel guard and failure copy, service-owned economy reasons, and operator-owned greeting text. Tests 636 / 92 files; live probe 27/27, adding `command-copy-localization` on Postgres: with setup.locale=de all 384 description nodes carried German from the catalog, /ping, /about and /help browse replied in German, an unknown key returned the fallback sentence, a partial catalog fell back to English, and clearing the setting restored the English reply through the real dispatcher. A gateway InteractionCreate is not claimed.",
+      "journal": "journal/2026-11-03-pass-62.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "636",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "27/27",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

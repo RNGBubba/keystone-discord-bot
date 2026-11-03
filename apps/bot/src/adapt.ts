@@ -538,26 +538,31 @@ interface CommandJsonNode {
 function localizeCommand(json: CommandJsonNode, definition: CommandDefinition): void {
   applyDescription(json, `command.${definition.name}`);
 
-  const nodes = flattenOptionNodes(json.options);
-  for (const subcommand of definition.subcommands ?? []) {
-    const node = nodes.find((entry) => entry.name === subcommand.name && entry.type === 1);
-    if (node) applyDescription(node, `command.${definition.name}.${subcommand.name}`);
+  // Each subcommand owns its own option nodes: two subcommands may share an
+  // option name (`module` on /help browse and /help commands), and the JSON has
+  // one node per appearance even though the description key is shared.
+  for (const option of definition.options ?? []) {
+    const node = (json.options ?? []).find(
+      (entry) => entry.name === option.name && entry.type !== 1 && entry.type !== 2,
+    );
+    if (node) applyDescription(node, `command.${definition.name}.option.${option.name}`);
   }
 
-  const optionNames = new Set<string>();
-  for (const option of definition.options ?? []) optionNames.add(option.name);
   for (const subcommand of definition.subcommands ?? []) {
-    for (const option of subcommand.options ?? []) optionNames.add(option.name);
+    const node = (json.options ?? []).find(
+      (entry) => entry.name === subcommand.name && entry.type === 1,
+    );
+    if (!node) continue;
+    applyDescription(node, `command.${definition.name}.${subcommand.name}`);
+    for (const option of subcommand.options ?? []) {
+      const optionNode = (node.options ?? []).find(
+        (entry) => entry.name === option.name && entry.type !== 1 && entry.type !== 2,
+      );
+      if (optionNode) {
+        applyDescription(optionNode, `command.${definition.name}.option.${option.name}`);
+      }
+    }
   }
-  for (const name of optionNames) {
-    const node = nodes.find((entry) => entry.name === name && entry.type !== 1 && entry.type !== 2);
-    if (node) applyDescription(node, `command.${definition.name}.option.${name}`);
-  }
-}
-
-function flattenOptionNodes(options: readonly CommandJsonNode[] | undefined): CommandJsonNode[] {
-  if (!options?.length) return [];
-  return options.flatMap((option) => [option, ...flattenOptionNodes(option.options)]);
 }
 
 function applyDescription(node: CommandJsonNode, key: string): void {

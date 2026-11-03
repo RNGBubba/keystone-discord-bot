@@ -1,5 +1,5 @@
 import { defineCommand, UserError, type CommandContext, type CommandOption } from "@keystone/kernel";
-import { guildLocale } from "@keystone/i18n";
+import { guildLocale, t } from "@keystone/i18n";
 import { EconomyService, LevelingService } from "../progress";
 import { rankPanel } from "../panels";
 import { SeasonService } from "../extras";
@@ -48,12 +48,12 @@ export const rank = defineCommand({
     const leveling = new LevelingService(store, actions, settings, ctx.now);
     const economy = new EconomyService(store, actions, settings, ctx.now, Math.random, ctx.cooldowns);
     const guildId = ctx.guildId as string;
+    const locale = await guildLocale(ctx.config, guildId);
     const selected = ctx.commandPath[0] ?? action(ctx);
 
     if (selected === "view") {
       const target = userId(ctx, "user") ?? ctx.userId;
       const result = await leveling.rank(guildId, target);
-      const locale = await guildLocale(ctx.config, guildId);
       await ctx.interaction.reply({
         v2: rankPanel(
           {
@@ -73,14 +73,14 @@ export const rank = defineCommand({
       await ctx.interaction.reply({
         embeds: [
           {
-            title: "XP leaderboard",
+            title: t(locale, "rank.leaderboard.title"),
             description:
               rows.length === 0
-                ? "No XP recorded yet."
+                ? t(locale, "rank.leaderboard.empty")
                 : rows
                     .map(
                       (profile, index) =>
-                        `${index + 1}. <@${profile.userId}> — level ${profile.level} (${profile.xp} XP)`,
+                        t(locale, "rank.leaderboard.row", index + 1, profile.userId, profile.level, profile.xp),
                     )
                     .join("\n"),
             color: 0x5865f2,
@@ -91,14 +91,16 @@ export const rank = defineCommand({
     }
 
     if (selected === "rewards") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const value = text(ctx, "value");
       if (!value) {
         await ctx.interaction.reply({
           content:
             settings.xp.rewards.length === 0
-              ? "No role rewards configured."
-              : settings.xp.rewards.map((reward) => `Level ${reward.level}: <@&${reward.roleId}>`).join("\n"),
+              ? t(locale, "rank.rewards.empty")
+              : settings.xp.rewards
+                  .map((reward) => t(locale, "rank.rewards.row", reward.level, reward.roleId))
+                  .join("\n"),
           ephemeral: true,
         });
         return;
@@ -107,23 +109,23 @@ export const rank = defineCommand({
         const [level, roleId] = entry.split(":");
         const parsed = Number(level);
         if (!Number.isInteger(parsed) || parsed < 1 || !roleId) {
-          throw new UserError("Rewards look like `5:123456789,10:987654321`.");
+          throw new UserError(t(locale, "rank.rewards.invalid"));
         }
         return { level: parsed, roleId };
       });
       await ctx.settings.update(guildId, { xp: { ...settings.xp, rewards } });
-      await ctx.interaction.reply({ content: "XP role rewards updated.", ephemeral: true });
+      await ctx.interaction.reply({ content: t(locale, "rank.rewards.updated"), ephemeral: true });
       return;
     }
 
     if (selected === "admin") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const target = userId(ctx, "user");
       const level = integer(ctx, "level");
-      if (!target || level === undefined) throw new UserError("Admin needs a user and a level.");
+      if (!target || level === undefined) throw new UserError(t(locale, "rank.admin.missing"));
       const profile = await leveling.setLevel(guildId, target, level);
       await ctx.interaction.reply({
-        content: `<@${target}> is now level ${profile.level} with ${profile.xp} XP.`,
+        content: t(locale, "rank.admin.updated", target, profile.level, profile.xp),
         ephemeral: true,
       });
       return;
@@ -133,7 +135,7 @@ export const rank = defineCommand({
       const target = userId(ctx, "user") ?? ctx.userId;
       const balance = await economy.balance(guildId, target);
       await ctx.interaction.reply({
-        content: `<@${target}> has **${balance} ${settings.economy.currency}**.`,
+        content: t(locale, "rank.balance", target, balance, settings.economy.currency),
       });
       return;
     }
@@ -142,8 +144,10 @@ export const rank = defineCommand({
       const result = await economy.daily(guildId, ctx.userId);
       await ctx.interaction.reply({
         content: result.ok
-          ? `You claimed **${result.amount} ${settings.economy.currency}**. Balance: **${result.balance}**.`
-          : `${result.reason} Balance: **${result.balance}**.`,
+          ? t(locale, "rank.daily.ok", result.amount, settings.economy.currency, result.balance)
+          : result.reason
+            ? t(locale, "rank.daily.failed", result.reason, result.balance)
+            : t(locale, "rank.daily.balance", result.balance),
         ephemeral: true,
       });
       return;
@@ -152,7 +156,7 @@ export const rank = defineCommand({
     if (selected === "pay") {
       const target = userId(ctx, "user");
       const amount = integer(ctx, "amount");
-      if (!target || !amount) throw new UserError("Pay needs a user and an amount.");
+      if (!target || !amount) throw new UserError(t(locale, "rank.pay.missing"));
       const result = await economy.transfer(
         guildId,
         ctx.userId,
@@ -162,7 +166,7 @@ export const rank = defineCommand({
       );
       await ctx.interaction.reply({
         content: result.ok
-          ? `Sent **${amount} ${settings.economy.currency}** to <@${target}>.`
+          ? t(locale, "rank.pay.ok", amount, settings.economy.currency, target)
           : (result.reason ?? "Transfer failed."),
         ephemeral: true,
       });
@@ -174,16 +178,22 @@ export const rank = defineCommand({
       await ctx.interaction.reply({
         embeds: [
           {
-            title: `${settings.economy.currency} shop`,
+            title: t(locale, "rank.shop.title", settings.economy.currency),
             description:
               items.length === 0
-                ? "The shop is empty."
+                ? t(locale, "rank.shop.empty")
                 : items
-                    .map(
-                      (item) =>
-                        `**${item.name}** — ${item.price} (id: \`${item.id}\`)${
-                          item.description ? `\n${item.description}` : ""
-                        }`,
+                    .map((item) =>
+                      item.description
+                        ? t(
+                            locale,
+                            "rank.shop.itemWithDescription",
+                            item.name,
+                            item.price,
+                            item.id,
+                            item.description,
+                          )
+                        : t(locale, "rank.shop.item", item.name, item.price, item.id),
                     )
                     .join("\n\n"),
             color: 0x57f287,
@@ -195,11 +205,11 @@ export const rank = defineCommand({
 
     if (selected === "buy") {
       const itemId = text(ctx, "item");
-      if (!itemId) throw new UserError("Name the shop item to buy.");
+      if (!itemId) throw new UserError(t(locale, "rank.buy.missingItem"));
       const result = await economy.buy(guildId, ctx.userId, itemId, ctx.interaction.id);
       await ctx.interaction.reply({
         content: result.ok
-          ? `Bought **${result.item?.name}**. Balance: **${result.balance}**.`
+          ? t(locale, "rank.buy.ok", result.item?.name ?? itemId, result.balance ?? 0)
           : (result.reason ?? "Purchase failed."),
         ephemeral: true,
       });
@@ -208,13 +218,13 @@ export const rank = defineCommand({
 
     if (selected === "gamble") {
       const amount = integer(ctx, "amount");
-      if (!amount) throw new UserError("Name the amount to gamble.");
+      if (!amount) throw new UserError(t(locale, "rank.gamble.missingAmount"));
       const result = await economy.gamble(guildId, ctx.userId, amount, ctx.interaction.id);
       await ctx.interaction.reply({
         content: result.ok
           ? result.won
-            ? `You won **${result.amount}**. Balance: **${result.balance}**.`
-            : `You lost **${amount}**. Balance: **${result.balance}**.`
+            ? t(locale, "rank.gamble.won", result.amount ?? amount, result.balance ?? 0)
+            : t(locale, "rank.gamble.lost", amount, result.balance ?? 0)
           : (result.reason ?? "Gamble failed."),
         ephemeral: true,
       });
@@ -226,10 +236,10 @@ export const rank = defineCommand({
       await ctx.interaction.reply({
         embeds: [
           {
-            title: "Your ledger",
+            title: t(locale, "rank.ledger.title"),
             description:
               rows.length === 0
-                ? "No movements yet."
+                ? t(locale, "rank.ledger.empty")
                 : rows
                     .map(
                       (entry) =>
@@ -245,15 +255,15 @@ export const rank = defineCommand({
     }
 
     if (selected === "season") {
-      requirePermission(ctx, "ManageGuild");
+      requirePermission(ctx, "ManageGuild", locale);
       const key =
         text(ctx, "value") ?? `season-${new Date(ctx.now()).toISOString().slice(0, 10)}`;
       const service = new SeasonService(store, ctx.now);
       const result = await service.start(guildId, key, integer(ctx, "days") ?? 30);
       await ctx.interaction.reply({
         content: result.alreadyReset
-          ? `Season **${result.state.key}** was already started; no profiles were archived again.`
-          : `Season **${result.state.key}** started. Archived **${result.archived}** profile(s); the XP ledger remains intact.`,
+          ? t(locale, "rank.season.already", result.state.key)
+          : t(locale, "rank.season.started", result.state.key, result.archived),
         ephemeral: true,
       });
     }

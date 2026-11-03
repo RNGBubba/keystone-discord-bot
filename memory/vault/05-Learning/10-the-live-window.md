@@ -37,7 +37,7 @@ with one idempotency key and waits for one Postgres receipt. It expires a real
 case, delivers a real reminder, round-trips a panic snapshot, imports/rolls
 back/deletes real portability rows, and calls `/healthz` with a real database.
 Every check writes `memory/machine/live.json`; `memory:render` turns that file
-into the Live-Window page. The last recorded run is 26 live checks against 20
+into the Live-Window page. The last recorded run is 27 live checks against 20
 migrations. The HTTP checks drive real local HTTP on Postgres: the schema form
 path (login, session, CSRF, save, reject), the fleet template path (list,
 preview diff, stale-fingerprint refusal, apply, one dashboard audit row per
