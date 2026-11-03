@@ -167,8 +167,10 @@ https://github.com/RNGBubba/keystone-discord-bot
   HTML form and a CSRF-protected `PATCH`, schema-generated widgets and an audit
   row per accepted change (pass 49), plus a fleet view and three built-in
   templates that preview a schema-validated diff and apply only the previewed
-  plan (pass 50). Custom saved templates, live Discord OAuth, token
-  refresh/revocation and scoped API tokens remain open. See [[Dashboard]] and
+  plan (pass 50), plus named saved templates that save, list, edit, delete and
+  apply through the same preview fingerprint and audit path (pass 52). Live
+  Discord OAuth, analytics aggregates, token refresh/revocation and scoped API
+  tokens remain open. See [[Dashboard]] and
   [[ADR-0016-dashboard-foundation]].
 - Phase **P5** complete in-repo: versioned export/restore with checksum
   verification, 24-hour rollback, deletion receipts, file level importers,

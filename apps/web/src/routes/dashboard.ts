@@ -23,6 +23,8 @@ import {
   renderFleet,
   renderGuildList,
   renderOverview,
+  renderSavedTemplateEditor,
+  renderSavedTemplates,
   renderSettingsEditor,
   renderTemplatePreview,
 } from "../render";
@@ -37,10 +39,7 @@ interface FleetSelection {
   readonly guildIds: readonly string[];
 }
 
-function readFleetSelection(params: URLSearchParams): FleetSelection {
-  const templateId = (params.get("template") ?? "").trim();
-  if (!templateId) throw new HttpError(400, "Choose a template.", "template_missing");
-
+function readGuildIds(params: URLSearchParams): readonly string[] {
   const guildIds = [
     ...new Set(
       params
@@ -60,7 +59,13 @@ function readFleetSelection(params: URLSearchParams): FleetSelection {
       throw new HttpError(400, "One selected guild id is invalid.", "guild_invalid");
     }
   }
-  return { templateId, guildIds };
+  return guildIds;
+}
+
+function readFleetSelection(params: URLSearchParams): FleetSelection {
+  const templateId = (params.get("template") ?? "").trim();
+  if (!templateId) throw new HttpError(400, "Choose a template.", "template_missing");
+  return { templateId, guildIds: readGuildIds(params) };
 }
 
 function count(value: string | null): number | undefined {
@@ -254,6 +259,189 @@ export async function configImportApply(
   redirect(
     ctx.res,
     `/dashboard/guilds/${encodePathSegment(guildId)}/config/drift?imported=${result.modulesWritten}&failed=${result.failures.length}`,
+  );
+  return true;
+}
+
+export async function templatesPage(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const { session, guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const templates = await ctx.deps.dashboard.listSavedTemplates(guild);
+  send(
+    ctx.res,
+    200,
+    renderSavedTemplates(session.username, guild, templates, ctx.csrfToken, {
+      created: ctx.url.searchParams.get("created") === "1",
+      deleted: ctx.url.searchParams.get("deleted") === "1",
+    }),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
+  return true;
+}
+
+export async function templateCreate(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  let body!: URLSearchParams;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    body = new URLSearchParams(await parseBody(ctx.req));
+    return body.get("csrf") ?? undefined;
+  });
+  const template = await ctx.deps.dashboard.createSavedTemplate(
+    write.guild,
+    {
+      name: body.get("name") ?? "",
+      description: body.get("description") ?? "",
+    },
+    write.session.userId,
+  );
+  redirect(
+    ctx.res,
+    `/dashboard/guilds/${encodePathSegment(guildId)}/templates/${encodePathSegment(template.id)}?created=1`,
+  );
+  return true;
+}
+
+export async function templateEditorPage(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const templateId = params[1] as string;
+  const { session, guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const [template, targets, history] = await Promise.all([
+    ctx.deps.dashboard.savedTemplate(guild, templateId),
+    ctx.deps.access.manageableGuilds(ctx.deps.auth.accessToken(session)),
+    ctx.deps.dashboard.history(guild.id, { targetId: templateId, limit: 12 }),
+  ]);
+  send(
+    ctx.res,
+    200,
+    renderSavedTemplateEditor(session.username, guild, template, targets, ctx.csrfToken, {
+      created: ctx.url.searchParams.get("created") === "1",
+      updated: ctx.url.searchParams.get("saved") === "1",
+      applied: count(ctx.url.searchParams.get("applied")),
+      failed: count(ctx.url.searchParams.get("failed")),
+      history,
+    }),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
+  return true;
+}
+
+export async function templateUpdate(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const templateId = params[1] as string;
+  let body!: URLSearchParams;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    body = new URLSearchParams(await parseBody(ctx.req));
+    return body.get("csrf") ?? undefined;
+  });
+  await ctx.deps.dashboard.updateSavedTemplate(
+    write.guild,
+    templateId,
+    {
+      name: body.get("name") ?? "",
+      description: body.get("description") ?? "",
+      refreshSettings: body.get("refresh") === "1",
+    },
+    write.session.userId,
+  );
+  redirect(
+    ctx.res,
+    `/dashboard/guilds/${encodePathSegment(guildId)}/templates/${encodePathSegment(templateId)}?saved=1`,
+  );
+  return true;
+}
+
+export async function templateDelete(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const templateId = params[1] as string;
+  let body!: URLSearchParams;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    body = new URLSearchParams(await parseBody(ctx.req));
+    return body.get("csrf") ?? undefined;
+  });
+  await ctx.deps.dashboard.deleteSavedTemplate(write.guild, templateId, write.session.userId);
+  redirect(ctx.res, `/dashboard/guilds/${encodePathSegment(guildId)}/templates?deleted=1`);
+  return true;
+}
+
+export async function templatePreview(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const templateId = params[1] as string;
+  let body!: URLSearchParams;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    body = new URLSearchParams(await parseBody(ctx.req));
+    return body.get("csrf") ?? undefined;
+  });
+  const targets = await authorizeFleet(ctx.deps, write.session, readGuildIds(body));
+  const template = await ctx.deps.dashboard.savedTemplateRecord(write.guild, templateId);
+  const plan = await ctx.deps.dashboard.previewSavedTemplate(targets, template);
+  send(
+    ctx.res,
+    200,
+    renderTemplatePreview(write.session.username, plan, ctx.csrfToken, {
+      applyAction: `/dashboard/guilds/${encodePathSegment(guildId)}/templates/${encodePathSegment(templateId)}/apply`,
+      includeTemplateField: false,
+      backHref: `/dashboard/guilds/${encodePathSegment(guildId)}/templates/${encodePathSegment(templateId)}`,
+      backLabel: "Back to the template",
+    }),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
+  return true;
+}
+
+export async function templateApply(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const templateId = params[1] as string;
+  let body!: URLSearchParams;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    body = new URLSearchParams(await parseBody(ctx.req));
+    return body.get("csrf") ?? undefined;
+  });
+  const fingerprint = (body.get("fingerprint") ?? "").trim();
+  if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
+    throw new HttpError(
+      400,
+      "The preview fingerprint is missing. Preview the saved template before applying it.",
+      "preview_missing",
+    );
+  }
+  const targets = await authorizeFleet(ctx.deps, write.session, readGuildIds(body));
+  const template = await ctx.deps.dashboard.savedTemplateRecord(write.guild, templateId);
+  const result = await ctx.deps.dashboard.applySavedTemplate(
+    targets,
+    template,
+    fingerprint,
+    write.session.userId,
+  );
+  for (const failure of result.failures) {
+    ctx.deps.logger.warn("saved template write failed", failure);
+  }
+  redirect(
+    ctx.res,
+    `/dashboard/guilds/${encodePathSegment(guildId)}/templates/${encodePathSegment(templateId)}?applied=${result.modulesWritten}&failed=${result.failures.length}`,
   );
   return true;
 }

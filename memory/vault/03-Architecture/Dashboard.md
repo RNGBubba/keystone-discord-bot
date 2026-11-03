@@ -133,11 +133,43 @@ has schema issues and `409` if the fingerprint does not match, then calls
 `SettingsService.update` for each changed module with the dashboard actor. A
 stale preview is therefore refused rather than applied, and a direct bulk POST
 without a preview cannot reach the writer. Each accepted module write appends
-one dashboard audit row. There is no template table and no second schema.
+one dashboard audit row. Built-in templates are code, not rows, and there is no
+second schema. Named saved templates are the next section.
 
 The preview uses `labelFor` from the schema form, so labels match the per-guild
 editor. Templates never contain channel or role ids; destinations remain
 guild-specific.
+
+## Saved templates
+
+A saved template is a named snapshot of one guild's effective module settings,
+not a second settings store. `config_templates` (migration 0016) holds the guild
+id, name, description, `{ id, version, settings }[]` snapshot, creator and
+timestamps; `(guild_id, lower(name))` is unique. `packages/kernel/src/saved-templates.ts`
+ows the `SavedTemplateStore` port and the in-memory adapter;
+`packages/db/src/config-template-store.ts` owns the SQL adapter and maps a
+Postgres `23505` to the same typed name error. A saved template belongs to its
+guild; there is no marketplace.
+
+Save reads every module through `SettingsService.get`, strips
+credential-shaped keys with the same filter the export uses, parses each value
+with that module's own schema and only then inserts. A snapshot can therefore
+never be born invalid. Create, update and delete each append one `template.*`
+audit row with the dashboard actor; applying the template is audited as ordinary
+`settings.update` rows, one per written module.
+
+Edit changes the name or description and can refresh the snapshot from live
+settings through the same schema gate. Every accepted edit moves `updatedAt`
+forward, so a preview shown before the edit is stale. The stored row is
+re-validated on read and on apply: if a schema changed, or an operator edited
+the JSON outside the dashboard, the page lists every bad path, the preview
+returns template-level issues and no guild targets, and apply refuses at `400`.
+
+Apply reuses the built-in path exactly: each target guild is re-authorized, the
+snapshot is diffed with `diffSettings`, the fingerprint seed includes the
+template id and `updatedAt`, and a stale or tampered fingerprint is refused at
+`409`. The shared `applyPlan` loop calls `SettingsService.update` per changed
+module. There is no second writer.
 
 ## Config export, import and drift
 
@@ -193,11 +225,11 @@ as well; the URL id alone is never enough.
 | `apps/web/src/settings-plan.ts` | Shared plan types and the canonical SHA-256 fingerprint |
 | `apps/web/src/config-bundle.ts` | Config file format, checksum, strict parse and schema validation |
 | `apps/web/src/templates.ts` | Built-in template patches and deep merge |
-| `apps/web/src/overview.ts` | View composition, editor/history, settings update and schema-error mapping; filters credential-shaped settings |
+| `apps/web/src/overview.ts` | View composition, saved-template lifecycle, editor/history, settings update and schema-error mapping; filters credential-shaped settings |
 | `apps/web/src/server.ts` | Error boundary, request context, route dispatch and the final method/404 fallback |
 | `apps/web/src/routes/index.ts` | Ordered route table, the shared guild/module patterns and matching |
 | `apps/web/src/routes/auth.ts` | Health, login, callback, logout and landing handlers |
-| `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, config export/import/drift, overview and settings editor/form handlers |
+| `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, saved-template CRUD/preview/apply, config export/import/drift, overview and settings editor/form handlers |
 | `apps/web/src/routes/api.ts` | `/api/v1` reads, settings `PATCH` and the API 404 |
 | `apps/web/src/request-context.ts` | Web dependencies, cookie parsing and the one session lookup per request |
 | `apps/web/src/authorization.ts` | Session check, guild authorization and the one settings-write/CSRF gate |
@@ -207,11 +239,13 @@ as well; the URL id alone is never enough.
 | `packages/kernel/src/web.ts` | `SessionStore`, `DashboardStore`, `WebSession` |
 | `packages/kernel/src/audit.ts` | `AuditStore`, in-memory adapter and the settings diff |
 | `packages/kernel/src/baselines.ts` | `ConfigBaselineStore` and its in-memory adapter |
+| `packages/kernel/src/saved-templates.ts` | `SavedTemplateStore`, in-memory adapter and name-taken error |
 | `packages/kernel/src/settings.ts` | Schema validation, optional clear, audit append |
 | `packages/db/src/web-session-store.ts` | Drizzle session adapter |
 | `packages/db/src/web-dashboard-store.ts` | Guild-scoped aggregate read model |
 | `packages/db/src/audit-store.ts` | Drizzle `audit_events` adapter |
 | `packages/db/src/config-baseline-store.ts` | Drizzle `config_baselines` adapter |
+| `packages/db/src/config-template-store.ts` | Drizzle `config_templates` adapter |
 | `packages/module-catalog` | The one module list shared with the bot |
 
 The kernel owns the contracts; `packages/db` owns SQL; `apps/web` owns HTTP and
@@ -254,7 +288,7 @@ server or a browser.
 
 ## Deliberately not done yet
 
-- Custom saved templates, analytics aggregates and bulk actions beyond the three built-ins.
+- Analytics aggregates and bulk actions beyond the built-in and saved templates.
 - Token refresh/rotation, Discord token revocation on logout, idle timeout.
   No refresh token is stored until that path exists; the session re-authenticates
   when its access token expires.

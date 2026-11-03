@@ -4,6 +4,7 @@ export * from "./migrator";
 export * from "./settings-repository";
 export * from "./audit-store";
 export * from "./config-baseline-store";
+export * from "./config-template-store";
 export * from "./idempotency";
 export * from "./case-store";
 export * from "./member-store";

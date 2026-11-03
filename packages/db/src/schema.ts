@@ -233,6 +233,22 @@ export const configBaselines = pgTable("config_baselines", {
 });
 
 /**
+ * A saved configuration template: one guild's snapshot of every module's
+ * effective settings. `lower(name)` is unique per guild in the migration, not
+ * a primary key, so a rename can keep the id.
+ */
+export const configTemplates = pgTable("config_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  guildId: text("guild_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  modules: jsonValue("modules").notNull(),
+  createdBy: text("created_by"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * P3 community-owned records: panels, giveaways, tags, feeds and transcript
  * events. The typed level/economy/ticket tables stay the spine; this table is
  * for feature records that do not warrant a new SQL shape yet.
@@ -602,6 +618,7 @@ export const schema = {
   economyLedger,
   auditEvents,
   configBaselines,
+  configTemplates,
   communityRecords,
   aiDocuments,
   aiUsage,

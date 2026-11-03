@@ -22,6 +22,7 @@ import {
   cases,
   communityRecords,
   configBaselines,
+  configTemplates,
   economyLedger,
   guilds,
   imports,
@@ -307,6 +308,7 @@ export class DrizzlePortabilityStore implements PortabilityStore {
       await tx.delete(settings).where(eq(settings.guildId, guildId));
       await tx.delete(caseCounters).where(eq(caseCounters.guildId, guildId));
       await tx.delete(configBaselines).where(eq(configBaselines.guildId, guildId));
+      await tx.delete(configTemplates).where(eq(configTemplates.guildId, guildId));
 
       await tx
         .insert(guilds)
@@ -644,6 +646,7 @@ export class DrizzlePortabilityStore implements PortabilityStore {
       await tx.delete(settings).where(eq(settings.guildId, guildId));
       await tx.delete(caseCounters).where(eq(caseCounters.guildId, guildId));
       await tx.delete(configBaselines).where(eq(configBaselines.guildId, guildId));
+      await tx.delete(configTemplates).where(eq(configTemplates.guildId, guildId));
       await tx.delete(guilds).where(eq(guilds.id, guildId));
 
       const [row] = await tx

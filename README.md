@@ -14,12 +14,13 @@ tickets, economy and AI all stand on.
 foundation** is now in repo: Discord OAuth2/PKCE login, opaque Postgres-backed
 sessions, per-guild BigInt authorization, schema-generated settings widgets,
 audited settings writes from the dashboard and a `PATCH /api/v1` route, a fleet
-view with three built-in config templates that preview a per-guild diff, and
-checksummed config export/import with a stored baseline and a drift page. Every
-apply is bound to the previewed plan. The dashboard stays the existing
-framework-free `apps/web` HTML app; a Next.js shell is not built and is not
-required for this slice. Custom saved templates, analytics aggregates, scoped
-API tokens and webhooks are the remaining P6 work. P7 now has invite tracking as
+view with three built-in config templates that preview a per-guild diff, named
+saved templates with audited create/update/delete, and checksummed config
+export/import with a stored baseline and a drift page. Every apply is bound to
+the previewed plan. The dashboard stays the existing framework-free `apps/web`
+HTML app; a Next.js shell is not built and is not required for this slice.
+Analytics aggregates, session hardening, scoped API tokens and webhooks are the
+remaining P6 work. P7 now has invite tracking as
 a sixth module (attribution, a joins/retention leaderboard and advisory
 suspicious-join flags), audit logging as a seventh module (five event kinds, one
 operator channel and a retained ledger), link/profanity/zalgo content filters,
@@ -45,7 +46,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**515 tests across 76 files** without a Discord token, database or network.
+**526 tests across 79 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -59,7 +60,7 @@ exercised over real HTTP, including authenticated settings writes against a fake
 OAuth port; live Discord OAuth is not claimed. Slash `InteractionCreate` from a
 human client is still the next live check. Pass 44 opened the live SQL window.
 Since then Docker Desktop 29.9.2 runs the repo's compose Postgres 16.15 and
-Redis, all 15 migrations are applied, and `pnpm probe:live` is 16/16 — settings survive a
+Redis, all 16 migrations are applied, and `pnpm probe:live` is 17/17 — settings survive a
 pool restart, cooldowns are shared through Redis, a BullMQ job runs once with a
 Postgres receipt, a delayed timer fires after its delay, a real case expires
 through `TemporaryActionService`, a reminder/scheduled record delivers once, a
@@ -448,11 +449,23 @@ and shows the exact before/after diff; nothing is written. Apply is bound to a
 SHA-256 fingerprint of that plan, re-authorizes every selected server, refuses a
 missing or stale preview (`400`/`409`) and then writes through
 `SettingsService.update`, with one audit row per changed module. Templates never
-contain channel or role ids, and custom saved templates are not built.
+contain channel or role ids.
 
-This is still not the P6 exit demo: custom saved templates, token refresh and
-revocation, public scoped API tokens, per-token rate limits, `Idempotency-Key`,
-webhooks, OpenAPI, and a live OAuth round trip against Discord remain open. See
+**Saved templates** let an admin name a snapshot of one server's effective
+settings, list it, rename or refresh it, delete it, and apply it to selected
+servers. `config_templates` (migration 0016) stores the snapshot; one kernel
+`SavedTemplateStore` port has in-memory and Drizzle adapters. Save parses every
+module with its own Zod schema before the insert. Apply re-validates the stored
+row: a template that has drifted out of validity lists every bad path and is
+refused at `400`, never applied. A valid template reuses the built-in plan,
+fingerprint, re-authorization and per-module audit path; create, update and
+delete append their own `template.*` audit rows. There is no marketplace and no
+second settings store.
+
+This is still not the P6 exit demo: analytics aggregates, token refresh and
+revocation, per-route rate limits, public scoped API tokens, per-token rate
+limits, `Idempotency-Key`, webhooks, OpenAPI, and a live OAuth round trip against
+Discord remain open. See
 [Dashboard](memory/vault/03-Architecture/Dashboard.md) and
 [ADR-0016](memory/vault/03-Architecture/ADR/ADR-0016-dashboard-foundation.md).
 
@@ -569,10 +582,10 @@ Everything below is free. No feature is moved behind a paywall.
 
 ### Planned (honest roadmap)
 
-- **P6 remaining:** custom saved templates, analytics aggregates, token
-  refresh/revocation, scoped public API tokens, per-token rate limits,
-  idempotency, webhooks and OpenAPI. Schema-driven widgets, the audit trail, the
-  fleet view, built-in templates and config export/import/drift are in repo; the
+- **P6 remaining:** analytics aggregates, token refresh/revocation, per-route
+  rate limits, scoped public API tokens, per-token rate limits, idempotency,
+  webhooks and OpenAPI. Schema-driven widgets, the audit trail, the fleet view,
+  built-in and saved templates, and config export/import/drift are in repo; the
   framework-free `apps/web` carrier is deliberate for now.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
@@ -893,7 +906,7 @@ Still open and not claimed as done:
 - MEE6 import is file-based, not a live fetch.
 - Forms modal input is not implemented; `/form submit` takes the validated
   `answers` option. Forms are not yet part of the `/export guild` bundle.
-- Live Discord OAuth, custom saved templates and scoped API tokens are the
+- Live Discord OAuth, analytics aggregates and scoped API tokens are the
   remaining P6 work. The Postgres session path is live-proven locally, but the
   Discord login that creates it is not.
 

@@ -3,6 +3,7 @@ import type { PostgresHandle } from "./client";
 import { DrizzleSettingsRepository } from "./settings-repository";
 import { DrizzleAuditStore } from "./audit-store";
 import { DrizzleConfigBaselineStore } from "./config-baseline-store";
+import { DrizzleSavedTemplateStore } from "./config-template-store";
 import { PostgresIdempotencyStore } from "./idempotency";
 import { DrizzleCaseStore } from "./case-store";
 import { DrizzleMemberStore } from "./member-store";
@@ -41,6 +42,12 @@ export function createConfigBaselineStore(
   handle: PostgresHandle,
 ): DrizzleConfigBaselineStore {
   return new DrizzleConfigBaselineStore(handle.db as never);
+}
+
+export function createSavedTemplateStore(
+  handle: PostgresHandle,
+): DrizzleSavedTemplateStore {
+  return new DrizzleSavedTemplateStore(handle.db as never);
 }
 
 export function createIdempotencyStore(handle: PostgresHandle): PostgresIdempotencyStore {

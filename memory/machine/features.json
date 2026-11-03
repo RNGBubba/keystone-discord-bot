@@ -1719,9 +1719,9 @@
           "phase": "P6",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Auth, schema-generated settings widgets, the audit trail, the fleet view and built-in templates are in repo; a live Discord OAuth round trip is pending",
+          "note": "Auth, schema-generated settings widgets, the audit trail, the fleet view, built-in and saved templates, and config export/import/drift are in repo; a live Discord OAuth round trip is pending",
           "liveVerified": false,
-          "openReason": "Login, sessions, guild reads, schema-generated forms, audited writes, the fleet view and built-in templates are built; a live Discord OAuth round trip is not."
+          "openReason": "Login, sessions, guild reads, schema forms, audited writes, the fleet view, built-in/saved templates and config portability are built; a live Discord OAuth round trip is not."
         },
         {
           "id": "operations.dashboard-auth-foundation",
@@ -1807,7 +1807,7 @@
           "phase": "P6",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Every accepted settings update and reset appends one `audit_events` row with the actor, surface, module and dotted-path before/after diff; a no-op or rejected write appends nothing. The dashboard shows the newest rows per module. `/config` passes its command actor. Live 2026-11-03: the dashboard save produced exactly one row naming the signed-in actor and source; the SQL store is PGlite-tested.",
+          "note": "Every accepted settings update and reset appends one `audit_events` row with the actor, surface, module and dotted-path before/after diff; a no-op or rejected write appends nothing. The dashboard shows the newest rows per module. Template create/update/delete append `template.*` rows on the same ledger. `/config` passes its command actor. Live 2026-11-03: the dashboard save produced exactly one row naming the signed-in actor and source; the SQL store is PGlite-tested.",
           "evidence": [
             "packages/kernel/src/audit.ts",
             "packages/kernel/src/settings.ts",
@@ -1859,17 +1859,23 @@
           "phase": "P6",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Three built-in templates (alert-first moderation, strict moderation, quiet optional modules) preview a schema-validated per-guild diff. Apply is bound to a SHA-256 fingerprint of the displayed plan, refuses a stale or missing preview, and writes through SettingsService with one dashboard audit row per module. Custom saved templates are not built.",
+          "note": "Three built-in templates and named saved templates share one plan: a patch or snapshot is deep-merged over each guild's current settings, parsed by that module's own Zod schema and diffed before anything is written. Apply is bound to a SHA-256 fingerprint of the displayed plan, re-authorizes every selected guild, refuses a missing/stale preview and writes through SettingsService with one dashboard audit row per module. A saved template is a guild-owned snapshot (migration 0016) with in-memory and Drizzle adapters; an out-of-validity stored row is reported and refused at 400. Create/update/delete are audited. Live over real local HTTP on Postgres with two guilds.",
           "evidence": [
             "apps/web/src/templates.ts",
             "apps/web/src/templates.test.ts",
+            "apps/web/src/saved-templates.test.ts",
             "apps/web/src/web.test.ts",
             "apps/web/src/render.ts",
+            "packages/kernel/src/saved-templates.ts",
+            "packages/db/src/config-template-store.ts",
+            "packages/db/src/config-template-store.test.ts",
+            "packages/db/src/migrations/0016-config-templates.ts",
             "scripts/live-probe.ts"
           ],
           "liveVerified": true,
           "liveEvidence": [
-            "web-fleet-templates"
+            "web-fleet-templates",
+            "web-saved-templates"
           ]
         },
         {
@@ -1885,7 +1891,7 @@
           "phase": "P6",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "A guild's effective module settings download as a checksummed JSON file; import parses and schema-validates the file, previews the exact diff, and applies only with a matching SHA-256 fingerprint, writing through SettingsService with one dashboard audit row per module. The applied bundle becomes the guild's baseline, and the drift page compares baseline to live. Custom saved templates are still open.",
+          "note": "A guild's effective module settings download as a checksummed JSON file; import parses and schema-validates the file, previews the exact diff, and applies only with a matching SHA-256 fingerprint, writing through SettingsService with one dashboard audit row per module. The applied bundle becomes the guild's baseline, and the drift page compares baseline to live. Saved templates are the sibling slice: one snapshot per guild, applied through this same fingerprint and audit path.",
           "evidence": [
             "apps/web/src/config-bundle.ts",
             "apps/web/src/config-bundle.test.ts",

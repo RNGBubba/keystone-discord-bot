@@ -128,8 +128,8 @@ rate-limited register leaves the app with no commands.
   and a fleet view with three built-in config templates that preview a
   schema-validated diff and apply only the previewed plan. The carrier is the
   framework-free `apps/web` HTML app; a future Next.js shell is not built and is
-  not required for this slice. Custom saved templates and scoped API tokens
-  remain open.
+  not required for this slice. Saved templates are in repo; analytics
+  aggregates, session hardening and scoped API tokens remain open.
 - P7 invite tracking is in repo as the sixth module: `/invites` leaderboard,
   stats and who-invited-whom, backed by `invite_joins` and advisory fake-join
   flags. A cold cache records an unknown inviter; the adapter test covers it.
@@ -250,8 +250,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 515
-  tests in 76 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 526
+  tests in 79 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -303,8 +303,8 @@ rate-limited register leaves the app with no commands.
   write appends one dashboard audit row. There is no template table or second
   schema. The live probe is 15/15: `web-fleet-templates` previewed and applied
   across two Postgres-backed guilds with a real session and CSRF, refused a
-  wrong fingerprint at `409`, and saw one audit row per guild. Custom saved
-  templates and JSON fleet endpoints are not built.
+  wrong fingerprint at `409`, and saw one audit row per guild. JSON fleet
+  endpoints are not built; saved templates arrived in pass 52.
 - Pass 51 built the P6 config export/import/drift slice. `GET
   /dashboard/guilds/:id/config/export` downloads a checksummed settings bundle
   (kind/version, one entry per module, SHA-256, credential-shaped keys omitted).
@@ -319,6 +319,20 @@ rate-limited register leaves the app with no commands.
   it as multipart, previewed without writing, refused `400`/`409`, applied one
   audited AI write with a stored baseline, saw no drift then exactly one changed
   value after an out-of-band update. OAuth exchange used a fake port.
+- Pass 52 finished the P6 template capability. A guild's effective settings can
+  be saved as a named template, listed, renamed or refreshed, deleted, and
+  applied to selected guilds. `config_templates` (migration 0016) sits behind one
+  `SavedTemplateStore` port with in-memory and Drizzle adapters. Save validates
+  every module with its own Zod schema; apply re-validates the stored row, so an
+  invalidated template is reported and refused at `400`, never applied. A valid
+  template reuses the built-in plan, SHA-256 fingerprint, re-authorization and
+  `SettingsService.update` loop, with one dashboard audit row per module;
+  create/update/delete append `template.*` rows. No marketplace, second settings
+  store or second write path. The carrier is still the framework-free
+  `apps/web` app. Live probe is 17/17: `web-saved-templates` saved, listed,
+  previewed two guilds without writing, refused tampered/stale previews at
+  `409`, applied one audited write per guild, refused an invalidated row at
+  `400`, and audited delete. OAuth exchange used a fake port.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in
@@ -353,8 +367,8 @@ rate-limited register leaves the app with no commands.
   answered real HTTP requests; the write path was exercised over real local HTTP
   with a fake OAuth port. Live Discord OAuth is open.
 - Environment: Docker Desktop **29.9.2** runs the repo's compose Postgres
-  **16.15** and Redis; all 15 migrations are applied, and `pnpm probe:live`
-  passed 16/16 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
+  **16.15** and Redis; all 16 migrations are applied, and `pnpm probe:live`
+  passed 17/17 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
   localhost. The machine evidence is `memory/machine/live.json`; run
   `pnpm probe:live` after touching a SQL, Redis, queue or web path. Memory mode
   is still a supported fallback, not the configured one. Local Ollama is up; a
@@ -364,9 +378,8 @@ rate-limited register leaves the app with no commands.
   mode, forms modal input and forms in the guild export bundle, live
   role/select/voice paths, a live Discord timer delivery and a live panic
   lockdown (the SQL/service halves are live-proven), a real member leave,
-  pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth, custom saved
-  templates, analytics aggregates, token refresh/revocation, scoped API tokens,
-  and the rest of P7.
+  pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth, analytics
+  aggregates, session hardening, scoped API tokens, and the rest of P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

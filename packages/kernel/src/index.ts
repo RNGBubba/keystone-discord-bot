@@ -20,6 +20,7 @@ export * from "./guards";
 export * from "./audit";
 export * from "./settings";
 export * from "./baselines";
+export * from "./saved-templates";
 export * from "./config";
 export * from "./telemetry";
 export * from "./web";

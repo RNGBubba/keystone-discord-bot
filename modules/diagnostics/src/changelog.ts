@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-52",
+    date: "2026-11-03",
+    summary:
+      "P6 saved templates: save a server's settings as a named template, then preview and apply it to the servers you manage through the same audited, schema-validated path; invalid or stale templates are refused.",
+    journal: "memory/journal/2026-11-03-pass-52.md",
+  },
+  {
     pass: "pass-51",
     date: "2026-11-03",
     summary:

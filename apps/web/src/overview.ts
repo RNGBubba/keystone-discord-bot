@@ -4,13 +4,16 @@ import type {
   AuditStore,
   ConfigBaselineStore,
   DashboardOverview,
+  SavedTemplateModule,
+  SavedTemplateRecord,
+  SavedTemplateStore,
   DashboardStore,
   ModuleManifest,
   ModuleRegistry,
   SettingsChangeContext,
   SettingsService,
 } from "@keystone/kernel";
-import { diffSettings } from "@keystone/kernel";
+import { SavedTemplateNameTakenError, diffSettings } from "@keystone/kernel";
 import {
   ConfigBundleError,
   createConfigBundle,
@@ -28,6 +31,7 @@ import {
   SettingsValidationError,
   buildSettingsForm,
   type SettingsFormModel,
+  type SettingsIssue,
 } from "./settings-form";
 import {
   mergeSettings,
@@ -91,7 +95,44 @@ export interface ConfigApplyResult {
   readonly failures: readonly { readonly moduleId: string; readonly message: string }[];
 }
 
+export interface SavedTemplateSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly moduleCount: number;
+  readonly invalidCount: number;
+  readonly createdBy?: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+export interface SavedTemplateDetail extends SavedTemplateSummary {
+  readonly modules: readonly SavedTemplateModule[];
+  readonly issues: readonly SettingsIssue[];
+}
+
+function templateName(value: string): string {
+  const name = value.trim();
+  if (!name) throw new HttpError(400, "A template name is required.", "template_name_missing");
+  if (name.length > 60) {
+    throw new HttpError(400, "A template name must be 60 characters or fewer.", "template_name_too_long");
+  }
+  return name;
+}
+
+function templateDescription(value: string): string {
+  const description = value.trim();
+  if (description.length > 280) {
+    throw new HttpError(400, "A template description must be 280 characters or fewer.", "template_description_too_long");
+  }
+  return description;
+}
+
 /** Never ship a credential-shaped setting to a browser, even by accident. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function safeValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(safeValue);
   if (value && typeof value === "object") return safeSettings(value as Record<string, unknown>);
@@ -134,6 +175,7 @@ export class DashboardService {
     private readonly store: DashboardStore,
     private readonly audit?: AuditStore,
     private readonly baselines?: ConfigBaselineStore,
+    private readonly savedTemplates?: SavedTemplateStore,
   ) {}
 
   private present(module: ModuleManifest, values: Record<string, unknown>): DashboardModule {
@@ -322,6 +364,18 @@ export class DashboardService {
       );
     }
 
+    return this.applyPlan(plan, actorId);
+  }
+
+  /**
+   * The one write loop for every previewed plan.
+   *
+   * Built-in and saved templates both reach this method after their own
+   * fingerprint check. Every module write is `SettingsService.update`, so the
+   * audit row and the schema gate are identical; a failure is reported and the
+   * remaining writes are still attempted.
+   */
+  private async applyPlan(plan: TemplatePlan, actorId?: string): Promise<TemplateApplyResult> {
     let modulesWritten = 0;
     const failures: { guildId: string; moduleId: string }[] = [];
     for (const guildPlan of plan.guilds) {
@@ -627,6 +681,404 @@ export class DashboardService {
     return { modulesWritten, failures };
   }
 
+  private requireSavedTemplates(): SavedTemplateStore {
+    if (!this.savedTemplates) {
+      throw new HttpError(
+        503,
+        "Saved templates are not configured on this dashboard.",
+        "saved_templates_unconfigured",
+      );
+    }
+    return this.savedTemplates;
+  }
+
+  /**
+   * Validate a stored snapshot against the current module schemas.
+   *
+   * This is the read side of the apply gate: a template saved against an older
+   * schema, or a row edited outside the dashboard, reports every issue and no
+   * target. The registry lookup also catches a module that was removed.
+   */
+  private validateSavedTemplateModules(modules: readonly SavedTemplateModule[]): {
+    targets: Map<string, { module: ModuleManifest; settings: Record<string, unknown> }>;
+    issues: SettingsIssue[];
+  } {
+    const targets = new Map<string, { module: ModuleManifest; settings: Record<string, unknown> }>();
+    const issues: SettingsIssue[] = [];
+    const seen = new Set<string>();
+
+    for (const [index, entry] of modules.entries()) {
+      const id = typeof entry?.id === "string" ? entry.id.trim() : "";
+      if (!id) {
+        issues.push({ path: `modules[${index}].id`, message: "A module id is required." });
+        continue;
+      }
+      if (seen.has(id)) {
+        issues.push({ path: id, message: `Module "${id}" appears more than once.` });
+        continue;
+      }
+      seen.add(id);
+
+      const module = this.registry.getModule(id);
+      if (!module) {
+        issues.push({ path: id, message: `Module "${id}" is not registered in this build.` });
+        continue;
+      }
+      if (!isRecord(entry.settings)) {
+        issues.push({ path: id, message: "This module's settings are missing." });
+        continue;
+      }
+
+      const parsed = module.settingsSchema.safeParse(entry.settings);
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          issues.push({
+            path: `${id}.${issue.path.join(".") || "(root)"}`,
+            message: issue.message,
+          });
+        }
+        continue;
+      }
+      targets.set(id, { module, settings: parsed.data as Record<string, unknown> });
+    }
+
+    return { targets, issues };
+  }
+
+  /** Snapshot every module's effective settings through the one settings path. */
+  private async snapshotModules(guild: DiscordGuild): Promise<SavedTemplateModule[]> {
+    const modules: SavedTemplateModule[] = [];
+    for (const module of this.registry.listModules()) {
+      let current: Record<string, unknown>;
+      try {
+        current = await this.settings.get(guild.id, module.id);
+      } catch (error) {
+        const issues = zodIssues(error);
+        if (!issues) throw error;
+        throw new SettingsValidationError(
+          issues.map((issue) => ({
+            path: `${module.id}.${issue.path.join(".") || "(root)"}`,
+            message: issue.message,
+          })),
+        );
+      }
+
+      const parsed = module.settingsSchema.safeParse(safeSettings(current));
+      if (!parsed.success) {
+        throw new SettingsValidationError(
+          parsed.error.issues.map((issue) => ({
+            path: `${module.id}.${issue.path.join(".") || "(root)"}`,
+            message: issue.message,
+          })),
+        );
+      }
+      modules.push({
+        id: module.id,
+        version: module.version,
+        settings: parsed.data as Record<string, unknown>,
+      });
+    }
+    return modules;
+  }
+
+  private savedTemplateSummary(record: SavedTemplateRecord): SavedTemplateSummary {
+    const validation = this.validateSavedTemplateModules(record.modules);
+    return {
+      id: record.id,
+      name: record.name,
+      description: record.description,
+      moduleCount: record.modules.length,
+      invalidCount: validation.issues.length,
+      ...(record.createdBy ? { createdBy: record.createdBy } : {}),
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  private savedTemplateDetail(record: SavedTemplateRecord): SavedTemplateDetail {
+    const validation = this.validateSavedTemplateModules(record.modules);
+    return {
+      ...this.savedTemplateSummary(record),
+      modules: record.modules,
+      issues: validation.issues,
+    };
+  }
+
+  private async auditTemplate(
+    action: "template.create" | "template.update" | "template.delete",
+    guildId: string,
+    targetId: string,
+    data: Record<string, unknown>,
+    actorId?: string,
+  ): Promise<void> {
+    if (!this.audit) return;
+    await this.audit.append({
+      guildId,
+      ...(actorId ? { actorId } : {}),
+      action,
+      targetId,
+      data: { source: "dashboard", ...data },
+    });
+  }
+
+  async listSavedTemplates(guild: DiscordGuild): Promise<readonly SavedTemplateSummary[]> {
+    const records = await this.requireSavedTemplates().list(guild.id);
+    return records.map((record) => this.savedTemplateSummary(record));
+  }
+
+  async savedTemplateRecord(guild: DiscordGuild, id: string): Promise<SavedTemplateRecord> {
+    const record = await this.requireSavedTemplates().get(guild.id, id);
+    if (!record) throw new HttpError(404, "No such saved template.", "template_not_found");
+    return record;
+  }
+
+  async savedTemplate(guild: DiscordGuild, id: string): Promise<SavedTemplateDetail> {
+    return this.savedTemplateDetail(await this.savedTemplateRecord(guild, id));
+  }
+
+  /**
+   * Save the guild's current effective settings under a new name.
+   *
+   * The snapshot is parsed by every module schema before the insert, so a
+   * template can never be born invalid. The create itself appends a dashboard
+   * audit row; applying it later is audited as ordinary settings writes.
+   */
+  async createSavedTemplate(
+    guild: DiscordGuild,
+    input: { readonly name: string; readonly description?: string },
+    actorId?: string,
+  ): Promise<SavedTemplateSummary> {
+    const store = this.requireSavedTemplates();
+    const name = templateName(input.name);
+    const description = templateDescription(input.description ?? "");
+    const modules = await this.snapshotModules(guild);
+
+    let record: SavedTemplateRecord;
+    try {
+      record = await store.create({
+        guildId: guild.id,
+        name,
+        description,
+        modules,
+        ...(actorId ? { createdBy: actorId } : {}),
+      });
+    } catch (error) {
+      if (error instanceof SavedTemplateNameTakenError) {
+        throw new HttpError(
+          409,
+          "A saved template with that name already exists in this server.",
+          "template_name_taken",
+        );
+      }
+      throw error;
+    }
+
+    await this.auditTemplate(
+      "template.create",
+      guild.id,
+      record.id,
+      { name: record.name, moduleCount: record.modules.length },
+      actorId,
+    );
+    return this.savedTemplateSummary(record);
+  }
+
+  /**
+   * Edit a saved template's metadata and refresh its snapshot on request.
+   *
+   * Content is not hand-edited field by field: that would be a second settings
+   * editor. `refreshSettings` re-reads the source guild through the same
+   * `SettingsService` and schema gate, which is the deliberate update path.
+   */
+  async updateSavedTemplate(
+    guild: DiscordGuild,
+    id: string,
+    input: {
+      readonly name?: string;
+      readonly description?: string;
+      readonly refreshSettings?: boolean;
+    },
+    actorId?: string,
+  ): Promise<SavedTemplateSummary> {
+    const store = this.requireSavedTemplates();
+    const existing = await store.get(guild.id, id);
+    if (!existing) throw new HttpError(404, "No such saved template.", "template_not_found");
+
+    const name = input.name !== undefined ? templateName(input.name) : existing.name;
+    const description =
+      input.description !== undefined
+        ? templateDescription(input.description)
+        : existing.description;
+    const refresh = input.refreshSettings === true;
+    if (input.name === undefined && input.description === undefined && !refresh) {
+      throw new HttpError(400, "Change a name or description, or refresh the snapshot.", "template_no_change");
+    }
+    const modules = refresh ? await this.snapshotModules(guild) : existing.modules;
+
+    // A preview binds to `updatedAt`. Make every accepted edit move it forward,
+    // even when two requests land in the same millisecond.
+    const at = Math.max(Date.now(), existing.updatedAt + 1);
+    let record: SavedTemplateRecord | undefined;
+    try {
+      record = await store.update(guild.id, id, {
+        name,
+        description,
+        modules,
+        at,
+      });
+    } catch (error) {
+      if (error instanceof SavedTemplateNameTakenError) {
+        throw new HttpError(
+          409,
+          "A saved template with that name already exists in this server.",
+          "template_name_taken",
+        );
+      }
+      throw error;
+    }
+    if (!record) throw new HttpError(404, "No such saved template.", "template_not_found");
+
+    await this.auditTemplate(
+      "template.update",
+      guild.id,
+      record.id,
+      {
+        name: record.name,
+        refreshed: refresh,
+        moduleCount: record.modules.length,
+      },
+      actorId,
+    );
+    return this.savedTemplateSummary(record);
+  }
+
+  async deleteSavedTemplate(
+    guild: DiscordGuild,
+    id: string,
+    actorId?: string,
+  ): Promise<void> {
+    const store = this.requireSavedTemplates();
+    const existing = await store.get(guild.id, id);
+    if (!existing) throw new HttpError(404, "No such saved template.", "template_not_found");
+    const deleted = await store.delete(guild.id, id);
+    if (!deleted) throw new HttpError(404, "No such saved template.", "template_not_found");
+
+    await this.auditTemplate(
+      "template.delete",
+      guild.id,
+      id,
+      { name: existing.name, moduleCount: existing.modules.length },
+      actorId,
+    );
+  }
+
+  /**
+   * Preview a saved template against selected guilds.
+   *
+   * A template that no longer validates is returned as a plan with template
+   * issues and no guilds, so the page reports it and apply stays disabled. For a
+   * valid template, every target module is parsed once and diffed against each
+   * guild's live settings. The fingerprint includes the template's updatedAt,
+   * so an edit after preview also invalidates the apply.
+   */
+  async previewSavedTemplate(
+    guilds: readonly DiscordGuild[],
+    template: SavedTemplateRecord,
+  ): Promise<TemplatePlan> {
+    const baseTemplate = {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+    };
+    const validation = this.validateSavedTemplateModules(template.modules);
+    const seed = `saved:${template.id}:${template.updatedAt}`;
+    if (validation.issues.length > 0) {
+      return {
+        template: baseTemplate,
+        guilds: [],
+        changeCount: 0,
+        issueCount: validation.issues.length,
+        templateIssues: validation.issues,
+        fingerprint: planFingerprint(seed, []),
+      };
+    }
+
+    const plans: TemplateGuildPlan[] = [];
+    for (const guild of guilds) {
+      const modules: SettingsPlanModule[] = [];
+      for (const [moduleId, entry] of validation.targets) {
+        let current: Record<string, unknown>;
+        try {
+          current = await this.settings.get(guild.id, moduleId);
+        } catch (error) {
+          const issues = zodIssues(error);
+          if (!issues) throw error;
+          modules.push({
+            moduleId,
+            moduleName: entry.module.name,
+            changes: {},
+            issues: issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          });
+          continue;
+        }
+
+        const changes = diffSettings(current, entry.settings);
+        if (Object.keys(changes).length === 0) continue;
+        modules.push({
+          moduleId,
+          moduleName: entry.module.name,
+          changes,
+          target: entry.settings,
+          issues: [],
+        });
+      }
+      plans.push({
+        guild: { id: guild.id, name: guild.name },
+        modules,
+        changeCount: modules.reduce(
+          (count, module) => count + Object.keys(module.changes).length,
+          0,
+        ),
+        issueCount: modules.reduce((count, module) => count + module.issues.length, 0),
+      });
+    }
+
+    return {
+      template: baseTemplate,
+      guilds: plans,
+      changeCount: plans.reduce((count, plan) => count + plan.changeCount, 0),
+      issueCount: plans.reduce((count, plan) => count + plan.issueCount, 0),
+      fingerprint: planFingerprint(seed, plans),
+    };
+  }
+
+  async applySavedTemplate(
+    guilds: readonly DiscordGuild[],
+    template: SavedTemplateRecord,
+    fingerprint: string,
+    actorId?: string,
+  ): Promise<TemplateApplyResult> {
+    const plan = await this.previewSavedTemplate(guilds, template);
+    if (plan.issueCount > 0) {
+      throw new HttpError(
+        400,
+        "This saved template no longer validates against the current module schemas. Nothing was applied.",
+        "template_invalid",
+      );
+    }
+    if (plan.fingerprint !== fingerprint) {
+      throw new HttpError(
+        409,
+        "The preview is out of date. Preview the saved template again before applying it.",
+        "preview_stale",
+      );
+    }
+    return this.applyPlan(plan, actorId);
+  }
+
   async module(guild: DiscordGuild, moduleId: string): Promise<DashboardModule> {
     const module = this.registry.getModule(moduleId);
     if (!module) throw new HttpError(404, "No such module.", "module_not_found");
@@ -647,15 +1099,16 @@ export class DashboardService {
     };
   }
 
-  /** Newest-first audit rows for one guild, optionally filtered to one module. */
+  /** Newest-first audit rows for one guild, optionally filtered to one target. */
   async history(
     guildId: string,
-    options: { moduleId?: string; limit?: number } = {},
+    options: { moduleId?: string; targetId?: string; limit?: number } = {},
   ): Promise<readonly AuditEventRecord[]> {
     if (!this.audit) return [];
+    const targetId = options.targetId ?? options.moduleId;
     const rows = await this.audit.list(guildId, 100);
     return rows
-      .filter((row) => !options.moduleId || row.targetId === options.moduleId)
+      .filter((row) => !targetId || row.targetId === targetId)
       .slice(0, Math.min(Math.max(options.limit ?? 8, 1), 20));
   }
 

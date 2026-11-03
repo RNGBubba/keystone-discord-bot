@@ -1,5 +1,11 @@
 import type { AuditEventRecord } from "@keystone/kernel";
-import type { DashboardModule, DashboardView, FleetView } from "./overview";
+import type {
+  DashboardModule,
+  DashboardView,
+  FleetView,
+  SavedTemplateDetail,
+  SavedTemplateSummary,
+} from "./overview";
 import type { ConfigDrift, ConfigPlan } from "./config-bundle";
 import type { DiscordGuild } from "./oauth";
 import { encodePathSegment } from "./http";
@@ -252,11 +258,32 @@ function renderPlanRows(modules: TemplateGuildPlan["modules"]): string {
     .join("");
 }
 
+export interface TemplatePreviewOptions {
+  readonly applyAction?: string;
+  readonly includeTemplateField?: boolean;
+  readonly backHref?: string;
+  readonly backLabel?: string;
+}
+
 export function renderTemplatePreview(
   username: string,
   plan: TemplatePlan,
   csrfToken: string,
+  options: TemplatePreviewOptions = {},
 ): string {
+  const applyAction = options.applyAction ?? "/dashboard/fleet/apply";
+  const includeTemplateField = options.includeTemplateField ?? true;
+  const backHref = options.backHref ?? "/dashboard/fleet";
+  const backLabel = options.backLabel ?? "Back to the fleet";
+  const templateIssues = plan.templateIssues ?? [];
+  const issuePanel = templateIssues.length > 0
+    ? `<div class="form-error"><p><strong>This saved template does not validate against the current module schemas.</strong></p>
+        <table><thead><tr><th>Setting</th><th>Problem</th></tr></thead><tbody>${templateIssues
+          .map((issue) => `<tr><td>${escapeHtml(issue.path.split(".").map(labelFor).join(" · "))}</td><td>${escapeHtml(issue.message)}</td></tr>`)
+          .join("")}</tbody></table>
+      </div>`
+    : "";
+
   const panels = plan.guilds
     .map((guildPlan) => {
       if (guildPlan.modules.length === 0) {
@@ -270,9 +297,11 @@ export function renderTemplatePreview(
     })
     .join("");
 
-  const summary = plan.issueCount > 0
-    ? `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}; ${plan.issueCount} schema issue${plan.issueCount === 1 ? "" : "s"}. Apply is disabled until they are resolved.`
-    : `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}. Nothing has been written yet.`;
+  const summary = templateIssues.length > 0
+    ? `This template has ${templateIssues.length} schema issue${templateIssues.length === 1 ? "" : "s"}. Apply is disabled until it is refreshed or fixed.`
+    : plan.issueCount > 0
+      ? `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}; ${plan.issueCount} schema issue${plan.issueCount === 1 ? "" : "s"}. Apply is disabled until they are resolved.`
+      : `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} across ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}. Nothing has been written yet.`;
 
   const hiddenGuilds = plan.guilds
     .map((guildPlan) => `<input type="hidden" name="guild" value="${escapeHtml(guildPlan.guild.id)}">`)
@@ -281,9 +310,9 @@ export function renderTemplatePreview(
     ? `<div class="form-error">This preview has schema issues, so apply is disabled. Reset or fix the affected module, then preview again.</div>`
     : plan.changeCount === 0
       ? `<p class="muted">No changes to apply: the selected guilds already match this template.</p>`
-      : `<form method="post" action="/dashboard/fleet/apply">
+      : `<form method="post" action="${escapeHtml(applyAction)}">
           <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
-          <input type="hidden" name="template" value="${escapeHtml(plan.template.id)}">
+          ${includeTemplateField ? `<input type="hidden" name="template" value="${escapeHtml(plan.template.id)}">` : ""}
           <input type="hidden" name="fingerprint" value="${escapeHtml(plan.fingerprint)}">
           ${hiddenGuilds}
           <p><button type="submit">Apply to ${plan.guilds.length} guild${plan.guilds.length === 1 ? "" : "s"}</button></p>
@@ -291,11 +320,11 @@ export function renderTemplatePreview(
 
   return layout(
     `${plan.template.name} preview`,
-    `<p><a href="/dashboard/fleet">← Back to the fleet</a></p>
+    `<p><a href="${escapeHtml(backHref)}">← ${escapeHtml(backLabel)}</a></p>
      <h1>${escapeHtml(plan.template.name)}</h1>
      <p class="muted">${escapeHtml(plan.template.description)}</p>
      <div class="notice">${escapeHtml(summary)}</div>
-     ${panels}
+     ${issuePanel}${panels}
      ${apply}
      ${logoutForm(csrfToken)}`,
     username,
@@ -405,6 +434,145 @@ export function renderConfigDrift(
      </div>
      ${baseline}
      ${driftPanel}
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface SavedTemplateNotice {
+  readonly created?: boolean;
+  readonly updated?: boolean;
+  readonly deleted?: boolean;
+  readonly applied?: number;
+  readonly failed?: number;
+  readonly history?: readonly AuditEventRecord[];
+}
+
+export function renderSavedTemplates(
+  username: string,
+  guild: DiscordGuild,
+  templates: readonly SavedTemplateSummary[],
+  csrfToken: string,
+  notice: SavedTemplateNotice = {},
+): string {
+  const base = `/dashboard/guilds/${encodePathSegment(guild.id)}/templates`;
+  const noticeHtml = notice.created
+    ? `<div class="notice">Saved. Open the template to edit it or preview an apply.</div>`
+    : notice.deleted
+      ? `<div class="notice">Template deleted. The deletion is in the audit trail.</div>`
+      : "";
+  const rows = templates
+    .map(
+      (template) => `<tr>
+        <td><a href="${base}/${encodePathSegment(template.id)}">${escapeHtml(template.name)}</a>${
+          template.invalidCount > 0
+            ? ` <span class="error">· invalid (${template.invalidCount})</span>`
+            : ""
+        }</td>
+        <td class="muted">${escapeHtml(template.description || "—")}</td>
+        <td>${template.moduleCount}</td>
+        <td class="muted">${escapeHtml(configTime(template.updatedAt))}</td>
+      </tr>`,
+    )
+    .join("");
+
+  return layout(
+    "Saved templates",
+    `<p><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">← Back to ${escapeHtml(guild.name)}</a></p>
+     <h1>Saved templates</h1>
+     <p class="muted">A saved template is a snapshot of this server's effective module settings. It belongs to this server; applying it to another server always re-authorizes both and previews the exact diff first.</p>
+     ${noticeHtml}
+     <div class="panel"><h2>Your templates</h2>
+       ${templates.length === 0
+         ? `<p class="muted">No saved templates yet.</p>`
+         : `<table><thead><tr><th>Name</th><th>Description</th><th>Modules</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>`}
+     </div>
+     <div class="panel"><h2>Save the current settings</h2>
+       <p class="muted">Every module's effective settings are re-parsed against its own Zod schema before the template is stored. Credential-shaped keys are omitted.</p>
+       <form method="post" action="${base}">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="template-name">Name</label><input id="template-name" type="text" name="name" maxlength="60" required></div>
+         <div class="field"><label for="template-description">Description</label><textarea id="template-description" name="description" rows="2" maxlength="280"></textarea></div>
+         <p><button type="submit">Save template</button></p>
+       </form>
+     </div>
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export function renderSavedTemplateEditor(
+  username: string,
+  guild: DiscordGuild,
+  template: SavedTemplateDetail,
+  targets: readonly DiscordGuild[],
+  csrfToken: string,
+  notice: SavedTemplateNotice = {},
+): string {
+  const base = `/dashboard/guilds/${encodePathSegment(guild.id)}/templates`;
+  const action = `${base}/${encodePathSegment(template.id)}`;
+  const noticeHtml = notice.created
+    ? `<div class="notice">Template saved from this server's current settings.</div>`
+    : notice.updated
+    ? `<div class="notice">Template updated. The edit is in the audit trail below.</div>`
+    : notice.applied !== undefined
+      ? `<div class="notice">${notice.applied} module setting${notice.applied === 1 ? "" : "s"} written across the selected servers. Every write is in that module's audit trail.</div>`
+      : "";
+  const failureHtml = notice.failed && notice.failed > 0
+    ? `<div class="form-error">${notice.failed} write${notice.failed === 1 ? "" : "s"} failed. The remaining writes were attempted; review the audit trail and try again.</div>`
+    : "";
+  const issues = template.issues.length > 0
+    ? `<div class="form-error"><p><strong>This template no longer validates against the current module schemas.</strong> It cannot be applied until it is refreshed from this server or deleted.</p>
+        <table><thead><tr><th>Setting</th><th>Problem</th></tr></thead><tbody>${template.issues
+          .map((issue) => `<tr><td>${escapeHtml(issue.path.split(".").map(labelFor).join(" · "))}</td><td>${escapeHtml(issue.message)}</td></tr>`)
+          .join("")}</tbody></table>
+      </div>`
+    : "";
+
+  const targetRows = targets
+    .map(
+      (target) => `<tr><td><input type="checkbox" name="guild" value="${escapeHtml(target.id)}" aria-label="${escapeHtml(target.name)}"${
+        target.id === guild.id ? " checked" : ""
+      }></td><td>${escapeHtml(target.name)}</td><td class="muted">${escapeHtml(target.id)}</td></tr>`,
+    )
+    .join("");
+  const applyPanel = template.issues.length > 0
+    ? `<div class="panel"><h2>Apply</h2><p class="muted">Apply is disabled while this template has schema issues.</p></div>`
+    : targets.length === 0
+      ? `<div class="panel"><h2>Apply</h2><p class="muted">No manageable servers are available.</p></div>`
+      : `<div class="panel"><h2>Apply to servers</h2>
+          <p class="muted">Select the servers to preview. Nothing is written until you confirm the diff; each selected server is re-authorized and every accepted module write is audited.</p>
+          <form method="post" action="${action}/preview">
+            <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+            <table><thead><tr><th></th><th>Server</th><th>ID</th></tr></thead><tbody>${targetRows}</tbody></table>
+            <p><button type="submit">Preview apply</button></p>
+          </form>
+        </div>`;
+
+  return layout(
+    `${template.name} template`,
+    `<p><a href="${base}">← All saved templates</a></p>
+     <h1>${escapeHtml(template.name)}</h1>
+     <p class="muted">${escapeHtml(template.description || "No description.")} · ${template.moduleCount} modules · updated ${escapeHtml(configTime(template.updatedAt))} · created ${escapeHtml(configTime(template.createdAt))}</p>
+     ${noticeHtml}${failureHtml}${issues}
+     <div class="panel"><h2>Edit metadata</h2>
+       <form method="post" action="${action}">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="template-name">Name</label><input id="template-name" type="text" name="name" maxlength="60" value="${escapeHtml(template.name)}" required></div>
+         <div class="field"><label for="template-description">Description</label><textarea id="template-description" name="description" rows="2" maxlength="280">${escapeHtml(template.description)}</textarea></div>
+         <div class="field check"><input id="refresh-settings" type="checkbox" name="refresh" value="1"><label for="refresh-settings">Replace the snapshot with this server's current settings</label></div>
+         <p><button type="submit">Save changes</button></p>
+       </form>
+     </div>
+     ${applyPanel}
+     ${renderAudit(notice.history ?? [])}
+     <div class="panel"><h2>Delete</h2>
+       <p class="muted">Deleting removes the template and keeps its audit rows. It does not change any server's settings.</p>
+       <form method="post" action="${action}/delete">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <p><button type="submit">Delete template</button></p>
+       </form>
+     </div>
      ${logoutForm(csrfToken)}`,
     username,
   );
@@ -534,6 +702,9 @@ function auditChanges(record: AuditEventRecord): string {
 function auditAction(record: AuditEventRecord): string {
   if (record.action === "settings.update") return "Settings update";
   if (record.action === "settings.reset") return "Settings reset";
+  if (record.action === "template.create") return "Template created";
+  if (record.action === "template.update") return "Template updated";
+  if (record.action === "template.delete") return "Template deleted";
   return record.action;
 }
 

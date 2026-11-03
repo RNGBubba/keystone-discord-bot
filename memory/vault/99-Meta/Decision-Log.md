@@ -174,6 +174,14 @@ including the small calls that did not deserve an ADR.
 | 95 | Apply is bound to a plan fingerprint and reuses `SettingsService.update`; each accepted module write appends one dashboard audit row, and the applied bundle becomes the baseline | [[Dashboard]] |
 | 96 | Drift compares baseline -> live and never treats a missing or unreadable baseline as empty settings; a full portability restore/delete clears the baseline | [[Dashboard]], `packages/db/src/config-baseline-store.ts` |
 
+## 2026-11-03 — P6 saved templates
+
+| # | Decision | Where |
+| --- | --- | --- |
+| 97 | A saved template is a guild-owned snapshot of effective settings in `config_templates`, not a second settings store or a marketplace; one `SavedTemplateStore` port has in-memory and Drizzle adapters | [[Dashboard]], `packages/kernel/src/saved-templates.ts`, migration 0016 |
+| 98 | Save and apply both parse the snapshot with each module's own Zod schema; an invalid stored row is reported and refused at `400`, never applied best-effort | [[Dashboard]], `apps/web/src/overview.ts` |
+| 99 | Saved templates share the built-in plan, fingerprint, re-authorization and `SettingsService.update` loop; create/update/delete append `template.*` audit rows, and an edit moves `updatedAt` so an earlier preview is stale | [[Dashboard]], `apps/web/src/overview.ts` |
+
 ## How to add a decision
 
 1. If it changes the contract, write an ADR with **Alternatives**.

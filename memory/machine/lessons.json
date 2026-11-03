@@ -12,7 +12,9 @@
         "packages/kernel/src/registry.ts",
         "modules/diagnostics/src/manifest.ts"
       ],
-      "proofCommands": ["pnpm check"]
+      "proofCommands": [
+        "pnpm check"
+      ]
     },
     {
       "id": "02-guards-and-permissions",
@@ -36,7 +38,9 @@
         "modules/community/src/settings.ts",
         "packages/kernel/src/settings.ts"
       ],
-      "proofCommands": ["pnpm test -- packages/kernel/src/settings.test.ts"]
+      "proofCommands": [
+        "pnpm test -- packages/kernel/src/settings.test.ts"
+      ]
     },
     {
       "id": "04-tests-without-a-token",
@@ -47,7 +51,9 @@
         "packages/queue/src/index.ts",
         "packages/kernel/src/idempotency.ts"
       ],
-      "proofCommands": ["pnpm test -- modules/moderation/src/mod.test.ts"]
+      "proofCommands": [
+        "pnpm test -- modules/moderation/src/mod.test.ts"
+      ]
     },
     {
       "id": "05-cases-and-evidence",
@@ -58,7 +64,9 @@
         "packages/db/src/case-store.ts",
         "modules/moderation/src/format.ts"
       ],
-      "proofCommands": ["pnpm test -- packages/db/src/cases.test.ts"]
+      "proofCommands": [
+        "pnpm test -- packages/db/src/cases.test.ts"
+      ]
     },
     {
       "id": "06-subcommands-and-the-budget",
@@ -69,11 +77,22 @@
         "modules/moderation/src/commands/mod.ts",
         "scripts/commands-doctor.ts"
       ],
-      "proofCommands": ["pnpm commands:catalog"],
+      "proofCommands": [
+        "pnpm commands:catalog"
+      ],
       "facts": [
-        { "text": "100 global roots", "source": "limit" },
-        { "text": "15 user", "source": "contextMenuLimit" },
-        { "text": "15 message", "source": "contextMenuLimit" }
+        {
+          "text": "100 global roots",
+          "source": "limit"
+        },
+        {
+          "text": "15 user",
+          "source": "contextMenuLimit"
+        },
+        {
+          "text": "15 message",
+          "source": "contextMenuLimit"
+        }
       ]
     },
     {
@@ -85,7 +104,9 @@
         "packages/kernel/src/idempotency.ts",
         "packages/db/src/idempotency.ts"
       ],
-      "proofCommands": ["pnpm test -- packages/queue/src/queue.test.ts"]
+      "proofCommands": [
+        "pnpm test -- packages/queue/src/queue.test.ts"
+      ]
     },
     {
       "id": "08-the-bot-side-timer",
@@ -96,19 +117,23 @@
         "modules/moderation/src/temporary.ts",
         "apps/bot/src/runtime.ts"
       ],
-      "proofCommands": ["pnpm test -- modules/moderation/src/temporary.test.ts"]
+      "proofCommands": [
+        "pnpm test -- modules/moderation/src/temporary.test.ts"
+      ]
     },
     {
       "id": "09-memory-that-checks-itself",
       "order": 9,
       "path": "vault/05-Learning/09-memory-that-checks-itself.md",
       "files": [
-    "memory/tools/memory-check.mjs",
-    "memory/machine/claims.json",
-    "scripts/audit-claims.ts",
-    "packages/db/src/migrator.ts"
+        "memory/tools/memory-check.mjs",
+        "memory/machine/claims.json",
+        "scripts/audit-claims.ts",
+        "packages/db/src/migrator.ts"
       ],
-      "proofCommands": ["pnpm memory:check"]
+      "proofCommands": [
+        "pnpm memory:check"
+      ]
     },
     {
       "id": "10-the-live-window",
@@ -119,10 +144,18 @@
         "compose.yaml",
         "memory/machine/live.json"
       ],
-      "proofCommands": ["pnpm probe:live"],
+      "proofCommands": [
+        "pnpm probe:live"
+      ],
       "facts": [
-        { "text": "15 migrations", "source": "migrations" },
-        { "text": "16 live checks", "source": "liveChecks" }
+        {
+          "text": "16 migrations",
+          "source": "migrations"
+        },
+        {
+          "text": "17 live checks",
+          "source": "liveChecks"
+        }
       ]
     },
     {
@@ -134,7 +167,9 @@
         "apps/bot/src/moderation-actions.ts",
         "modules/moderation/src/security.test.ts"
       ],
-      "proofCommands": ["pnpm test -- modules/moderation/src/panic.test.ts apps/bot/src/moderation-actions.test.ts"]
+      "proofCommands": [
+        "pnpm test -- modules/moderation/src/panic.test.ts apps/bot/src/moderation-actions.test.ts"
+      ]
     },
     {
       "id": "12-goodbye",
@@ -145,7 +180,9 @@
         "modules/community/src/settings.ts",
         "apps/bot/src/community-events.test.ts"
       ],
-      "proofCommands": ["pnpm test -- modules/community/src/community.test.ts modules/community/src/commands.test.ts apps/bot/src/community-events.test.ts"]
+      "proofCommands": [
+        "pnpm test -- modules/community/src/community.test.ts modules/community/src/commands.test.ts apps/bot/src/community-events.test.ts"
+      ]
     },
     {
       "id": "13-portability-and-receipts",
@@ -156,7 +193,9 @@
         "packages/db/src/portability-store.ts",
         "scripts/live-probe.ts"
       ],
-      "proofCommands": ["pnpm test -- packages/db/src/portability.test.ts"]
+      "proofCommands": [
+        "pnpm test -- packages/db/src/portability.test.ts"
+      ]
     },
     {
       "id": "14-self-host-quickstart",
@@ -167,8 +206,15 @@
         "scripts/migrate.ts",
         "packages/config/src/index.ts"
       ],
-      "proofCommands": ["pnpm db:migrate"],
-      "facts": [{ "text": "12 modules", "source": "modules" }]
+      "proofCommands": [
+        "pnpm db:migrate"
+      ],
+      "facts": [
+        {
+          "text": "12 modules",
+          "source": "modules"
+        }
+      ]
     }
   ]
 }

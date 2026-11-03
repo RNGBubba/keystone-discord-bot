@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T01:20:47.008Z",
+  "generatedAt": "2026-11-03T01:47:05.733Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -12,7 +12,7 @@
       "reachable": true,
       "version": "16.15",
       "migrations": {
-        "applied": 15,
+        "applied": 16,
         "pending": 0,
         "upToDate": true
       }
@@ -25,7 +25,7 @@
     {
       "id": "postgres-migrations",
       "status": "pass",
-      "detail": "15 migrations applied, 0 pending on Postgres 16.15",
+      "detail": "16 migrations applied, 0 pending on Postgres 16.15",
       "features": []
     },
     {
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1100ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1128ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 3398bc84c613… matched after import fa788548",
+      "detail": "bundle checksum ce669b333449… matched after import 6b5af830",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -137,6 +137,15 @@
       "detail": "real local HTTP on Postgres: exported a 12-module checksummed bundle as a file; uploaded it to another guild via multipart and previewed the diff without writing; an edited checksum was refused at 400 and a wrong fingerprint at 409; apply wrote one AI row with one dashboard audit row and stored the baseline; drift showed no changes, then exactly one changed value after an out-of-band update; OAuth exchange itself used a fake port",
       "features": [
         "operations.config-portability"
+      ]
+    },
+    {
+      "id": "web-saved-templates",
+      "status": "pass",
+      "detail": "real local HTTP on Postgres: saved a template from one guild, listed it, previewed a diff for two guilds without writing, refused a tampered fingerprint at 409 and a stale preview after an edit at 409, then applied one write per guild with one dashboard audit row each; an out-of-band schema-invalid row was reported and refused at 400; create/update/delete were audited; OAuth exchange itself used a fake port",
+      "features": [
+        "operations.config-templates",
+        "operations.multi-server-fleet"
       ]
     }
   ]

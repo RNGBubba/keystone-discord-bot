@@ -5,6 +5,7 @@ import {
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
+  InMemorySavedTemplateStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
   ModuleRegistry,
@@ -70,6 +71,7 @@ interface Harness {
   settings: SettingsService;
   audit: InMemoryAuditStore;
   baselines: InMemoryConfigBaselineStore;
+  savedTemplates: InMemorySavedTemplateStore;
   close(): Promise<void>;
 }
 
@@ -88,6 +90,7 @@ async function harness(): Promise<Harness> {
   const audit = new InMemoryAuditStore();
   const settings = new SettingsService(new InMemorySettingsRepository(), registry, audit);
   const baselines = new InMemoryConfigBaselineStore();
+  const savedTemplates = new InMemorySavedTemplateStore();
   const auth = new AuthService({
     oauth,
     sessions,
@@ -103,7 +106,14 @@ async function harness(): Promise<Harness> {
   const handler = createWebHandler({
     auth,
     access: new GuildAccessService(oauth),
-    dashboard: new DashboardService(registry, settings, dashboardStore, audit, baselines),
+    dashboard: new DashboardService(
+      registry,
+      settings,
+      dashboardStore,
+      audit,
+      baselines,
+      savedTemplates,
+    ),
     logger: createSilentLogger(),
     secureCookies: false,
     databaseMode: "memory",
@@ -120,6 +130,7 @@ async function harness(): Promise<Harness> {
     settings,
     audit,
     baselines,
+    savedTemplates,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -219,7 +230,10 @@ async function login(test: Harness): Promise<{ cookie: string; csrf: string }> {
   const csrf = cookieValue(callback, "keystone_csrf");
   expect(cookie).toBeTruthy();
   expect(csrf).toBeTruthy();
-  return { cookie: `keystone_session=${cookie}`, csrf: csrf as string };
+  return {
+    cookie: `keystone_session=${cookie}; keystone_csrf=${csrf}`,
+    csrf: csrf as string,
+  };
 }
 
 async function downloadConfig(
@@ -938,6 +952,177 @@ describe("P6 web auth and authorization", () => {
       expect(html).toContain("No baseline yet");
       expect(html).toContain("Download config bundle");
       expect(html).not.toContain("No drift");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("saves, lists, edits, applies and deletes a template over real HTTP", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      await test.settings.update(GUILD_A, "ai", { monthlyBudgetUsd: 6, enabled: true });
+
+      const create = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates`,
+        new URLSearchParams({ csrf, name: "Alpha six", description: "Six dollars" }),
+      );
+      expect(create.status).toBe(302);
+      const location = create.headers.get("location") ?? "";
+      const templateId = /\/templates\/([0-9a-f-]{36})\?created=1$/.exec(location)?.[1];
+      expect(templateId).toBeTruthy();
+      expect(
+        test.audit.records(GUILD_A).find((row) => row.action === "template.create"),
+      ).toMatchObject({
+        actorId: USER,
+        targetId: templateId,
+        data: { source: "dashboard", name: "Alpha six" },
+      });
+
+      const list = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/templates`, {
+        headers: { cookie },
+      });
+      expect(list.status).toBe(200);
+      expect(await list.text()).toContain("Alpha six");
+
+      const editorPage = await fetch(`${test.base}${location}`, { headers: { cookie } });
+      expect(editorPage.status).toBe(200);
+      const editorHtml = await editorPage.text();
+      expect(editorHtml).toContain("Template saved from this server");
+      expect(editorHtml).toContain("Apply to servers");
+
+      await test.settings.update(GUILD_A, "ai", { monthlyBudgetUsd: 4 });
+      await test.settings.update(GUILD_D, "ai", { monthlyBudgetUsd: 2 });
+      const previewPath = `/dashboard/guilds/${GUILD_A}/templates/${templateId}/preview`;
+      const applyPath = `/dashboard/guilds/${GUILD_A}/templates/${templateId}/apply`;
+      const selection = new URLSearchParams({ csrf });
+      selection.append("guild", GUILD_A);
+      selection.append("guild", GUILD_D);
+
+      const preview = await postSettingsForm(test, cookie, previewPath, selection);
+      expect(preview.status).toBe(200);
+      const previewHtml = await preview.text();
+      expect(previewHtml).toContain("Nothing has been written yet");
+      expect(previewHtml).toContain("Monthly budget USD");
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(previewHtml)?.[1];
+      expect(fingerprint).toBeTruthy();
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 4 });
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 2 });
+
+      const tampered = new URLSearchParams(selection);
+      tampered.set("fingerprint", "0".repeat(64));
+      const refused = await postSettingsForm(test, cookie, applyPath, tampered);
+      expect(refused.status).toBe(409);
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 2 });
+
+      const edit = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates/${templateId}`,
+        new URLSearchParams({ csrf, name: "Alpha six v2", description: "Edited" }),
+      );
+      expect(edit.status).toBe(302);
+      expect(
+        test.audit.records(GUILD_A).find((row) => row.action === "template.update"),
+      ).toMatchObject({ actorId: USER, data: { source: "dashboard", refreshed: false } });
+
+      const stale = new URLSearchParams(selection);
+      stale.set("fingerprint", fingerprint as string);
+      expect((await postSettingsForm(test, cookie, applyPath, stale)).status).toBe(409);
+
+      const freshPreview = await postSettingsForm(test, cookie, previewPath, selection);
+      const freshHtml = await freshPreview.text();
+      const freshFingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(freshHtml)?.[1];
+      expect(freshFingerprint).toBeTruthy();
+      expect(freshFingerprint).not.toBe(fingerprint);
+
+      const apply = new URLSearchParams(selection);
+      apply.set("fingerprint", freshFingerprint as string);
+      const applied = await postSettingsForm(test, cookie, applyPath, apply);
+      expect(applied.status).toBe(302);
+      expect(applied.headers.get("location")).toBe(
+        `/dashboard/guilds/${GUILD_A}/templates/${templateId}?applied=2&failed=0`,
+      );
+      for (const guildId of [GUILD_A, GUILD_D]) {
+        expect(await test.settings.get(guildId, "ai")).toMatchObject({
+          monthlyBudgetUsd: 6,
+        });
+        const writes = test.audit
+          .records(guildId)
+          .filter((row) => row.action === "settings.update" && row.actorId === USER);
+        expect(writes).toHaveLength(1);
+        expect(writes[0]).toMatchObject({ targetId: "ai", data: { source: "dashboard" } });
+      }
+
+      const createdBroken = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates`,
+        new URLSearchParams({ csrf, name: "Tampered" }),
+      );
+      const brokenId = /\/templates\/([0-9a-f-]{36})\?created=1$/.exec(
+        createdBroken.headers.get("location") ?? "",
+      )?.[1];
+      expect(brokenId).toBeTruthy();
+      const row = await test.savedTemplates.get(GUILD_A, brokenId as string);
+      await test.savedTemplates.update(GUILD_A, brokenId as string, {
+        modules: (row?.modules ?? []).map((module) =>
+          module.id === "ai"
+            ? { ...module, settings: { ...module.settings, monthlyBudgetUsd: 5_000 } }
+            : module,
+        ),
+        at: Date.now(),
+      });
+
+      const brokenPage = await fetch(
+        `${test.base}/dashboard/guilds/${GUILD_A}/templates/${brokenId}`,
+        { headers: { cookie } },
+      );
+      expect(brokenPage.status).toBe(200);
+      const brokenHtml = await brokenPage.text();
+      expect(brokenHtml).toContain("no longer validates");
+      expect(brokenHtml).not.toContain("Apply to servers");
+
+      const brokenSelection = new URLSearchParams({ csrf });
+      brokenSelection.append("guild", GUILD_A);
+      const brokenPreview = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates/${brokenId}/preview`,
+        brokenSelection,
+      );
+      expect(brokenPreview.status).toBe(200);
+      expect(await brokenPreview.text()).toContain("does not validate");
+
+      const brokenApply = new URLSearchParams(brokenSelection);
+      brokenApply.set("fingerprint", "0".repeat(64));
+      const brokenRefused = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates/${brokenId}/apply`,
+        brokenApply,
+      );
+      expect(brokenRefused.status).toBe(400);
+      expect(await test.settings.get(GUILD_A, "ai")).toMatchObject({ monthlyBudgetUsd: 6 });
+
+      const deleted = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_A}/templates/${templateId}/delete`,
+        new URLSearchParams({ csrf }),
+      );
+      expect(deleted.status).toBe(302);
+      expect(
+        test.audit.records(GUILD_A).at(-1),
+      ).toMatchObject({ action: "template.delete", actorId: USER });
+      const listAfter = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/templates`, {
+        headers: { cookie },
+      });
+      const listAfterHtml = await listAfter.text();
+      expect(listAfterHtml).toContain("Tampered");
+      expect(listAfterHtml).not.toContain("Alpha six v2");
     } finally {
       await test.close();
     }

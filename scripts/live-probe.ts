@@ -23,6 +23,7 @@ import {
   createCommunityStore,
   createConfigBaselineStore,
   createDashboardStore,
+  createSavedTemplateStore,
   createIdempotencyStore,
   createPanicStore,
   createPortabilityStore,
@@ -591,6 +592,7 @@ async function main(): Promise<void> {
     const registry = new ModuleRegistry().registerAll(modules);
     const auditStore = createAuditStore(database);
     const baselineStore = createConfigBaselineStore(database);
+    const savedTemplateStore = createSavedTemplateStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
     const probeOAuth = new WebProbeOAuth();
     const auth = new AuthService({
@@ -614,6 +616,7 @@ async function main(): Promise<void> {
         createDashboardStore(database),
         auditStore,
         baselineStore,
+        savedTemplateStore,
       ),
       logger,
       secureCookies: false,
@@ -992,6 +995,266 @@ async function main(): Promise<void> {
           "real local HTTP on Postgres: exported a 12-module checksummed bundle as a file; uploaded it to another guild via multipart and previewed the diff without writing; an edited checksum was refused at 400 and a wrong fingerprint at 409; apply wrote one AI row with one dashboard audit row and stored the baseline; drift showed no changes, then exactly one changed value after an out-of-band update; OAuth exchange itself used a fake port",
         features: ["operations.config-portability"],
       });
+
+      // --- Saved templates: save, list, preview, apply, invalidate, delete ---
+      const templatesPath = `/dashboard/guilds/${WEB_GUILD}/templates`;
+      const createdTemplate = await fetch(`${base}${templatesPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrf,
+          name: "Probe snapshot",
+          description: "Saved from the live probe guild",
+        }).toString(),
+      });
+      assert(createdTemplate.status === 302, `saving a template returned ${createdTemplate.status}`);
+      const templateLocation = createdTemplate.headers.get("location") ?? "";
+      const templateId = /\/templates\/([0-9a-f-]{36})\?created=1$/.exec(templateLocation)?.[1];
+      assert(templateId !== undefined, `the create redirect has no template id: ${templateLocation}`);
+
+      const createRow = (await auditStore.list(WEB_GUILD, 20)).find(
+        (row) => row.action === "template.create" && row.targetId === templateId,
+      );
+      assert(createRow?.actorId === WEB_USER, "the template create row has the wrong actor");
+      assert(
+        (createRow?.data as { source?: string } | undefined)?.source === "dashboard",
+        "the template create row does not name the dashboard",
+      );
+
+      const templateList = await fetch(`${base}${templatesPath}`, { headers: { cookie } });
+      assert(templateList.status === 200, `the template list returned ${templateList.status}`);
+      assert(
+        (await templateList.text()).includes("Probe snapshot"),
+        "the saved template is not listed",
+      );
+
+      const templateEditor = await fetch(`${base}${templateLocation}`, { headers: { cookie } });
+      assert(templateEditor.status === 200, `the template page returned ${templateEditor.status}`);
+      const templateEditorHtml = await templateEditor.text();
+      assert(
+        templateEditorHtml.includes("Template saved from this server"),
+        "the template page has no created notice",
+      );
+      assert(
+        templateEditorHtml.includes("Apply to servers"),
+        "the template page has no apply selection",
+      );
+
+      await settings.update(WEB_GUILD, "ai", { monthlyBudgetUsd: 5 });
+      await settings.update(WEB_GUILD_B, "ai", { monthlyBudgetUsd: 2 });
+      const savedSelection = new URLSearchParams({ csrf });
+      savedSelection.append("guild", WEB_GUILD);
+      savedSelection.append("guild", WEB_GUILD_B);
+      const previewPath = `${templatesPath}/${templateId}/preview`;
+      const applyPath = `${templatesPath}/${templateId}/apply`;
+      const applyForm = (fingerprint: string): URLSearchParams => {
+        const form = new URLSearchParams(savedSelection);
+        form.set("fingerprint", fingerprint);
+        return form;
+      };
+
+      const savedPreview = await fetch(`${base}${previewPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: savedSelection.toString(),
+      });
+      assert(savedPreview.status === 200, `saved-template preview returned ${savedPreview.status}`);
+      const savedPreviewHtml = await savedPreview.text();
+      assert(
+        savedPreviewHtml.includes("Nothing has been written yet"),
+        "the saved-template preview claims writes",
+      );
+      assert(
+        savedPreviewHtml.includes("Monthly budget USD"),
+        "the saved-template preview does not label the changed setting",
+      );
+      const savedFingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(
+        savedPreviewHtml,
+      )?.[1];
+      assert(savedFingerprint !== undefined, "the saved-template preview has no fingerprint");
+      assert(
+        (await settings.get(WEB_GUILD, "ai")).monthlyBudgetUsd === 5,
+        "the saved-template preview wrote settings",
+      );
+
+      const tamperedSaved = await fetch(`${base}${applyPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: applyForm("0".repeat(64)).toString(),
+      });
+      assert(tamperedSaved.status === 409, `a tampered saved-template apply returned ${tamperedSaved.status}`);
+      assert(
+        (await settings.get(WEB_GUILD, "ai")).monthlyBudgetUsd === 5,
+        "a tampered saved-template apply wrote settings",
+      );
+
+      const editedTemplate = await fetch(`${base}${templatesPath}/${templateId}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrf,
+          name: "Probe snapshot v2",
+          description: "Edited by the live probe",
+        }).toString(),
+      });
+      assert(editedTemplate.status === 302, `editing a template returned ${editedTemplate.status}`);
+      const updateRow = (await auditStore.list(WEB_GUILD, 20)).find(
+        (row) => row.action === "template.update" && row.targetId === templateId,
+      );
+      assert(updateRow?.actorId === WEB_USER, "the template edit row has the wrong actor");
+
+      const staleSaved = await fetch(`${base}${applyPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: applyForm(savedFingerprint).toString(),
+      });
+      assert(staleSaved.status === 409, `a stale saved-template apply returned ${staleSaved.status}`);
+
+      const freshPreview = await fetch(`${base}${previewPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: savedSelection.toString(),
+      });
+      const freshFingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(
+        await freshPreview.text(),
+      )?.[1];
+      assert(freshFingerprint !== undefined, "the re-preview has no fingerprint");
+      assert(freshFingerprint !== savedFingerprint, "the edit did not invalidate the old preview");
+      const auditBeforeA = (await auditStore.list(WEB_GUILD, 100)).length;
+      const auditBeforeB = (await auditStore.list(WEB_GUILD_B, 100)).length;
+
+      const appliedSaved = await fetch(`${base}${applyPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: applyForm(freshFingerprint).toString(),
+      });
+      assert(appliedSaved.status === 302, `saved-template apply returned ${appliedSaved.status}`);
+      assert(
+        (appliedSaved.headers.get("location") ?? "") ===
+          `${templatesPath}/${templateId}?applied=2&failed=0`,
+        `saved-template apply redirected to ${String(appliedSaved.headers.get("location"))}`,
+      );
+      assert(
+        (await settings.get(WEB_GUILD, "ai")).monthlyBudgetUsd === 9,
+        "the saved template did not restore the first guild's budget",
+      );
+      assert(
+        (await settings.get(WEB_GUILD_B, "ai")).monthlyBudgetUsd === 9,
+        "the saved template did not write the second guild's budget",
+      );
+      for (const [guildId, before] of [
+        [WEB_GUILD, auditBeforeA],
+        [WEB_GUILD_B, auditBeforeB],
+      ] as const) {
+        const rows = await auditStore.list(guildId, 100);
+        assert(rows.length === before + 1, `expected one apply row in ${guildId}, found ${rows.length - before}`);
+        const row = rows[0];
+        assert(row?.actorId === WEB_USER, `the saved-template row in ${guildId} has the wrong actor`);
+        assert(row?.action === "settings.update", `the saved-template row in ${guildId} is not a settings write`);
+        assert(
+          (row?.data as { source?: string } | undefined)?.source === "dashboard",
+          `the saved-template row in ${guildId} does not name the dashboard`,
+        );
+        assert(
+          JSON.stringify((row?.data as { changes?: unknown } | undefined)?.changes).includes(
+            "monthlyBudgetUsd",
+          ),
+          `the saved-template row in ${guildId} does not name the changed setting`,
+        );
+      }
+
+      const createdInvalid = await fetch(`${base}${templatesPath}`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf, name: "Probe invalid" }).toString(),
+      });
+      const invalidId = /\/templates\/([0-9a-f-]{36})\?created=1$/.exec(
+        createdInvalid.headers.get("location") ?? "",
+      )?.[1];
+      assert(invalidId !== undefined, "the invalid-template create has no id");
+      const invalidRow = await savedTemplateStore.get(WEB_GUILD, invalidId);
+      assert(invalidRow !== undefined, "the invalid-template row was not stored");
+      await savedTemplateStore.update(WEB_GUILD, invalidId, {
+        modules: invalidRow.modules.map((module) =>
+          module.id === "ai"
+            ? { ...module, settings: { ...module.settings, monthlyBudgetUsd: 5_000 } }
+            : module,
+        ),
+        at: Date.now(),
+      });
+
+      const invalidEditor = await fetch(`${base}${templatesPath}/${invalidId}`, {
+        headers: { cookie },
+      });
+      assert(invalidEditor.status === 200, `the invalid template page returned ${invalidEditor.status}`);
+      const invalidHtml = await invalidEditor.text();
+      assert(invalidHtml.includes("no longer validates"), "the page does not report the schema drift");
+      assert(!invalidHtml.includes("Apply to servers"), "an invalid template still offers apply");
+
+      const invalidPreview = await fetch(`${base}${templatesPath}/${invalidId}/preview`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf, guild: WEB_GUILD }).toString(),
+      });
+      assert(invalidPreview.status === 200, `the invalid preview returned ${invalidPreview.status}`);
+      assert(
+        (await invalidPreview.text()).includes("does not validate"),
+        "the invalid preview does not explain the refusal",
+      );
+
+      const invalidApply = await fetch(`${base}${templatesPath}/${invalidId}/apply`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrf,
+          guild: WEB_GUILD,
+          fingerprint: "0".repeat(64),
+        }).toString(),
+      });
+      assert(invalidApply.status === 400, `an invalid template apply returned ${invalidApply.status}`);
+      assert(
+        (await settings.get(WEB_GUILD, "ai")).monthlyBudgetUsd === 9,
+        "an invalid template changed settings",
+      );
+
+      const deletedTemplate = await fetch(`${base}${templatesPath}/${templateId}/delete`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf }).toString(),
+      });
+      assert(deletedTemplate.status === 302, `deleting a template returned ${deletedTemplate.status}`);
+      const deleteRow = (await auditStore.list(WEB_GUILD, 20))[0];
+      assert(deleteRow?.action === "template.delete", "the delete is not the newest audit row");
+      assert(deleteRow?.actorId === WEB_USER, "the template delete row has the wrong actor");
+      await fetch(`${base}${templatesPath}/${invalidId}/delete`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ csrf }).toString(),
+      });
+      const afterDelete = await fetch(`${base}${templatesPath}`, { headers: { cookie } });
+      const afterDeleteHtml = await afterDelete.text();
+      assert(!afterDeleteHtml.includes("Probe snapshot v2"), "the deleted template is still listed");
+      assert(!afterDeleteHtml.includes("Probe invalid"), "the invalid template is still listed");
+
+      record({
+        id: "web-saved-templates",
+        status: "pass",
+        detail:
+          "real local HTTP on Postgres: saved a template from one guild, listed it, previewed a diff for two guilds without writing, refused a tampered fingerprint at 409 and a stale preview after an edit at 409, then applied one write per guild with one dashboard audit row each; an out-of-band schema-invalid row was reported and refused at 400; create/update/delete were audited; OAuth exchange itself used a fake port",
+        features: ["operations.config-templates", "operations.multi-server-fleet"],
+      });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1004,6 +1267,7 @@ async function main(): Promise<void> {
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM config_baselines WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM config_templates WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';

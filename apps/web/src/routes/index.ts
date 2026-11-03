@@ -16,6 +16,7 @@ interface Route {
 
 const GUILD_ID = String.raw`(\d{15,20})`;
 const MODULE_ID = String.raw`([a-z][a-z0-9-]{1,31})`;
+const TEMPLATE_ID = String.raw`([0-9a-fA-F-]{36})`;
 const exact = (path: string): RegExp => new RegExp(`^${path}$`);
 
 const routes: readonly Route[] = [
@@ -64,6 +65,41 @@ const routes: readonly Route[] = [
   {
     pattern: exact(`/dashboard/guilds/${GUILD_ID}/settings/${MODULE_ID}`),
     handler: dashboard.settingsPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates`),
+    methods: ["GET"],
+    handler: dashboard.templatesPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates`),
+    methods: ["POST"],
+    handler: dashboard.templateCreate,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates/${TEMPLATE_ID}`),
+    methods: ["GET"],
+    handler: dashboard.templateEditorPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates/${TEMPLATE_ID}`),
+    methods: ["POST"],
+    handler: dashboard.templateUpdate,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates/${TEMPLATE_ID}/delete`),
+    methods: ["POST"],
+    handler: dashboard.templateDelete,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates/${TEMPLATE_ID}/preview`),
+    methods: ["POST"],
+    handler: dashboard.templatePreview,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/templates/${TEMPLATE_ID}/apply`),
+    methods: ["POST"],
+    handler: dashboard.templateApply,
   },
   { pattern: exact("/api/v1/me"), methods: ["GET"], handler: api.me },
   { pattern: exact("/api/v1/guilds"), methods: ["GET"], handler: api.guilds },

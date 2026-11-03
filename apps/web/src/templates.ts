@@ -3,6 +3,7 @@ import {
   type SettingsPlanGuild,
   type SettingsPlanModule,
 } from "./settings-plan";
+import type { SettingsIssue } from "./settings-form";
 
 /**
  * Built-in configuration templates.
@@ -115,6 +116,8 @@ export interface TemplatePlan {
   readonly guilds: readonly TemplateGuildPlan[];
   readonly changeCount: number;
   readonly issueCount: number;
+  /** Template-level schema issues; present only for an invalid saved template. */
+  readonly templateIssues?: readonly SettingsIssue[];
   readonly fingerprint: string;
 }
 

@@ -4,6 +4,7 @@ import {
   InMemoryAuditStore,
   InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
+  InMemorySavedTemplateStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
   ModuleRegistry,
@@ -12,6 +13,7 @@ import {
   type AuditStore,
   type ConfigBaselineStore,
   type DashboardStore,
+  type SavedTemplateStore,
   type Logger,
   type SessionStore,
   type SettingsRepository,
@@ -20,6 +22,7 @@ import {
   createAuditStore,
   createConfigBaselineStore,
   createDashboardStore,
+  createSavedTemplateStore,
   createPostgresDatabase,
   createSessionStore,
   createSettingsRepository,
@@ -69,6 +72,7 @@ export function createWebRuntime(env: Env): WebRuntime {
   let dashboardStore: DashboardStore;
   let auditStore: AuditStore;
   let baselineStore: ConfigBaselineStore;
+  let savedTemplateStore: SavedTemplateStore;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
     settingsRepository = createSettingsRepository(database);
@@ -76,6 +80,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     dashboardStore = createDashboardStore(database);
     auditStore = createAuditStore(database);
     baselineStore = createConfigBaselineStore(database);
+    savedTemplateStore = createSavedTemplateStore(database);
     logger.info("web data: postgres");
   } else {
     logger.warn("DATABASE_URL is not set — web sessions, audit rows and dashboard reads are process-local.");
@@ -84,6 +89,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     dashboardStore = new InMemoryDashboardStore();
     auditStore = new InMemoryAuditStore();
     baselineStore = new InMemoryConfigBaselineStore();
+    savedTemplateStore = new InMemorySavedTemplateStore();
   }
 
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
@@ -133,6 +139,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     dashboardStore,
     auditStore,
     baselineStore,
+    savedTemplateStore,
   );
   const handler = createWebHandler({
     auth,
