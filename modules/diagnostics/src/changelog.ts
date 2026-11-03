@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-61",
+    date: "2026-11-03",
+    summary:
+      "P7 interactions: role buttons, role select menus, giveaway entries, suggestion votes and polls now carry signed, expiring ids handled by the same shared router as the ticket panel. An old or copied panel is refused without a write.",
+    journal: "memory/journal/2026-11-03-pass-61.md",
+  },
+  {
     pass: "pass-60",
     date: "2026-11-03",
     summary:

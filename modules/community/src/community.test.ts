@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createComponentSigner } from "@keystone/kernel";
 import { RecordingJobQueue } from "@keystone/testing";
 import { communitySettingsSchema } from "./settings";
 import { InMemoryCommunityStore } from "./store";
@@ -16,6 +17,7 @@ import { ContentService, parseRss } from "./content";
 
 const guild = "guild-a";
 const user = "user-a";
+const componentSigner = createComponentSigner("community-test-secret");
 
 function settings(overrides: Record<string, unknown> = {}) {
   return communitySettingsSchema.parse(overrides);
@@ -206,13 +208,20 @@ describe("P3 community", () => {
   it("posts a button panel and toggles the role on the button path", async () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
-    const service = new ReactionRoleService(store, actions);
+    const signer = createComponentSigner("community-test-secret");
+    const service = new ReactionRoleService(store, actions, signer);
 
     const panel = await service.createPanel(guild, "roles-channel", "Pick a role", [
       { roleId: "role-news", label: "News" },
     ]);
     const button = firstRow(actions.sent[0]!.message)?.components[0];
-    expect(button?.customId).toBe("keystone:role:role-news");
+    expect(button?.customId).not.toContain("keystone:role:");
+    expect(signer.parse(button?.customId ?? "")).toMatchObject({
+      ok: true,
+      namespace: "role",
+      action: "toggle",
+      payload: "role-news",
+    });
 
     expect(await service.toggle(guild, user, "role-news")).toMatchObject({
       added: true,
@@ -258,12 +267,25 @@ describe("P3 community", () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
     const clock = nowAt();
-    const service = new GiveawayService(store, actions, settings(), clock.now, () => 0.1);
+    const signer = createComponentSigner("community-test-secret");
+    const service = new GiveawayService(
+      store,
+      actions,
+      settings(),
+      clock.now,
+      () => 0.1,
+      signer,
+    );
 
     const giveaway = await service.start(guild, "events", "Nitro", 10, 1);
-    expect(actions.sent[0]?.message.components?.[0]?.components[0]?.customId).toContain(
-      giveaway.id,
-    );
+    expect(
+      signer.parse(actions.sent[0]?.message.components?.[0]?.components[0]?.customId ?? ""),
+    ).toMatchObject({
+      ok: true,
+      namespace: "giveaway",
+      action: "enter",
+      payload: giveaway.id,
+    });
     expect(await service.enter(guild, giveaway.id, user)).toMatchObject({
       entered: true,
       entries: 1,
@@ -358,7 +380,7 @@ describe("P3 tickets and content", () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
     const clock = nowAt();
-    const service = new ContentService(store, actions, settings(), clock.now);
+    const service = new ContentService(store, actions, settings(), clock.now, componentSigner);
 
     await service.createEmbed(guild, "general", "Rules", { title: "Rules", description: "Be kind." });
     expect(actions.sent[0]?.message.embeds?.[0]?.title).toBe("Rules");
@@ -393,7 +415,7 @@ describe("P3 tickets and content", () => {
     const actions = new RecordingCommunityActions();
     const clock = nowAt();
     const queue = new RecordingJobQueue();
-    const service = new ContentService(store, actions, settings(), clock.now);
+    const service = new ContentService(store, actions, settings(), clock.now, componentSigner);
 
     const due = new Date(clock.now() + 1_000).toISOString();
     const reminder = await service.createReminder(
@@ -452,7 +474,7 @@ describe("P3 tickets and content", () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
     const clock = nowAt();
-    const service = new ContentService(store, actions, settings(), clock.now);
+    const service = new ContentService(store, actions, settings(), clock.now, componentSigner);
 
     const due = new Date(clock.now() + 1_000).toISOString();
     const reminder = await service.createReminder(guild, user, undefined, "drink water", due);
@@ -469,7 +491,13 @@ describe("P3 tickets and content", () => {
   it("dedupes feeds by GUID and updates a stat channel", async () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
-    const service = new ContentService(store, actions, settings(), () => 1_700_000_000_000);
+    const service = new ContentService(
+      store,
+      actions,
+      settings(),
+      () => 1_700_000_000_000,
+      componentSigner,
+    );
     const feed = await service.addFeed(guild, "https://example.com/feed.xml", "news");
 
     const xml =

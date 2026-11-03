@@ -11,6 +11,7 @@ import {
 } from "discord.js";
 import type {
   CommunityPort,
+  ComponentSigner,
   Logger,
   ModuleSettings,
 } from "@keystone/kernel";
@@ -19,11 +20,9 @@ import {
   BirthdayService,
   ContentService,
   GiveawayService,
-  ReactionRoleService,
   SeasonService,
   StarboardService,
   StickyService,
-  SuggestionService,
   TempVoiceService,
   WelcomeService,
   communitySettingsSchema,
@@ -33,6 +32,8 @@ import { botFixtureContent } from "./dev-fixture";
 export interface CommunityEventOptions {
   /** Development-only guild where a bot marker may drive the real message path. */
   readonly botTestGuildId?: string;
+  /** Signs the disabled button on a giveaway that the tick ends. */
+  readonly componentSigner?: Pick<ComponentSigner, "sign">;
 }
 
 /**
@@ -191,99 +192,9 @@ export function registerCommunityEvents(
   client.on(Events.GuildMemberRemove, (member) => void onMemberLeave(member));
   client.on(Events.VoiceStateUpdate, (oldState, newState) => void onVoice(oldState, newState));
 
-  client.on(Events.InteractionCreate, (interaction) => {
-    if ((!interaction.isButton() && !interaction.isStringSelectMenu()) || !interaction.guildId) return;
-    void (async () => {
-      try {
-        const current = await config(interaction.guildId as string);
-        const customId = interaction.customId;
-
-        if (interaction.isStringSelectMenu() && customId.startsWith("keystone:roles:")) {
-          const panelId = customId.slice("keystone:roles:".length);
-          const result = await new ReactionRoleService(port.store, port.actions).applySelection(
-            interaction.guildId as string,
-            interaction.user.id,
-            panelId,
-            interaction.values,
-          );
-          await interaction.reply({
-            content: `Roles updated: ${result.added} added, ${result.removed} removed.`,
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (!interaction.isButton()) return;
-
-        if (customId.startsWith("keystone:role:")) {
-          const roleId = customId.slice("keystone:role:".length);
-          const result = await new ReactionRoleService(port.store, port.actions).toggle(
-            interaction.guildId as string,
-            interaction.user.id,
-            roleId,
-          );
-          await interaction.reply({
-            content: `${result.added ? "Added" : "Removed"} **${result.label}**.`,
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (customId.startsWith("keystone:giveaway:enter:")) {
-          const giveawayId = customId.slice("keystone:giveaway:enter:".length);
-          const result = await new GiveawayService(
-            port.store,
-            port.actions,
-            current,
-          ).enter(interaction.guildId as string, giveawayId, interaction.user.id);
-          await interaction.reply({
-            content: result.entered
-              ? `Entered. ${result.entries} entry(ies) so far.`
-              : (result.reason ?? "Could not enter."),
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (customId.startsWith("keystone:suggest:")) {
-          const [, , kind, suggestionId] = customId.split(":");
-          if (!suggestionId || (kind !== "up" && kind !== "down")) return;
-          const result = await new SuggestionService(
-            port.store,
-            port.actions,
-            current,
-          ).vote(interaction.guildId as string, suggestionId, interaction.user.id, kind);
-          await interaction.reply({
-            content: `Vote ${result.changed ? "recorded" : "already counted"}: 👍 ${result.up} · 👎 ${result.down}.`,
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (customId.startsWith("keystone:poll:")) {
-          const [, , pollId, rawIndex] = customId.split(":");
-          if (!pollId || rawIndex === undefined) return;
-          const result = await new ContentService(
-            port.store,
-            port.actions,
-            current,
-          ).vote(interaction.guildId as string, pollId, interaction.user.id, Number(rawIndex));
-          await interaction.reply({
-            content: `Vote recorded. Totals: ${result.counts.join(" / ")}.`,
-            ephemeral: true,
-          });
-        }
-      } catch (error) {
-        if (interaction.replied || interaction.deferred) return;
-        await interaction
-          .reply({
-            content: error instanceof Error ? error.message : "That interaction failed.",
-            ephemeral: true,
-          })
-          .catch(() => undefined);
-      }
-    })();
-  });
+  // Component ids are not handled here. Every button and select goes through
+  // `components.ts`, which verifies the signature, the expiry and the guild
+  // before a handler runs; a legacy `keystone:` id is unhandled by design.
 
   let lastFeedPoll = 0;
   const interval = setInterval(() => {
@@ -293,7 +204,14 @@ export function registerCommunityEvents(
           const current = await config(guild.id);
           const content = new ContentService(port.store, port.actions, current);
           await content.tick(guild.id);
-          await new GiveawayService(port.store, port.actions, current).endDue(guild.id);
+          await new GiveawayService(
+            port.store,
+            port.actions,
+            current,
+            Date.now,
+            Math.random,
+            options.componentSigner,
+          ).endDue(guild.id);
           await new WelcomeService(port.actions, current, port.store).applyDueAutoroles(guild.id);
           await new BirthdayService(port.store, port.actions, current).announceDue(guild.id);
           await new SeasonService(port.store).rollover(guild.id);

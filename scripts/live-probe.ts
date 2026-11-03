@@ -59,7 +59,10 @@ import {
 } from "../modules/moderation/src/index";
 import {
   ContentService,
+  GiveawayService,
   LevelingService,
+  ReactionRoleService,
+  SuggestionService,
   TICKET_PANEL_TTL_MS,
   TicketService,
   WelcomeService,
@@ -2724,16 +2727,39 @@ async function main(): Promise<void> {
     const communitySettings = communitySettingsSchema.parse({});
 
     const sent: CommunityMessage[] = [];
+    const heldRoles = new Set<string>();
+    const roleCalls: { userId: string; roleId: string; added: boolean }[] = [];
     const communityActions = {
       async sendMessage(_guildId: string, _channelId: string, message: CommunityMessage) {
         sent.push(message);
         return { ok: true, id: `probe-message-${sent.length}` };
       },
+      async editMessage() {
+        return { ok: true };
+      },
       async createThread() {
         return { ok: true, id: "probe-ticket-thread" };
       },
-      async addRole() {
+      async addRole(_guildId: string, userId: string, roleId: string) {
+        heldRoles.add(`${userId}:${roleId}`);
+        roleCalls.push({ userId, roleId, added: true });
         return { ok: true };
+      },
+      async removeRole(_guildId: string, userId: string, roleId: string) {
+        heldRoles.delete(`${userId}:${roleId}`);
+        roleCalls.push({ userId, roleId, added: false });
+        return { ok: true };
+      },
+      async toggleRole(_guildId: string, userId: string, roleId: string) {
+        const key = `${userId}:${roleId}`;
+        const added = !heldRoles.has(key);
+        if (added) heldRoles.add(key);
+        else heldRoles.delete(key);
+        roleCalls.push({ userId, roleId, added });
+        return { ok: true, added };
+      },
+      async hasRole(_guildId: string, userId: string, roleId: string) {
+        return heldRoles.has(`${userId}:${roleId}`);
       },
       async isBot() {
         return false;
@@ -2866,18 +2892,29 @@ async function main(): Promise<void> {
     interface Clicked {
       replies: ReplyInput[];
     }
-    const click = (customId: string, permissions: string[] = []) => {
+    const click = (
+      customId: string,
+      permissions: string[] = [],
+      options: {
+        userId?: string;
+        guildId?: string;
+        kind?: "button" | "select";
+        values?: string[];
+      } = {},
+    ) => {
       const captured: Clicked = { replies: [] };
+      const isButton = (options.kind ?? "button") === "button";
       const interaction = {
         customId,
-        guildId: GUILD,
+        guildId: options.guildId ?? GUILD,
         channelId: "probe-support",
-        user: { id: "probe-ticket-requester" },
+        user: { id: options.userId ?? "probe-ticket-requester" },
+        values: options.values ?? [],
         memberPermissions: { toArray: () => permissions },
         replied: false,
         deferred: false,
-        isButton: () => true,
-        isStringSelectMenu: () => false,
+        isButton: () => isButton,
+        isStringSelectMenu: () => !isButton,
         isModalSubmit: () => false,
         reply: async (input: ReplyInput) => {
           captured.replies.push(input);
@@ -2986,6 +3023,194 @@ async function main(): Promise<void> {
         "community.welcome-goodbye",
         "tickets.panels",
         "operations.i18n",
+      ],
+    });
+
+    // --- The five remaining community panels, now on the signed router ------
+    // Each panel is minted by the module with the same signer the router uses,
+    // then pressed through the real discord.js adapter. The role, giveaway,
+    // suggestion and poll writes below are Postgres rows, not probe state.
+    const lastCustomId = (index = 0): string => {
+      const row = sent.at(-1)?.components?.[0];
+      return row?.components[index]?.customId ?? "";
+    };
+
+    const roles = new ReactionRoleService(
+      communityStore,
+      communityActions,
+      signer,
+      () => now,
+    );
+    await roles.createPanel(GUILD, "probe-roles", "Pick a role", [
+      { roleId: "probe-role-a", label: "Alpha" },
+    ]);
+    const roleId = lastCustomId();
+    assert(roleId.startsWith("k1:"), "the role panel did not post a signed id");
+    assert(!roleId.includes("keystone:role:"), "the role panel still posted a legacy id");
+    const rolePress = click(roleId, [], { userId: "probe-role-user" });
+    assert(await router.dispatch(rolePress.like, signer, now), "the role button was not routed");
+    assert(
+      heldRoles.has("probe-role-user:probe-role-a"),
+      "the role button did not grant the role through the action port",
+    );
+    assert(rolePress.captured.replies[0]?.ephemeral === true, "the role reply was not ephemeral");
+    const [roleRecord] = await database.runner.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM community_records
+        WHERE guild_id = '${GUILD}' AND kind = 'reaction_role' AND key = 'probe-role-a'`,
+    );
+    assert(roleRecord?.count === "1", "the role panel config is not a stored row");
+
+    const selectPanel = await roles.createSelectPanel(GUILD, "probe-roles", "Pick roles", [
+      { roleId: "probe-role-a", label: "Alpha" },
+      { roleId: "probe-role-b", label: "Beta" },
+    ]);
+    const select = click(lastCustomId(), [], {
+      userId: "probe-select-user",
+      kind: "select",
+      values: ["probe-role-b"],
+    });
+    assert(await router.dispatch(select.like, signer, now), "the select menu was not routed");
+    assert(
+      heldRoles.has("probe-select-user:probe-role-b") &&
+        !heldRoles.has("probe-select-user:probe-role-a"),
+      "the select menu did not apply exactly the selected role",
+    );
+    const [panelRecord] = await database.runner.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM community_records
+        WHERE guild_id = '${GUILD}' AND kind = 'reaction_role_panel'
+          AND key = '${selectPanel.panelId}'`,
+    );
+    assert(panelRecord?.count === "1", "the select panel config is not a stored row");
+
+    const giveaways = new GiveawayService(
+      communityStore,
+      communityActions,
+      communitySettings,
+      () => now,
+      () => 0.5,
+      signer,
+    );
+    const giveaway = await giveaways.start(GUILD, "probe-events", "Probe Nitro", 10, 1);
+    const giveawayButton = lastCustomId();
+    assert(giveawayButton.startsWith("k1:"), "the giveaway did not post a signed id");
+    const enter = click(giveawayButton, [], { userId: "probe-giveaway-user" });
+    assert(await router.dispatch(enter.like, signer, now), "the giveaway button was not routed");
+    const giveawayRow = await communityStore.getRecord<{ entries: string[] }>(
+      GUILD,
+      "giveaway",
+      giveaway.id,
+    );
+    assert(
+      giveawayRow?.data.entries.includes("probe-giveaway-user") === true,
+      "the giveaway press did not write an entry",
+    );
+
+    const suggestions = new SuggestionService(
+      communityStore,
+      communityActions,
+      communitySettingsSchema.parse({
+        suggestions: { enabled: true, channelId: "probe-suggestions" },
+      }),
+      () => now,
+      signer,
+    );
+    const suggestion = await suggestions.submit(GUILD, "probe-author", "Probe movie night");
+    const upvote = click(lastCustomId(), [], { userId: "probe-suggestion-user" });
+    assert(await router.dispatch(upvote.like, signer, now), "the suggestion vote was not routed");
+    const suggestionRow = await communityStore.getRecord<{ votes: { up: string[] } }>(
+      GUILD,
+      "suggestion",
+      suggestion.id,
+    );
+    assert(
+      suggestionRow?.data.votes.up.includes("probe-suggestion-user") === true,
+      "the suggestion vote did not reach the stored row",
+    );
+
+    const content = new ContentService(
+      communityStore,
+      communityActions,
+      communitySettings,
+      () => now,
+      signer,
+    );
+    const poll = await content.createPoll(GUILD, "probe-general", "Probe lunch?", [
+      "Pizza",
+      "Soup",
+    ]);
+    const ballot = click(lastCustomId(1), [], { userId: "probe-poll-user" });
+    assert(await router.dispatch(ballot.like, signer, now), "the poll button was not routed");
+    const pollRow = await communityStore.getRecord<{ votes: Record<string, string[]> }>(
+      GUILD,
+      "poll",
+      poll.id,
+    );
+    assert(
+      pollRow?.data.votes["1"]?.includes("probe-poll-user") === true,
+      "the poll vote did not reach the stored row",
+    );
+
+    // Refusals: expiry, a forged signature, a copied cross-guild id and every
+    // old unsigned id. None may write a row or change a role.
+    const rolesBefore = roleCalls.length;
+    const expiredRole = click(
+      signer.sign(
+        { namespace: "role", action: "toggle", payload: "probe-role-a", ttlMs: 1_000 },
+        now,
+      ),
+      [],
+      { userId: "probe-expired-user" },
+    );
+    await router.dispatch(expiredRole.like, signer, now + 1_000);
+    assert(
+      String(expiredRole.captured.replies[0]?.content).includes("expired") &&
+        expiredRole.captured.replies[0]?.ephemeral === true,
+      "an expired community id was not refused ephemerally",
+    );
+    assert(roleCalls.length === rolesBefore, "an expired role id still changed a role");
+
+    const forged = click(`${roleId.slice(0, -1)}${roleId.endsWith("a") ? "b" : "a"}`);
+    await router.dispatch(forged.like, signer, now);
+    assert(
+      forged.captured.replies[0]?.ephemeral === true,
+      "a forged community id was not refused ephemerally",
+    );
+
+    const crossBefore = roleCalls.length;
+    const crossGuild = click(roleId, [], { guildId: "live-probe-other" });
+    await router.dispatch(crossGuild.like, signer, now);
+    assert(
+      crossGuild.captured.replies[0]?.ephemeral === true &&
+        String(crossGuild.captured.replies[0]?.content).length > 0,
+      "a cross-guild role id was not refused ephemerally",
+    );
+    assert(roleCalls.length === crossBefore, "a cross-guild role id still changed a role");
+
+    for (const legacyId of [
+      "keystone:role:probe-role-a",
+      `keystone:roles:${selectPanel.panelId}`,
+      `keystone:giveaway:enter:${giveaway.id}`,
+      `keystone:suggest:up:${suggestion.id}`,
+      `keystone:poll:${poll.id}:1`,
+    ]) {
+      const legacy = click(legacyId);
+      assert(
+        (await router.dispatch(legacy.like, signer, now)) === false,
+        `the router accepted legacy id ${legacyId}`,
+      );
+      assert(legacy.captured.replies.length === 0, `legacy id ${legacyId} produced a reply`);
+    }
+
+    record({
+      id: "web-community-interactions",
+      status: "pass",
+      detail:
+        "real discord.js adapter + the shared signed router on Postgres: the role, select-role, giveaway, suggestion and poll panels were minted by the community module with signed k1 ids and pressed as real adapter objects; the role button granted the stored panel's role through the action port, the select applied exactly the chosen role, the giveaway press wrote an entry, the suggestion upvote and the poll option reached the stored votes, and both role and select panel configs were read back from community_records; an expired id, a forged signature and a cross-guild id were refused ephemerally without a write, and all five old keystone: ids returned false from the router, produced no reply and wrote nothing. A live gateway click is not claimed",
+      features: [
+        "community.reaction-roles",
+        "community.giveaways",
+        "community.suggestions",
+        "community.polls",
       ],
     });
   }

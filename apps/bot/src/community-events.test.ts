@@ -110,12 +110,12 @@ describe("community event adapter", () => {
     stop();
   });
 
-  it("no longer handles the legacy ticket button id", async () => {
+  it("handles no component ids itself, so a legacy community id is unhandled", async () => {
     const { client, sendMessage, stop } = await setup();
     const reply = vi.fn().mockResolvedValue(undefined);
     client.emit(Events.InteractionCreate, {
       guildId: "dev-guild",
-      customId: "keystone:ticket:open",
+      customId: "keystone:role:role-news",
       channelId: "support",
       user: { id: "member-1" },
       isButton: () => true,

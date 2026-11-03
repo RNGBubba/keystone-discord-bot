@@ -260,10 +260,12 @@ rest of this phase is open.
 - `packages/ui` (shipped in pass 58; community panels migrated in pass 60):
   Components V2 budgeter (40 components, ~4,000 text), typed layout primitives,
   defer-then-edit through the command, and modal Label text inputs. The form
-  panel, the rank card, the ticket panel and the welcome/goodbye greetings use
-  it. File Upload, Radio and Checkbox builders are not built yet, and the older
-  community button ids (`role`, `roles`, `giveaway`, `suggest`, `poll`) still
-  use their own unsigned listener.
+  panel, the rank card, the ticket panel, the welcome/goodbye greetings and the
+  role/select/giveaway/suggestion/poll panels use it. File Upload, Radio and
+  Checkbox builders are not built yet. Pass 61 moved every community component
+  id onto the signed, expiring router; moderation's `appeal`/`verify` ids are
+  the one remaining unsigned handler because their DM payload does not fit the
+  signed budget.
 - New domains: role persistence; plus YouTube/Twitch/RSS feeds, join-gate
   expiry, case export and `command_usage` retention. Invites, the link,
   profanity and zalgo filters, auto-responders, analytics and the four context

@@ -2,6 +2,23 @@
 
 ## Now
 
+**Pass 61 finished the community interaction layer** (2026-11-03): the role
+buttons, role select menus, giveaway entries, suggestion votes and polls now
+carry signed, expiring `k1:` ids minted by the community module with the same
+signer the shared router verifies. Pressing one goes through the same
+`ComponentRouter` checks as the ticket and form panels and calls the same
+service the old listener called; the legacy `keystone:` branch was deleted from
+`community-events.ts`, so an old panel is unhandled instead of silently served.
+Role panels use a one-year TTL because they are pinned configuration, while
+giveaway, suggestion and poll panels use 30 days. Tests are **626 / 91 files**;
+`pnpm probe:live` is **26/26**, adding `web-community-interactions`: all five
+signed panels were pressed through the real discord.js adapter into their stored
+rows, and expired, forged and cross-guild ids were refused ephemerally without a
+write. The inventory has one named exception: moderation's `keystone:appeal:`
+and `keystone:verify:` still use their own handler because the verify id needs a
+guild + member pair that does not fit the signed payload. A live gateway click is
+not claimed. See [pass 61](../../journal/2026-11-03-pass-61.md).
+
 **Pass 60 migrated the remaining community embeds onto the typed UI layer**
 (2026-11-03): the rank card (`/rank view` and the user menu) and the ticket
 panel are `packages/ui` V2 containers, and the welcome/goodbye channel messages
@@ -735,7 +752,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 623 tests / 91 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 25/25 · memory current
+pnpm check        exit 0 · typecheck 0 · 626 tests / 91 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 26/26 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -751,6 +768,7 @@ live webhooks    2026-11-03 UTC · real local HTTP on Postgres · endpoint creat
 live idempotency 2026-11-03 UTC · real local HTTP on Postgres · same key and body replayed byte-identically with Idempotent-Replayed: true · different body 409 idempotency_conflict · exactly one settings.update audit row · receipt stored the fingerprint and 200 status · OAuth exchange fake
 live session lifecycle 2026-11-03 UTC · real local HTTP on Postgres · 4 idle minutes of a 5-minute window accepted and last_seen_at moved · 6 idle minutes 401 with the row deleted · one refresh call for two concurrent requests · rotated sealed refresh token and new access expiry stored · spent refresh token replay 401 with the row deleted · logout revoked the refresh grant · OAuth exchange/refresh/revoke fake
 live community panels 2026-11-03 UTC · real discord.js adapter + typed V2 builders on Postgres · rank card matched the stored levels row in German and English · welcome/goodbye {user}/{server} substitution rendered as V2 text · signed ticket panel press wrote one open tickets row and replied in German · legacy/expired/copied ids refused with no row
+live community interactions 2026-11-03 UTC · real adapter + shared signed router on Postgres · role button granted its stored panel role · select applied exactly the chosen role · giveaway entry, suggestion upvote and poll vote reached their stored rows · expired/forged/cross-guild ids refused ephemerally with no write · all five legacy keystone: ids returned false with no reply · gateway click not claimed
 live i18n         2026-11-03 UTC · real discord.js adapter + signed router on Postgres · setup.locale=de rendered the form panel, modal receipt, missing-field/member/expired refusals and review list in German · locale=xx refused by the setup schema, effective locale stayed de · partial catalog fell back to English and an unknown key returned a sentence, not the key · clearing the setting restored English · form command description_localizations.de generated from the same catalog · gateway click/modal submit not claimed
 live components   2026-11-03 UTC · real discord.js adapter + signed router on Postgres · V2 form panel container with signed Apply/staff ids · Apply opened a modal with the form title and two inputs · valid submit wrote one form_submissions row · missing tz refused with no row · expired id refused before the handler · member refused, manager saw 1 pending · gateway click/modal submit not claimed
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4

@@ -16,8 +16,18 @@ import {
   formModal,
   formPanel,
 } from "@keystone/module-forms";
-import { InMemoryCommunityStore, communitySettingsSchema } from "@keystone/module-community";
-import { RecordingCommunityActions } from "@keystone/module-community/testing";
+import {
+  ContentService,
+  GiveawayService,
+  InMemoryCommunityStore,
+  ReactionRoleService,
+  SuggestionService,
+  communitySettingsSchema,
+} from "@keystone/module-community";
+import {
+  RecordingCommunityActions,
+  firstRow,
+} from "@keystone/module-community/testing";
 import { createComponentRouter, type ComponentRuntimeDeps } from "./components";
 
 const NOW = 1_800_000_000_000;
@@ -26,10 +36,11 @@ const GUILD = "g1";
 class FakeComponent implements ComponentInteractionLike {
   readonly kind: "button" | "select" | "modal";
   readonly customId: string;
-  readonly guildId = GUILD;
+  readonly guildId: string;
   readonly channelId = "chan-1";
   readonly userId: string;
   readonly permissions: readonly string[];
+  readonly values?: readonly string[];
   readonly fields?: Readonly<Record<string, string>>;
   readonly replies: ReplyInput[] = [];
   modal?: ModalSpec;
@@ -38,14 +49,18 @@ class FakeComponent implements ComponentInteractionLike {
   constructor(init: {
     kind?: "button" | "select" | "modal";
     customId: string;
+    guildId?: string;
     userId?: string;
     permissions?: string[];
+    values?: string[];
     fields?: Record<string, string>;
   }) {
     this.kind = init.kind ?? "button";
     this.customId = init.customId;
+    this.guildId = init.guildId ?? GUILD;
     this.userId = init.userId ?? "member-1";
     this.permissions = init.permissions ?? [];
+    this.values = init.values;
     this.fields = init.fields;
   }
 
@@ -278,5 +293,151 @@ describe("ticket panel components", () => {
     expect(member.replies[0]?.content).toMatch(/permission/);
 
     expect(await communityStore.listTickets(GUILD, { limit: 10 })).toHaveLength(0);
+  });
+});
+
+describe("community interaction routes", () => {
+  it("toggles a role and applies a select panel only from signed ids", async () => {
+    const { router, signer, communityStore, communityActions } = await fixture();
+    const roles = new ReactionRoleService(
+      communityStore,
+      communityActions,
+      signer,
+      () => NOW,
+    );
+
+    await roles.createPanel(GUILD, "roles", "Pick a role", [
+      { roleId: "role-news", label: "News" },
+    ]);
+    const button = firstRow(communityActions.sent.at(-1)!.message)?.components[0];
+    const press = new FakeComponent({ customId: button?.customId ?? "", userId: "member-1" });
+    expect(await router.dispatch(press, signer, NOW)).toBe(true);
+    expect(press.replies[0]).toMatchObject({ ephemeral: true });
+    expect(await communityActions.hasRole(GUILD, "member-1", "role-news")).toBe(true);
+
+    const panel = await roles.createSelectPanel(GUILD, "roles", "Pick roles", [
+      { roleId: "role-a", label: "Alpha" },
+      { roleId: "role-b", label: "Beta" },
+    ]);
+    const select = firstRow(communityActions.sent.at(-1)!.message)?.components[0];
+    const pick = new FakeComponent({
+      kind: "select",
+      customId: select?.customId ?? "",
+      userId: "member-1",
+      values: ["role-b"],
+    });
+    expect(await router.dispatch(pick, signer, NOW)).toBe(true);
+    expect(await communityActions.hasRole(GUILD, "member-1", "role-a")).toBe(false);
+    expect(await communityActions.hasRole(GUILD, "member-1", "role-b")).toBe(true);
+    expect(panel.panelId.length).toBeGreaterThan(0);
+
+    // The old unsigned ids are not handled by the router at all.
+    for (const customId of [
+      "keystone:role:role-news",
+      `keystone:roles:${panel.panelId}`,
+      "keystone:giveaway:enter:old",
+      "keystone:suggest:up:old",
+      "keystone:poll:old:0",
+    ]) {
+      const legacy = new FakeComponent({ customId });
+      expect(await router.dispatch(legacy, signer, NOW)).toBe(false);
+      expect(legacy.replies).toHaveLength(0);
+    }
+  });
+
+  it("refuses an expired, forged or cross-guild role id without changing the role", async () => {
+    const { router, signer, communityStore, communityActions } = await fixture();
+    const roles = new ReactionRoleService(
+      communityStore,
+      communityActions,
+      signer,
+      () => NOW,
+    );
+    await roles.createPanel(GUILD, "roles", "Pick a role", [
+      { roleId: "role-news", label: "News" },
+    ]);
+    const id = firstRow(communityActions.sent.at(-1)!.message)?.components[0]?.customId ?? "";
+
+    const expired = new FakeComponent({
+      customId: signer.sign(
+        { namespace: "role", action: "toggle", payload: "role-news", ttlMs: 1_000 },
+        NOW,
+      ),
+    });
+    await router.dispatch(expired, signer, NOW + 1_000);
+    expect(expired.replies[0]?.content).toMatch(/expired/);
+    expect(await communityActions.hasRole(GUILD, "member-1", "role-news")).toBe(false);
+
+    const forged = new FakeComponent({
+      customId: `${id.slice(0, -1)}${id.endsWith("a") ? "b" : "a"}`,
+    });
+    await router.dispatch(forged, signer, NOW);
+    expect(forged.replies[0]?.ephemeral).toBe(true);
+    expect(await communityActions.hasRole(GUILD, "member-1", "role-news")).toBe(false);
+
+    const foreign = new FakeComponent({ customId: id, guildId: "other-guild" });
+    await router.dispatch(foreign, signer, NOW);
+    expect(foreign.replies[0]).toMatchObject({ ephemeral: true });
+    expect(foreign.replies[0]?.content).toMatch(/no longer configured/);
+    expect(await communityActions.hasRole("other-guild", "member-1", "role-news")).toBe(false);
+  });
+
+  it("enters a giveaway, records a suggestion vote and counts a poll vote", async () => {
+    const { router, signer, communityStore, communityActions } = await fixture();
+
+    const giveaways = new GiveawayService(
+      communityStore,
+      communityActions,
+      communitySettingsSchema.parse({}),
+      () => NOW,
+      () => 0.5,
+      signer,
+    );
+    const giveaway = await giveaways.start(GUILD, "events", "Nitro", 10, 1);
+    const enter = firstRow(communityActions.sent.at(-1)!.message)?.components[0];
+    const entry = new FakeComponent({ customId: enter?.customId ?? "", userId: "member-2" });
+    expect(await router.dispatch(entry, signer, NOW)).toBe(true);
+    const giveawayRow = await communityStore.getRecord<{ entries: string[] }>(
+      GUILD,
+      "giveaway",
+      giveaway.id,
+    );
+    expect(giveawayRow?.data.entries).toEqual(["member-2"]);
+
+    const suggestions = new SuggestionService(
+      communityStore,
+      communityActions,
+      communitySettingsSchema.parse({
+        suggestions: { enabled: true, channelId: "suggestions" },
+      }),
+      () => NOW,
+      signer,
+    );
+    const suggestion = await suggestions.submit(GUILD, "author-1", "Movie night");
+    const upvote = firstRow(communityActions.sent.at(-1)!.message)?.components[0];
+    const vote = new FakeComponent({ customId: upvote?.customId ?? "", userId: "member-3" });
+    expect(await router.dispatch(vote, signer, NOW)).toBe(true);
+    const suggestionRow = await communityStore.getRecord<{
+      votes: { up: string[]; down: string[] };
+    }>(GUILD, "suggestion", suggestion.id);
+    expect(suggestionRow?.data.votes.up).toEqual(["member-3"]);
+
+    const content = new ContentService(
+      communityStore,
+      communityActions,
+      communitySettingsSchema.parse({}),
+      () => NOW,
+      signer,
+    );
+    const poll = await content.createPoll(GUILD, "general", "Lunch?", ["Pizza", "Soup"]);
+    const second = firstRow(communityActions.sent.at(-1)!.message)?.components[1];
+    const ballot = new FakeComponent({ customId: second?.customId ?? "", userId: "member-4" });
+    expect(await router.dispatch(ballot, signer, NOW)).toBe(true);
+    const pollRow = await communityStore.getRecord<{ votes: Record<string, string[]> }>(
+      GUILD,
+      "poll",
+      poll.id,
+    );
+    expect(pollRow?.data.votes["1"]).toEqual(["member-4"]);
   });
 });

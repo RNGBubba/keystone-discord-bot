@@ -106,12 +106,12 @@ box means the code and its tests exist, not that a live guild has run it.
 | --- | --- | --- | --- |
 | Welcome / goodbye | P7 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/engagement.ts`, `modules/community/src/community.test.ts`, `modules/community/src/commands.test.ts`, `apps/bot/src/community-events.test.ts`, `scripts/live-probe.ts` · live verified |
 | Autorole | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Reaction roles | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
+| Reaction roles | P3 | ✅ in repo | `modules/community/src/extras.test.ts`, `apps/bot/src/components.test.ts` · live verified |
 | Starboard | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Birthdays | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Suggestions | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Polls | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
-| Giveaways | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
+| Suggestions | P3 | ✅ in repo | `modules/community/src/extras.test.ts`, `apps/bot/src/components.test.ts` · live verified |
+| Polls | P3 | ✅ in repo | `modules/community/src/extras.test.ts`, `apps/bot/src/components.test.ts` · live verified |
+| Giveaways | P3 | ✅ in repo | `modules/community/src/extras.test.ts`, `apps/bot/src/components.test.ts` · live verified |
 | Temp voice | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Stat channels | P3 | ✅ in repo | `modules/community/src/extras.test.ts` · live unverified |
 | Social feeds | P7 | ◐ open | RSS ships; YouTube/Twitch-specific feeds are named as open in the P3 status. · `modules/community/src/extras.test.ts` |

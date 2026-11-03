@@ -33,10 +33,13 @@ and then spending is a race: two clicks both see 100 and both spend 80. The
 lock — a guild row in Postgres, one queue in memory — and the command only
 reports the result.
 
-**A button click is a request, not an authority.** The custom id carries a role
-or ticket id. The service looks up its own record, checks the owner/state and
-then acts. A user cannot turn `keystone:role:123` into a different role because
-the adapter only passes the stored id.
+**A button click is a request, not an authority.** The custom id carries a role,
+ticket or poll id inside an HMAC-signed envelope with an expiry. The router
+verifies the signature and expiry before any handler runs; the service then
+looks up its own record in the acting guild and checks the owner/state before it
+acts. A user cannot turn a role id into a different role: changing the payload
+breaks the signature, and a valid id copied to another guild finds no record
+there.
 
 **One root, many features.** `/tools` is a hub; adding a utility does not spend
 another global command. `/rank` is the same idea for leveling and money. Discord

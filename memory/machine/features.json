@@ -971,9 +971,13 @@
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
           "note": "Buttons and selects too",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/extras.test.ts",
+            "apps/bot/src/components.test.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-interactions"
+          ]
         },
         {
           "id": "community.starboard",
@@ -1028,9 +1032,13 @@
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
           "note": "Vote + status",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/extras.test.ts",
+            "apps/bot/src/components.test.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-interactions"
+          ]
         },
         {
           "id": "community.polls",
@@ -1047,9 +1055,13 @@
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
           "note": "Native poll fallback",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/extras.test.ts",
+            "apps/bot/src/components.test.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-interactions"
+          ]
         },
         {
           "id": "community.giveaways",
@@ -1066,9 +1078,13 @@
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
           "note": "Requirements + reroll",
           "evidence": [
-            "modules/community/src/extras.test.ts"
+            "modules/community/src/extras.test.ts",
+            "apps/bot/src/components.test.ts"
           ],
-          "liveVerified": false
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-community-interactions"
+          ]
         },
         {
           "id": "community.temp-voice",

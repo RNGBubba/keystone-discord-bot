@@ -816,6 +816,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-61",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "P7's remaining community component ids are signed, expiring and routed through the shared component router. `keystone:role:`, `keystone:roles:`, `keystone:giveaway:enter:`, `keystone:suggest:` and `keystone:poll:` are gone; the community module now mints `k1:` ids with the same signer the router verifies, so posting a panel without a signer is an explicit refusal instead of an unsigned message. Role panels use a one-year TTL because they are pinned configuration; giveaway, suggestion and poll panels use 30 days. The five handlers live in `apps/bot/src/components.ts` and call the same `ReactionRoleService.toggle`/`applySelection`, `GiveawayService.enter`, `SuggestionService.vote` and `ContentService.vote` as the old listener; the listener branch and its imports were deleted from `community-events.ts`, so an old panel is unhandled rather than silently served. The poll index rides in the route action (`v0`..`v4`), keeping the payload a plain poll id. Tests 626 / 91 files; live probe 26/26, adding `web-community-interactions` on Postgres: each of the five signed panels was pressed through the real discord.js adapter, the role/select actions and the giveaway/suggestion/poll rows changed, both panel configs were read back from `community_records`, and expired, forged and cross-guild ids were refused ephemerally without a write while all five legacy ids returned false from the router. The inventory leaves one explicit exception: moderation's `keystone:appeal:` and `keystone:verify:` still use `moderation-buttons.ts`, because the verify id encodes a guild + member pair that does not fit the 40-character signed payload. A live gateway click is not claimed.",
+      "journal": "journal/2026-11-03-pass-61.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "626",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "26/26",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

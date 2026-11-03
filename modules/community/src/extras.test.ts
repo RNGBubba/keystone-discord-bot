@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createComponentSigner } from "@keystone/kernel";
 import { birthdayOutput } from "./test-helpers";
 import { communitySettingsSchema } from "./settings";
 import { InMemoryCommunityStore } from "./store";
@@ -13,6 +14,7 @@ import { ReactionRoleService, StarboardService, WelcomeService } from "./engagem
 
 const guild = "guild-a";
 const user = "user-a";
+const componentSigner = createComponentSigner("community-test-secret");
 
 function settings(overrides: Record<string, unknown> = {}) {
   return communitySettingsSchema.parse(overrides);
@@ -63,6 +65,7 @@ describe("P3 follow-up community features", () => {
       actions,
       settings({ suggestions: { enabled: true, channelId: "suggestions" } }),
       () => 1_700_000_000_000,
+      componentSigner,
     );
 
     const suggestion = await service.submit(guild, user, "Please add a movie night channel.");
@@ -92,6 +95,8 @@ describe("P3 follow-up community features", () => {
       store,
       actions,
       settings({ suggestions: { enabled: false } }),
+      Date.now,
+      componentSigner,
     );
     await expect(disabled.submit(guild, user, "No suggestions here.")).rejects.toThrow(/disabled/i);
   });
@@ -99,7 +104,7 @@ describe("P3 follow-up community features", () => {
   it("posts a multi-role select panel and applies the selected set idempotently", async () => {
     const store = new InMemoryCommunityStore();
     const actions = new RecordingCommunityActions();
-    const service = new ReactionRoleService(store, actions);
+    const service = new ReactionRoleService(store, actions, componentSigner);
 
     const panel = await service.createSelectPanel(guild, "roles", "Pick roles", [
       { roleId: "role-a", label: "Alpha" },

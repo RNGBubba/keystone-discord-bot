@@ -79,10 +79,23 @@ export const tools = defineCommand({
   async execute(ctx: CommandContext): Promise<void> {
     const { store, actions } = port(ctx);
     const settings = await settingsFor(ctx);
-    const content = new ContentService(store, actions, settings, ctx.now);
-    const giveaways = new GiveawayService(store, actions, settings, ctx.now);
+    const content = new ContentService(store, actions, settings, ctx.now, ctx.componentSigner);
+    const giveaways = new GiveawayService(
+      store,
+      actions,
+      settings,
+      ctx.now,
+      Math.random,
+      ctx.componentSigner,
+    );
     const birthdays = new BirthdayService(store, actions, settings, ctx.now);
-    const suggestions = new SuggestionService(store, actions, settings, ctx.now);
+    const suggestions = new SuggestionService(
+      store,
+      actions,
+      settings,
+      ctx.now,
+      ctx.componentSigner,
+    );
     const sticky = new StickyService(store, actions);
     const responders = new AutoResponderService(store, actions, settings, ctx.now);
     const guildId = ctx.guildId as string;
@@ -267,7 +280,12 @@ export const tools = defineCommand({
           return { roleId, label: label.join(":") };
         });
         if (roles.length < 2) throw new UserError("A select panel needs at least two roles.");
-        const result = await new ReactionRoleService(store, actions).createSelectPanel(
+        const result = await new ReactionRoleService(
+          store,
+          actions,
+          ctx.componentSigner,
+          ctx.now,
+        ).createSelectPanel(
           guildId,
           target,
           text(ctx, "name") ?? "Choose your roles",
@@ -283,9 +301,12 @@ export const tools = defineCommand({
       const role = text(ctx, "role");
       if (!role) throw new UserError("Choose a role, or use value for a multi-select panel.");
       const label = text(ctx, "name") ?? "Choose a role";
-      const result = await new ReactionRoleService(store, actions).createPanel(guildId, target, label, [
-        { roleId: role, label },
-      ]);
+      const result = await new ReactionRoleService(
+        store,
+        actions,
+        ctx.componentSigner,
+        ctx.now,
+      ).createPanel(guildId, target, label, [{ roleId: role, label }]);
       await ctx.interaction.reply({ content: `Reaction-role panel posted (${result.messageId}).`, ephemeral: true });
       return;
     }

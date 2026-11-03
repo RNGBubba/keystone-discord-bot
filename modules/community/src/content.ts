@@ -8,6 +8,11 @@ import type {
   EmbedPayload,
   JobQueue,
 } from "@keystone/kernel";
+import {
+  COMMUNITY_PANEL_TTL_MS,
+  requirePanelSigner,
+  type PanelSigner,
+} from "./panels";
 import type { CommunitySettings } from "./settings";
 
 function button(
@@ -87,6 +92,8 @@ export class ContentService {
     private readonly actions: CommunityActions,
     private readonly settings: CommunitySettings,
     private readonly now: () => number = Date.now,
+    /** Required to post a poll; delivery and rendering-only paths do not need it. */
+    private readonly signer?: PanelSigner,
   ) {}
 
   async createEmbed(
@@ -258,6 +265,7 @@ export class ContentService {
     if (options.length < 2 || options.length > 5) {
       throw new UserError("A poll needs 2–5 options.");
     }
+    const signer = requirePanelSigner(this.signer);
     const id = randomUUID();
     const record: PollRecord = {
       id,
@@ -277,9 +285,17 @@ export class ContentService {
       components: [
         {
           type: "action-row",
-          components: record.options.map((option, index) => ({
+          components: record.options.map((_option, index) => ({
             type: "button",
-            customId: `keystone:poll:${id}:${index}`,
+            customId: signer.sign(
+              {
+                namespace: "poll",
+                action: `v${index}`,
+                payload: id,
+                ttlMs: COMMUNITY_PANEL_TTL_MS,
+              },
+              this.now(),
+            ),
             label: `${index + 1}`,
             style: "secondary" as const,
           })),

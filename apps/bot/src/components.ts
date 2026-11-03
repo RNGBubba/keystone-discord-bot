@@ -21,7 +21,14 @@ import {
   modalAnswers,
   modalFits,
 } from "@keystone/module-forms";
-import { TicketService, communitySettingsSchema } from "@keystone/module-community";
+import {
+  ContentService,
+  GiveawayService,
+  ReactionRoleService,
+  SuggestionService,
+  TicketService,
+  communitySettingsSchema,
+} from "@keystone/module-community";
 import { asComponentInteraction } from "./adapt";
 import { handleModerationButton } from "./moderation-buttons";
 
@@ -60,7 +67,10 @@ export function createComponentRouter(deps: ComponentRuntimeDeps): ComponentRout
     return new FormService(deps.forms, settings, now);
   };
 
-  return new ComponentRouter()
+  const communityConfig = async (guildId: string) =>
+    communitySettingsSchema.parse(await deps.community.settings.get(guildId));
+
+  const router = new ComponentRouter()
     .register({
       namespace: "form",
       action: "apply",
@@ -178,9 +188,7 @@ export function createComponentRouter(deps: ComponentRuntimeDeps): ComponentRout
         if (!interaction.channelId) {
           throw new UserError(t(locale, "ticket.open.noChannel"));
         }
-        const settings = communitySettingsSchema.parse(
-          await deps.community.settings.get(interaction.guildId),
-        );
+        const settings = await communityConfig(interaction.guildId);
         const ticket = await new TicketService(
           deps.community.store,
           deps.community.actions,
@@ -198,7 +206,119 @@ export function createComponentRouter(deps: ComponentRuntimeDeps): ComponentRout
           ephemeral: true,
         });
       },
+    })
+    .register({
+      namespace: "role",
+      action: "toggle",
+      kind: "button",
+      guildOnly: true,
+      async handle({ interaction, payload }) {
+        if (!interaction.guildId) return;
+        const result = await new ReactionRoleService(
+          deps.community.store,
+          deps.community.actions,
+        ).toggle(interaction.guildId, interaction.userId, payload);
+        await interaction.reply({
+          content: `${result.added ? "Added" : "Removed"} **${result.label}**.`,
+          ephemeral: true,
+        });
+      },
+    })
+    .register({
+      namespace: "roles",
+      action: "select",
+      kind: "select",
+      guildOnly: true,
+      async handle({ interaction, payload }) {
+        if (!interaction.guildId) return;
+        const result = await new ReactionRoleService(
+          deps.community.store,
+          deps.community.actions,
+        ).applySelection(
+          interaction.guildId,
+          interaction.userId,
+          payload,
+          [...(interaction.values ?? [])],
+        );
+        await interaction.reply({
+          content: `Roles updated: ${result.added} added, ${result.removed} removed.`,
+          ephemeral: true,
+        });
+      },
+    })
+    .register({
+      namespace: "giveaway",
+      action: "enter",
+      kind: "button",
+      guildOnly: true,
+      async handle({ interaction, payload, now: current }) {
+        if (!interaction.guildId) return;
+        const settings = await communityConfig(interaction.guildId);
+        const result = await new GiveawayService(
+          deps.community.store,
+          deps.community.actions,
+          settings,
+          () => current,
+        ).enter(interaction.guildId, payload, interaction.userId);
+        await interaction.reply({
+          content: result.entered
+            ? `Entered. ${result.entries} entry(ies) so far.`
+            : (result.reason ?? "Could not enter."),
+          ephemeral: true,
+        });
+      },
     });
+
+  // One route per poll option, because Discord sends only the custom id. The
+  // action carries the index, so the payload stays a plain poll id.
+  for (let index = 0; index < 5; index += 1) {
+    router.register({
+      namespace: "poll",
+      action: `v${index}`,
+      kind: "button",
+      guildOnly: true,
+      async handle({ interaction, payload, now: current }) {
+        if (!interaction.guildId) return;
+        const settings = await communityConfig(interaction.guildId);
+        const result = await new ContentService(
+          deps.community.store,
+          deps.community.actions,
+          settings,
+          () => current,
+        ).vote(interaction.guildId, payload, interaction.userId, index);
+        await interaction.reply({
+          content: `Vote recorded. Totals: ${result.counts.join(" / ")}.`,
+          ephemeral: true,
+        });
+      },
+    });
+  }
+
+  for (const kind of ["up", "down"] as const) {
+    router.register({
+      namespace: "suggest",
+      action: kind,
+      kind: "button",
+      guildOnly: true,
+      async handle({ interaction, payload, now: current }) {
+        if (!interaction.guildId) return;
+        const settings = await communityConfig(interaction.guildId);
+        const result = await new SuggestionService(
+          deps.community.store,
+          deps.community.actions,
+          settings,
+          () => current,
+          deps.signer,
+        ).vote(interaction.guildId, payload, interaction.userId, kind);
+        await interaction.reply({
+          content: `Vote ${result.changed ? "recorded" : "already counted"}: 👍 ${result.up} · 👎 ${result.down}.`,
+          ephemeral: true,
+        });
+      },
+    });
+  }
+
+  return router;
 }
 
 function isModerationButton(customId: string): boolean {
@@ -206,10 +326,15 @@ function isModerationButton(customId: string): boolean {
 }
 
 /**
- * One gateway listener for every component kind. Moderation's existing button
- * ids predate the signed format, so they are handed to their own handler; every
- * new panel goes through the router, which checks the signature, the expiry,
- * the guild and the route's permission before any handler runs.
+ * One gateway listener for every component kind. Community, ticket and form
+ * ids are signed and handled by the router, which checks the signature, the
+ * expiry, the guild and the route's permission before a handler runs.
+ *
+ * Moderation's appeal and verify ids are the one remaining exception: they
+ * predate the signed format and encode a guild + member pair in a DM, which does
+ * not fit the signed payload budget. They are handed to their own handler until
+ * that payload is redesigned; a legacy community id matches neither path and is
+ * therefore unhandled.
  */
 export function registerComponentInteractions(client: Client, deps: ComponentRuntimeDeps): void {
   const router = createComponentRouter(deps);

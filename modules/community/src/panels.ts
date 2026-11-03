@@ -1,6 +1,22 @@
-import type { V2Component } from "@keystone/kernel";
+import type { ComponentSigner, V2Component } from "@keystone/kernel";
+import { UserError } from "@keystone/kernel";
 import { DEFAULT_LOCALE, t } from "@keystone/i18n";
 import { layout } from "@keystone/ui";
+
+/** The signer shape a panel needs; the bot's composition root owns the secret. */
+export type PanelSigner = Pick<ComponentSigner, "sign">;
+
+/** Role panels are pinned configuration, so they get a year rather than a month. */
+export const ROLE_PANEL_TTL_MS = 365 * 24 * 60 * 60_000;
+
+/** Giveaway, suggestion and poll panels are time-bound; a month is enough. */
+export const COMMUNITY_PANEL_TTL_MS = 30 * 24 * 60 * 60_000;
+
+/** Fail before a message is posted rather than shipping an unsigned control. */
+export function requirePanelSigner(signer: PanelSigner | undefined): PanelSigner {
+  if (!signer) throw new UserError("Interactive panels are not configured on this bot.");
+  return signer;
+}
 
 /**
  * The community module's V2 surfaces. Each builder returns a structural tree;

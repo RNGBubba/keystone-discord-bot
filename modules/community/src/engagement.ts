@@ -6,7 +6,13 @@ import type {
   CommunityStore,
   EmbedPayload,
 } from "@keystone/kernel";
-import { greetingPanel } from "./panels";
+import {
+  COMMUNITY_PANEL_TTL_MS,
+  ROLE_PANEL_TTL_MS,
+  greetingPanel,
+  requirePanelSigner,
+  type PanelSigner,
+} from "./panels";
 import type { CommunitySettings } from "./settings";
 
 function row(buttons: ActionRow["components"]): ActionRow {
@@ -17,8 +23,9 @@ function button(
   customId: string,
   label: string,
   style: "primary" | "secondary" | "success" | "danger" = "primary",
+  disabled = false,
 ): ActionRow["components"][number] {
-  return { type: "button", customId, label, style };
+  return { type: "button", customId, label, style, disabled };
 }
 
 function truncate(value: string, max: number): string {
@@ -145,6 +152,9 @@ export class ReactionRoleService {
   constructor(
     private readonly store: CommunityStore,
     private readonly actions: CommunityActions,
+    /** Required to post a panel; `toggle` can run without one. */
+    private readonly signer?: PanelSigner,
+    private readonly now: () => number = Date.now,
   ) {}
 
   async createPanel(
@@ -155,6 +165,7 @@ export class ReactionRoleService {
   ): Promise<{ messageId: string }> {
     if (roles.length < 1) throw new UserError("A reaction-role panel needs at least one role.");
     if (roles.length > 5) throw new UserError("A panel can hold at most five buttons.");
+    const signer = requirePanelSigner(this.signer);
     const message = {
       embeds: [
         {
@@ -167,7 +178,15 @@ export class ReactionRoleService {
         row(
           roles.map((role) =>
             button(
-              `keystone:role:${role.roleId}`,
+              signer.sign(
+                {
+                  namespace: "role",
+                  action: "toggle",
+                  payload: role.roleId,
+                  ttlMs: ROLE_PANEL_TTL_MS,
+                },
+                this.now(),
+              ),
               `${role.emoji ? `${role.emoji} ` : ""}${role.label}`.slice(0, 80),
               "secondary",
             ),
@@ -197,6 +216,7 @@ export class ReactionRoleService {
   ): Promise<{ messageId: string; panelId: string }> {
     if (roles.length < 2) throw new UserError("A select panel needs at least two roles.");
     if (roles.length > 25) throw new UserError("Discord allows at most 25 select options.");
+    const signer = requirePanelSigner(this.signer);
     const panelId = randomUUID();
     const maxValues = Math.min(options.maxValues ?? roles.length, roles.length);
     const minValues = Math.min(options.minValues ?? 0, maxValues);
@@ -212,7 +232,15 @@ export class ReactionRoleService {
         row([
           {
             type: "select",
-            customId: `keystone:roles:${panelId}`,
+            customId: signer.sign(
+              {
+                namespace: "roles",
+                action: "select",
+                payload: panelId,
+                ttlMs: ROLE_PANEL_TTL_MS,
+              },
+              this.now(),
+            ),
             placeholder: "Choose roles",
             minValues,
             maxValues,
@@ -369,6 +397,8 @@ export class GiveawayService {
     private readonly settings: CommunitySettings,
     private readonly now: () => number = Date.now,
     private readonly rng: () => number = Math.random,
+    /** Required to start a giveaway; ending can re-render without one. */
+    private readonly signer?: PanelSigner,
   ) {}
 
   async start(
@@ -386,7 +416,12 @@ export class GiveawayService {
     if (!Number.isInteger(winners) || winners < 1 || winners > this.settings.giveaways.maxWinners) {
       throw new UserError(`Winners must be between 1 and ${this.settings.giveaways.maxWinners}.`);
     }
+    const signer = requirePanelSigner(this.signer);
     const id = randomUUID();
+    const entryId = signer.sign(
+      { namespace: "giveaway", action: "enter", payload: id, ttlMs: COMMUNITY_PANEL_TTL_MS },
+      this.now(),
+    );
     const endsAt = new Date(this.now() + durationMinutes * 60_000).toISOString();
     const message = await this.actions.sendMessage(guildId, channelId, {
       embeds: [
@@ -398,7 +433,7 @@ export class GiveawayService {
           color: 0x57f287,
         },
       ],
-      components: [row([button(`keystone:giveaway:enter:${id}`, "Enter", "success")])],
+      components: [row([button(entryId, "Enter", "success")])],
     });
     if (!message.ok || !message.id) throw new Error(message.detail ?? "Could not start giveaway");
     const record: GiveawayRecord = {
@@ -465,9 +500,26 @@ export class GiveawayService {
           color: 0xfaa61a,
         },
       ],
-      components: [
-        row([button(`keystone:giveaway:enter:${giveawayId}`, "Ended", "secondary")]),
-      ],
+      components: this.signer
+        ? [
+            row([
+              button(
+                this.signer.sign(
+                  {
+                    namespace: "giveaway",
+                    action: "enter",
+                    payload: giveawayId,
+                    ttlMs: COMMUNITY_PANEL_TTL_MS,
+                  },
+                  this.now(),
+                ),
+                "Ended",
+                "secondary",
+                true,
+              ),
+            ]),
+          ]
+        : [],
     });
     for (const winner of winners) {
       await this.actions.sendDM(winner, {

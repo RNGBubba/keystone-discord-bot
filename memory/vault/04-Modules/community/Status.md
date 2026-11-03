@@ -2,6 +2,21 @@
 
 ## Now
 
+Pass 61 moved the last five community component families onto the signed,
+expiring router. `ReactionRoleService`, `GiveawayService`, `SuggestionService`
+and `ContentService` now mint `k1:` ids with the bot's signer; posting a panel
+without one is an explicit refusal. Role buttons and role-select menus use a
+one-year TTL because they are pinned configuration, while giveaway, suggestion
+and poll panels use 30 days. The handlers in `apps/bot/src/components.ts` call
+the same `toggle`/`applySelection`, `enter` and `vote` methods as the old
+listener, and the entire `InteractionCreate` branch was deleted from
+`community-events.ts`, so a legacy `keystone:` id is unhandled. The live probe
+adds `web-community-interactions`: all five signed panels were pressed through
+the real discord.js adapter, the role action and the giveaway/suggestion/poll
+rows changed, and expired, forged and cross-guild ids were refused ephemerally
+without a write. Moderation's `appeal`/`verify` ids remain the one unsigned
+handler and are named in the journal. A live gateway click is not claimed.
+
 P3 is complete in-repo as of pass 07 (2026-11-01), and P4 hardened its economy in
 pass 09 (2026-11-01). Balances are sums over the append-only `economy_ledger`;
 transfers, purchases and gambles use the Discord interaction id as their
@@ -75,19 +90,20 @@ the guild.
 ## Verified
 
 ```text
-pnpm check                            exit 0 · 623 tests / 91 files
+pnpm check                            exit 0 · 626 tests / 91 files
   responder.test.ts                   5 tests (auto-responder service)
   community.test.ts                  15 tests (including timer delivery, a concurrent claim and goodbye)
   extras.test.ts                      7 tests
   commands.test.ts                   13 tests (incl. reminder/schedule timer wiring and goodbye settings)
   economy.test.ts                     6 tests
-  apps/bot/src/community-events.test.ts 4 tests (dev marker, responder and member leave)
+  apps/bot/src/community-events.test.ts 5 tests (dev marker, responder, member leave and no component handler)
+  apps/bot/src/components.test.ts      12 tests (form, ticket and the five community routes)
   apps/bot/src/prefix.test.ts         8 tests (dev bridge)
   context.test.ts                     2 tests (Rank card menu)
   packages/db/src/community.test.ts   6 tests (incl. responder reopen and delivery claim)
   packages/db/src/economy.test.ts     2 tests
 pnpm budget                           20/100 roots · 141 subcommands · 161 actions · 4 context menus, status OK
-pnpm memory:check                     current (pass 60)
+pnpm memory:check                     current (pass 61)
 ```
 
 Feature proofs (P3 plus the P4 economy hardening):
@@ -105,13 +121,13 @@ Feature proofs (P3 plus the P4 economy hardening):
 | Gambling | Disabled by default; cap enforced; a seeded RNG proves a win and a loss debits once |
 | Welcome | Text placeholders, immediate autorole and DM are recorded |
 | Delayed autorole | Join records a pending role; before due applies zero; after due applies once; second tick no-op |
-| Button reaction roles | Panel carries `keystone:role:<id>`; first toggle adds, second removes |
-| Select reaction roles | Panel has a select with managed options; applying a subset adds; repeat is a no-op; unmanaged value rejected; changing subset removes old roles |
+| Button reaction roles | Panel carries a signed `role:toggle` id; first toggle adds, second removes; a legacy id is unhandled |
+| Select reaction roles | Panel has a signed select with managed options; applying a subset adds; repeat is a no-op; unmanaged value rejected; changing subset removes old roles |
 | Starboard | Below threshold sends nothing; threshold sends once; the next count edits the same record |
 | Starboard overrides | A source channel with threshold 1 posts to its override channel; an un-overridden source still needs the global 5 |
 | Birthdays | `11-01` announces once for the year; duplicate tick sends zero; `02-30` rejected; removal stops announcements |
 | Suggestions | Submit, one vote per user, duplicate vote no-op, switch vote moves counts, decision once, decided votes rejected, disabled path rejected |
-| Giveaways | Duplicate entry is refused; early end is refused; due end picks a winner and DMs; second end is a no-op |
+| Giveaways | Duplicate entry is refused; early end is refused; due end picks a winner and DMs; second end is a no-op; entry ids are signed and foreign-guild ids are refused |
 | Rank card menu | Seeds `4 / 400`; the user menu reports `Level 4 · 400 XP · rank #1`, and the row is unchanged afterwards |
 | Temp voice | Hub creates the named room; owner leave with members stays; empty owner leave deletes and removes the record |
 | Tickets | Panel, thread ticket, one-open cap, claim, transcript message, close, stats and average close |

@@ -6,6 +6,11 @@ import type {
   CommunityStore,
   LevelProfile,
 } from "@keystone/kernel";
+import {
+  COMMUNITY_PANEL_TTL_MS,
+  requirePanelSigner,
+  type PanelSigner,
+} from "./panels";
 import type { CommunitySettings } from "./settings";
 
 function button(
@@ -135,6 +140,8 @@ export class SuggestionService {
     private readonly actions: CommunityActions,
     private readonly settings: CommunitySettings,
     private readonly now: () => number = Date.now,
+    /** Required to post or re-render a suggestion's vote buttons. */
+    private readonly signer?: PanelSigner,
   ) {}
 
   async submit(
@@ -223,6 +230,12 @@ export class SuggestionService {
 
   private render(record: SuggestionRecord) {
     const closed = record.status !== "open";
+    const signer = requirePanelSigner(this.signer);
+    const voteId = (kind: "up" | "down"): string =>
+      signer.sign(
+        { namespace: "suggest", action: kind, payload: record.id, ttlMs: COMMUNITY_PANEL_TTL_MS },
+        this.now(),
+      );
     return {
       embeds: [
         {
@@ -240,14 +253,14 @@ export class SuggestionService {
           components: [
             {
               type: "button" as const,
-              customId: `keystone:suggest:up:${record.id}`,
+              customId: voteId("up"),
               label: "Upvote",
               style: "success" as const,
               disabled: closed,
             },
             {
               type: "button" as const,
-              customId: `keystone:suggest:down:${record.id}`,
+              customId: voteId("down"),
               label: "Downvote",
               style: "danger" as const,
               disabled: closed,
