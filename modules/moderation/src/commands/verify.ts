@@ -87,10 +87,12 @@ async function startVerification(ctx: CommandContext): Promise<void> {
     );
   }
 
+  const signer = ctx.componentSigner;
+  if (!signer) throw new UserError("Verification links are not configured in this process.");
   const sent = await moderation.actions.directMessage(ctx.userId, {
     content:
       "Keystone verification: click the button below to leave quarantine in this server. If you did not request this, ignore it.",
-    components: [verifyButton(guildId, ctx.userId)],
+    components: [verifyButton(guildId, ctx.userId, signer, ctx.now())],
   });
   if (!sent.ok) {
     throw new UserError(

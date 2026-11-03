@@ -118,8 +118,15 @@ function isAction(value: string | undefined): value is ModAction {
   return value !== undefined && (ACTIONS as readonly string[]).includes(value);
 }
 
-function appealComponents(settings: ModerationSettings, record: ModerationCase): ActionRow[] {
-  return settings.appealsEnabled ? [appealButton(record.id)] : [];
+function appealComponents(
+  ctx: CommandContext,
+  settings: ModerationSettings,
+  record: ModerationCase,
+): ActionRow[] {
+  if (!settings.appealsEnabled) return [];
+  const signer = ctx.componentSigner;
+  if (!signer) throw new UserError("Case panels are not configured in this process.");
+  return [appealButton(record.id, signer, ctx.now())];
 }
 
 async function notify(
@@ -130,7 +137,7 @@ async function notify(
 ): Promise<void> {
   await actions.notify(ctx.guildId!, settings.modLogChannelId, {
     embeds: [caseEmbed(record)],
-    components: appealComponents(settings, record),
+    components: appealComponents(ctx, settings, record),
   });
 }
 
@@ -262,7 +269,7 @@ export const mod = defineCommand({
       await ctx.interaction.reply({
         ephemeral: true,
         embeds: [caseEmbed(record)],
-        components: appealComponents(settings, record),
+        components: appealComponents(ctx, settings, record),
       });
       return;
     }

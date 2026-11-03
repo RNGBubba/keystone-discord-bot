@@ -79,15 +79,13 @@ async function main(): Promise<void> {
     disabledFeatures: capabilities.disabledFeatures,
   });
   const client = createClient(intentNames);
-  const runtime = await createRuntime(
-    env,
-    registry,
-    logger,
-    createDiscordModerationActions(client),
-    createDiscordCommunityActions(client),
-    createDiscordInviteActions(client, logger.child("invites")),
-    createDiscordLoggingActions(client, logger.child("logging")),
-  );
+  const runtime = await createRuntime(env, registry, logger, {
+    moderation: createDiscordModerationActions(client),
+    community: createDiscordCommunityActions(client),
+    invites: createDiscordInviteActions(client, logger.child("invites")),
+    logging: createDiscordLoggingActions(client, logger.child("logging")),
+    signer: componentSigner,
+  });
   logger.info("runtime ready", runtime.mode);
 
   const dispatchDeps: DispatchDeps = {

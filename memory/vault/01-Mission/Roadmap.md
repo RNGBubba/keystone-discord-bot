@@ -263,9 +263,9 @@ rest of this phase is open.
   panel, the rank card, the ticket panel, the welcome/goodbye greetings and the
   role/select/giveaway/suggestion/poll panels use it. File Upload, Radio and
   Checkbox builders are not built yet. Pass 61 moved every community component
-  id onto the signed, expiring router; moderation's `appeal`/`verify` ids are
-  the one remaining unsigned handler because their DM payload does not fit the
-  signed budget.
+  id onto the signed, expiring router; pass 64 moved moderation's `appeal` and
+  `verify` ids too, packing the guild and member into the signed payload. No
+  component id bypasses the router.
 - New domains: role persistence; plus YouTube/Twitch/RSS feeds, join-gate
   expiry, case export and `command_usage` retention. Invites, the link,
   profanity and zalgo filters, auto-responders, analytics and the four context

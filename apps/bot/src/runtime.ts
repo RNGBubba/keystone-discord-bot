@@ -14,6 +14,7 @@ import {
   type ModuleRegistry,
   type SettingsRepository,
   type Telemetry,
+  type ComponentSigner,
   type ModerationActions,
   type ModerationPort,
   type CommunityActions,
@@ -137,6 +138,16 @@ class RuntimeHealth implements HealthProbe {
   }
 }
 
+/** Gateway-facing ports the composition root owns; the runtime only wires them. */
+export interface RuntimePorts {
+  readonly moderation: ModerationActions;
+  readonly community: CommunityActions;
+  readonly invites: InviteActions;
+  readonly logging: LoggingActions;
+  /** Mints signed component ids; the same secret the interaction router verifies. */
+  readonly signer: ComponentSigner;
+}
+
 /**
  * The composition root. This is the only function that decides *which*
  * implementation of each port a deployment gets; modules and the kernel keep
@@ -149,11 +160,15 @@ export async function createRuntime(
   env: Env,
   registry: ModuleRegistry,
   logger: Logger,
-  moderationActions: ModerationActions,
-  communityActions: CommunityActions,
-  inviteActions: InviteActions,
-  loggingActions: LoggingActions,
+  ports: RuntimePorts,
 ): Promise<Runtime> {
+  const {
+    moderation: moderationActions,
+    community: communityActions,
+    invites: inviteActions,
+    logging: loggingActions,
+    signer,
+  } = ports;
   const telemetry = env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? await createOtlpTelemetry(env.OTEL_EXPORTER_OTLP_ENDPOINT, "keystone-bot")
     : createTelemetry({ enabled: env.OTEL_ENABLED, serviceName: "keystone-bot" });
@@ -287,6 +302,7 @@ export async function createRuntime(
     members: memberStore,
     settings: settings.forModule("moderation"),
     logger: logger.child("security"),
+    signer,
   });
 
   const musicStore: MusicStore = database ? createMusicStore(database) : new InMemoryMusicStore();

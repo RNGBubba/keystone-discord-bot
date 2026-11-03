@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-64",
+    date: "2026-11-03",
+    summary:
+      "P7 interactions: the case appeal button and the DM verification button are signed, expiring ids on the shared router. A copied, forged, expired or cross-server press is refused before it can touch a case or a member row.",
+    journal: "memory/journal/2026-11-03-pass-64.md",
+  },
+  {
     pass: "pass-63",
     date: "2026-11-03",
     summary:

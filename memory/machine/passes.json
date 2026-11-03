@@ -861,6 +861,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-64",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "Moderation's `keystone:appeal:` and `keystone:verify:` ids are gone; every component id in the tree is now signed, expiring and routed by the shared component router. The verify id packs `<guild>_<user>` into the signer's existing 40-character payload (39 for two snowflakes), and a new `guildFromPayload` hook lets the router treat that pair as the id's guild: it satisfies `guildOnly`, a DM click is bound to the guild in the signature, and a click in another server is refused with a new `component.wrongGuild` copy before the handler runs. The appeal id still signs only the case id, so its handler checks `record.guildId` against the interaction guild. Both handlers moved to `registerModerationRoutes` in `apps/bot/src/moderation-buttons.ts`; `parseModerationButtonId`, the `keystone:` listener branch and the old in-guild fallback were deleted, so a legacy id is unhandled with no reply and no write. `createRuntime` now takes its gateway ports and signer as one `RuntimePorts` object, and `SecurityCoordinatorOptions.signer` is required. The journal records the rejected alternatives: widening the payload budget, an opaque server-side handle, and a guild in the namespace. Inventory grep: the only `keystone:` hits left in production are a comment and the cache prefix; no component id bypasses the router. Tests 631 / 92 files (the five legacy parser tests became eleven router-level cases); live probe 28/28, adding `web-moderation-interactions` on Postgres: the panel's signed appeal opened a stored appeal with one `case_events` row, a DM-context verify resolved guild and member from the signed payload, ran unquarantine and persisted `verified_at`, and expired, forged, cross-guild and wrong-member presses were refused without a write while both legacy ids returned false. A live gateway click or DM is not claimed.",
+      "journal": "journal/2026-11-03-pass-64.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "631",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "28/28",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

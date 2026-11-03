@@ -525,6 +525,7 @@ export const de: Catalog = {
   "component.expired": () => "Dieses Panel ist abgelaufen. Führe den Befehl erneut aus.",
   "component.noPermission": () => "Du hast keine Berechtigung, diesen Button zu verwenden.",
   "component.guildOnly": () => "Dieses Element funktioniert nur innerhalb eines Servers.",
+  "component.wrongGuild": () => "Dieses Panel gehört zu einem anderen Server.",
 
   "form.panel.questions": () => "**Fragen**",
   "form.panel.apply": () => "Bewerben",

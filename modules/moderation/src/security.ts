@@ -7,7 +7,7 @@ import type {
   ModuleSettings,
   Logger,
 } from "@keystone/kernel";
-import { CaseService, appealButton, verifyButton } from "./cases";
+import { CaseService, appealButton, verifyButton, type ModerationSigner } from "./cases";
 import { moderationSettingsSchema, type ModerationSettings } from "./settings";
 
 /**
@@ -536,6 +536,8 @@ export interface SecurityCoordinatorOptions {
   members: MemberStore;
   settings: ModuleSettings;
   logger: Logger;
+  /** Mints the signed appeal/verify ids; the same secret the router verifies. */
+  signer: ModerationSigner;
   now?: () => number;
 }
 
@@ -660,14 +662,17 @@ export class SecurityCoordinator {
     settings: ModerationSettings,
     dryRun: boolean,
   ): Promise<void> {
+    const now = this.options.now?.() ?? Date.now();
     const components: import("@keystone/kernel").ActionRow[] = [];
-    if (settings.appealsEnabled && record.targetId) components.push(appealButton(record.id));
+    if (settings.appealsEnabled && record.targetId) {
+      components.push(appealButton(record.id, this.options.signer, now));
+    }
     if (
       finding.kind === "quarantine" &&
       finding.rule.startsWith("join-gate.") &&
       record.targetId
     ) {
-      components.push(verifyButton(record.guildId, record.targetId));
+      components.push(verifyButton(record.guildId, record.targetId, this.options.signer, now));
     }
 
     try {

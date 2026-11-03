@@ -43,7 +43,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Case lookup | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Evidence card | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
 | Dry-run default | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts` · live unverified |
-| Appeal from the DM | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts`, `packages/db/src/cases.test.ts` · live verified |
+| Appeal from the DM | P2 | ✅ in repo | `modules/moderation/src/mod.test.ts`, `packages/db/src/cases.test.ts`, `scripts/live-probe.ts` · live verified |
 | Case export | P7 | ◐ open | Export commands are part of the P5/P7 data-ownership work. · `modules/moderation/src/mod.test.ts` |
 | Report message menu | P7 | ✅ in repo | `modules/moderation/src/context.test.ts` · live unverified |
 | Case history menu | P7 | ✅ in repo | `modules/moderation/src/context.test.ts` · live unverified |
@@ -71,7 +71,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Anti-nuke (webhook/bot add) | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Anti-raid (join burst) | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Quarantine role | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
-| Join gate / verification | P2 | ✅ in repo | `apps/bot/src/moderation-buttons.test.ts`, `modules/moderation/src/security.test.ts`, `modules/moderation/src/verification.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/member-store.test.ts` · live unverified |
+| Join gate / verification | P2 | ✅ in repo | `apps/bot/src/moderation-buttons.test.ts`, `modules/moderation/src/security.test.ts`, `modules/moderation/src/verification.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/member-store.test.ts`, `scripts/live-probe.ts` · live unverified |
 | Panic mode | P7 | ✅ in repo | `modules/moderation/src/panic.test.ts`, `modules/moderation/src/mod.test.ts`, `packages/db/src/panic.test.ts`, `apps/bot/src/moderation-actions.ts`, `apps/bot/src/moderation-actions.test.ts` · live unverified |
 | Heat scoring | P2 | ✅ in repo | `modules/moderation/src/security.test.ts` · live unverified |
 | Backup / restore | P5 | ✅ in repo | `packages/db/src/portability.test.ts` · live verified |

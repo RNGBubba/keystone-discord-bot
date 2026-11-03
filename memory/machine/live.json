@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T10:18:33.952Z",
+  "generatedAt": "2026-11-03T10:45:15.484Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -39,7 +39,7 @@
     {
       "id": "redis-shared-cooldown",
       "status": "pass",
-      "detail": "two clients: first allowed, second refused with 1998ms remaining",
+      "detail": "two clients: first allowed, second refused with 1999ms remaining",
       "features": []
     },
     {
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1153ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1217ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 50aaa8aa2b2b… matched after import ea030c3b",
+      "detail": "bundle checksum 6edb864bf1b1… matched after import 075a259e",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -225,6 +225,14 @@
         "community.giveaways",
         "community.suggestions",
         "community.polls"
+      ]
+    },
+    {
+      "id": "web-moderation-interactions",
+      "status": "pass",
+      "detail": "real discord.js adapter + the shared signed router on Postgres: the case panel's signed appeal id opened a stored appeal (state appealed, one case_events row), and the signed verify id pressed with no guild context — as in a DM — resolved its guild from the payload, ran unquarantine and persisted members.verified_at. An expired id, a forged signature, a cross-guild appeal, a cross-guild verify and clicks by the wrong member were refused without a write, and the old keystone:appeal / keystone:verify ids returned false from the router, produced no reply and wrote nothing. A live gateway click or DM is not claimed",
+      "features": [
+        "moderation.appeal-from-the-dm"
       ]
     },
     {

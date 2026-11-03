@@ -22,7 +22,7 @@ import {
 import { appeal } from "./commands/appeal";
 import { mod } from "./commands/mod";
 import { verify } from "./commands/verify";
-import { CaseService, InMemoryCaseStore, appealCustomId } from "./cases";
+import { CaseService, InMemoryCaseStore, appealCustomId, verifyCustomId } from "./cases";
 import { InMemoryMemberStore } from "./members";
 import { InMemoryPanicStore } from "./panic";
 import { moderationModule } from "./manifest";
@@ -246,7 +246,7 @@ describe("moderation module", () => {
     });
     expect(actions.notifications).toHaveLength(1);
     expect(actions.notifications[0]?.components?.[0]?.components[0]?.customId).toBe(
-      appealCustomId(records[0]!.id),
+      appealCustomId(records[0]!.id, ctx.componentSigner!, ctx.now()),
     );
   });
 
@@ -578,7 +578,12 @@ describe("moderation module", () => {
     expect(actions.dms[0]?.content).toBe(
       "Keystone verification: click the button below to leave quarantine in this server. If you did not request this, ignore it.",
     );
-    expect(actions.dms[0]?.customId).toMatch(/^keystone:verify:guild-1:new-member$/);
+    expect(actions.dms[0]?.customId).toBe(
+      verifyCustomId("guild-1", "new-member", ctx.componentSigner!, ctx.now()),
+    );
+    expect(verifyCustomId("guild-1", "new-member", ctx.componentSigner!).length).toBeLessThanOrEqual(
+      100,
+    );
     expect(interaction.lastReply?.content).toContain("DMs");
     expect(await members.get("guild-1", "new-member")).toMatchObject({
       quarantined: true,

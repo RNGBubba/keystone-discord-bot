@@ -30,7 +30,7 @@ import {
   communitySettingsSchema,
 } from "@keystone/module-community";
 import { asComponentInteraction } from "./adapt";
-import { handleModerationButton } from "./moderation-buttons";
+import { registerModerationRoutes } from "./moderation-buttons";
 
 export interface ComponentRuntimeDeps {
   /** Signs every button and modal id; only the composition root holds it. */
@@ -318,23 +318,18 @@ export function createComponentRouter(deps: ComponentRuntimeDeps): ComponentRout
     });
   }
 
+  // Moderation's appeal and verify buttons live on the same router. The verify
+  // id carries its guild inside the signed payload, because a DM has none.
+  registerModerationRoutes(router, deps.moderation);
+
   return router;
 }
 
-function isModerationButton(customId: string): boolean {
-  return customId.startsWith("keystone:appeal:") || customId.startsWith("keystone:verify:");
-}
-
 /**
- * One gateway listener for every component kind. Community, ticket and form
- * ids are signed and handled by the router, which checks the signature, the
- * expiry, the guild and the route's permission before a handler runs.
- *
- * Moderation's appeal and verify ids are the one remaining exception: they
- * predate the signed format and encode a guild + member pair in a DM, which does
- * not fit the signed payload budget. They are handed to their own handler until
- * that payload is redesigned; a legacy community id matches neither path and is
- * therefore unhandled.
+ * One gateway listener for every component kind. Every id is signed and
+ * handled by the router, which checks the signature, the expiry, the guild and
+ * the route's permission before a handler runs. An id without the signed
+ * prefix belongs to no route and is left unhandled.
  */
 export function registerComponentInteractions(client: Client, deps: ComponentRuntimeDeps): void {
   const router = createComponentRouter(deps);
@@ -350,10 +345,6 @@ export function registerComponentInteractions(client: Client, deps: ComponentRun
     const like: ComponentInteractionLike = asComponentInteraction(interaction);
 
     void (async () => {
-      if (like.kind === "button" && isModerationButton(like.customId)) {
-        await handleModerationButton(like, deps.moderation);
-        return;
-      }
       const locale = like.guildId
         ? await guildLocale(deps.config, like.guildId)
         : DEFAULT_LOCALE;
@@ -363,6 +354,7 @@ export function registerComponentInteractions(client: Client, deps: ComponentRun
           expired: t(locale, "component.expired"),
           noPermission: t(locale, "component.noPermission"),
           guildOnly: t(locale, "component.guildOnly"),
+          wrongGuild: t(locale, "component.wrongGuild"),
         },
       });
     })().catch((error: unknown) => {

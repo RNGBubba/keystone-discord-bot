@@ -14,8 +14,8 @@ listener, and the entire `InteractionCreate` branch was deleted from
 adds `web-community-interactions`: all five signed panels were pressed through
 the real discord.js adapter, the role action and the giveaway/suggestion/poll
 rows changed, and expired, forged and cross-guild ids were refused ephemerally
-without a write. Moderation's `appeal`/`verify` ids remain the one unsigned
-handler and are named in the journal. A live gateway click is not claimed.
+without a write. Pass 64 moved moderation's `appeal`/`verify` ids onto the same
+router too, so no component id bypasses it. A live gateway click is not claimed.
 
 P3 is complete in-repo as of pass 07 (2026-11-01), and P4 hardened its economy in
 pass 09 (2026-11-01). Balances are sums over the append-only `economy_ledger`;
@@ -90,7 +90,7 @@ the guild.
 ## Verified
 
 ```text
-pnpm check                            exit 0 · 633 tests / 92 files
+pnpm check                            exit 0 · 631 tests / 92 files
   responder.test.ts                   5 tests (auto-responder service)
   community.test.ts                  15 tests (including timer delivery, a concurrent claim and goodbye)
   extras.test.ts                      7 tests

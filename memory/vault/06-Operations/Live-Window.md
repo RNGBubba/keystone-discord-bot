@@ -6,7 +6,7 @@
 > A passing local suite does not prove a service; this page records the last
 > `pnpm probe:live` run against the configured Postgres and Redis.
 
-Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:18:33.952Z.
+Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:45:15.484Z.
 
 | Service | Result |
 | --- | --- |
@@ -20,14 +20,14 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:18:33.95
 | --- | --- | --- | --- |
 | postgres-migrations | pass | 20 migrations applied, 0 pending on Postgres 16.15 |  |
 | postgres-settings-restart | pass | one settings row written, pool closed and reopened, same value read back | operations.in-bot-config |
-| redis-shared-cooldown | pass | two clients: first allowed, second refused with 1998ms remaining |  |
+| redis-shared-cooldown | pass | two clients: first allowed, second refused with 1999ms remaining |  |
 | bullmq-job-idempotency | pass | two enqueues with one idempotency key produced one handler call and a completed Postgres receipt |  |
-| bullmq-delayed-timer | pass | one delayed job fired once after 1153ms and wrote a completed receipt |  |
+| bullmq-delayed-timer | pass | one delayed job fired once after 1217ms and wrote a completed receipt |  |
 | temporary-moderation-expiry | pass | a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event |  |
 | panic-snapshot-persistence | pass | a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only |  |
 | content-timer-delivery | pass | a real community record delivered a reminder and a scheduled message once, and two concurrent claims produced exactly one send |  |
 | portability-dry-run | pass | dry run reported 1 added / 0 changed / 0 removed setting(s) | portability.dry-run-import-diff |
-| portability-import-verify | pass | bundle checksum 50aaa8aa2b2b… matched after import ea030c3b | portability.restore-and-config-hash, security.backup-restore |
+| portability-import-verify | pass | bundle checksum 6edb864bf1b1… matched after import 075a259e | portability.restore-and-config-hash, security.backup-restore |
 | portability-rollback | pass | the applied import restored its pre-import backup; the destination has no settings rows | portability.rollback-window, security.backup-restore |
 | portability-deletion-receipt | pass | deletion receipt retained 1 setting(s) and the guild row is gone | portability.deletion-receipt |
 | web-health-postgres | pass | /healthz returned 200 with database=postgres on an ephemeral port |  |
@@ -44,6 +44,7 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:18:33.95
 | web-component-panels | pass | real discord.js adapter + signed component router on Postgres: with setup.locale=de the form panel, the Apply modal receipt, the missing-field refusal, the expired-id refusal, the member permission refusal and the staff pending list all rendered in German; the valid submit still wrote exactly one form_submissions row and the missing-field submit wrote none; the setup schema rejected locale=xx and left the effective locale at de; a partial German catalog fell back to English and a key no catalog has returned a sentence, not the key; clearing the setting restored English for the same panel and refusal; the form command carried its German description from the same catalog. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed | forms.application-forms, operations.i18n |
 | web-community-panels | pass | real discord.js adapter + typed V2 builders on Postgres: the rank card rendered Level/XP/rank from the same LevelingService projection and the stored levels row, in German (Rang/Rangkarte) and English; welcome and goodbye kept their {user}/{server} substitution and rendered as V2 text with no legacy content; the ticket panel posted a signed guild-bound id (German title, description and button, no embed), and pressing it through the shared router wrote exactly one open tickets row and replied in German; the legacy keystone:ticket:open id was unhandled and produced no reply or row, and expired, cross-guild and permission-gated ids were refused. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click is not claimed | community.rank-card, community.welcome-goodbye, tickets.panels, operations.i18n |
 | web-community-interactions | pass | real discord.js adapter + the shared signed router on Postgres: the role, select-role, giveaway, suggestion and poll panels were minted by the community module with signed k1 ids and pressed as real adapter objects; the role button granted the stored panel's role through the action port, the select applied exactly the chosen role, the giveaway press wrote an entry, the suggestion upvote and the poll option reached the stored votes, and both role and select panel configs were read back from community_records; an expired id, a forged signature and a cross-guild id were refused ephemerally without a write, and all five old keystone: ids returned false from the router, produced no reply and wrote nothing. A live gateway click is not claimed | community.reaction-roles, community.giveaways, community.suggestions, community.polls |
+| web-moderation-interactions | pass | real discord.js adapter + the shared signed router on Postgres: the case panel's signed appeal id opened a stored appeal (state appealed, one case_events row), and the signed verify id pressed with no guild context — as in a DM — resolved its guild from the payload, ran unquarantine and persisted members.verified_at. An expired id, a forged signature, a cross-guild appeal, a cross-guild verify and clicks by the wrong member were refused without a write, and the old keystone:appeal / keystone:verify ids returned false from the router, produced no reply and wrote nothing. A live gateway click or DM is not claimed | moderation.appeal-from-the-dm |
 | command-copy-localization | pass | real dispatcher on Postgres with setup.locale=de: all 384 root, subcommand and option description nodes of the 20 chat-input roots carried German from the catalog and none reused its English text; /ping, /about and /help browse replied in German, /rank leaderboard rendered the stored level row as "XP-Rangliste", the Rank card user menu rendered its German rank line, /ticket stats rendered its German title and average-close line, and the same command without ManageGuild was refused in German; a key no catalog defines returned the fallback sentence and a partial catalog fell back to English; resetting the setting restored the English reply. The dispatcher was driven with a plain InteractionLike, not a gateway InteractionCreate | operations.i18n |
 
 ## Rules

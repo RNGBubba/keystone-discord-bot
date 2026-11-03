@@ -2,23 +2,20 @@
 
 ## Now
 
-**Pass 63 corrected the command copy the audit found** (2026-11-03): option
-descriptions are keyed per declaration, so `setup module`, `appeal case` and
-`logging channel` no longer describe the wrong sibling; a subcommand key wins
-over the shared root key, and a registry-derived test fails when a shared key
-is used where siblings differ or a specific key goes stale. English command
-text is no longer duplicated in the catalog — the command definition is the
-English sentence — which removes the stale-row class and the ~500-line mirror;
-the German copy moved into `de.ts`, its one owner. `/rank daily` puts the
-service's English refusal on its own line above the translated balance,
-`/help changelog` states that its entries stay English, `localeFor` and the
-unreachable German `error.guildOnly` are gone, and `guildLocale` reads one
-settings row instead of listing every module. The English-only map now
-classifies every command file. Tests are **633 / 92 files**; `pnpm probe:live`
-is **27/27**, with `command-copy-localization` now also driving `/rank
-leaderboard`, the rank card, `/ticket stats` and a German permission refusal. A
-gateway `InteractionCreate` is not claimed. See
-[pass 63](../../journal/2026-11-03-pass-63.md).
+**Pass 64 signed moderation's last two buttons** (2026-11-03): the case appeal
+and the DM verification button now carry `k1:` ids on the shared router, so no
+component id anywhere bypasses signature, expiry, guild and permission checks.
+The verify id packs `<guild>_<user>` into the signer's existing 40-character
+payload, and the router's new `guildFromPayload` hook treats that guild as the
+id's guild even when the interaction is a DM; a click in another server is
+refused. The appeal payload stays the case id and its handler checks the case's
+guild. The legacy parser and listener branch are deleted, so an old id is
+unhandled. Tests are **631 / 92 files**; `pnpm probe:live` is **28/28**, adding
+`web-moderation-interactions`: on Postgres the panel's signed appeal opened a
+stored appeal, a DM-context verify ran `unquarantine` and persisted
+`verified_at`, and expired, forged, cross-guild and wrong-member presses wrote
+nothing. A gateway click or DM is not claimed. See
+[pass 64](../../journal/2026-11-03-pass-64.md).
 
 **Pass 62 closed P7's command-copy gap** (2026-11-03): every registered root,
 subcommand and option description gained a hand-written German entry (253 keys
@@ -52,10 +49,19 @@ giveaway, suggestion and poll panels use 30 days. That pass reported **626 / 91
 files**; `pnpm probe:live` was **26/26**, adding `web-community-interactions`: all five
 signed panels were pressed through the real discord.js adapter into their stored
 rows, and expired, forged and cross-guild ids were refused ephemerally without a
-write. The inventory has one named exception: moderation's `keystone:appeal:`
-and `keystone:verify:` still use their own handler because the verify id needs a
-guild + member pair that does not fit the signed payload. A live gateway click is
-not claimed. See [pass 61](../../journal/2026-11-03-pass-61.md).
+write. A live gateway click is not claimed. See [pass 61](../../journal/2026-11-03-pass-61.md).
+
+**Pass 64 closed the last unsigned component ids** (2026-11-03): moderation's
+`keystone:appeal:` and `keystone:verify:` are gone. The appeal id signs the case
+id; the verify id signs `<guild>_<user>`, which fits the signer's 40-character
+payload budget for two snowflakes, and the router treats that guild as the id's
+guild — so a DM click is guild-bound and a click in another server is refused.
+The legacy parser, the `keystone:` listener branch and their tests are deleted;
+an old id is now unhandled. The probe adds `web-moderation-interactions` on
+Postgres: the case panel's signed appeal opened a stored appeal, the DM-context
+verify ran `unquarantine` and persisted `verified_at`, and expired, forged,
+cross-guild and wrong-member ids were refused without a write. A live gateway
+click or DM is not claimed. See [pass 64](../../journal/2026-11-03-pass-64.md).
 
 **Pass 60 migrated the remaining community embeds onto the typed UI layer**
 (2026-11-03): the rank card (`/rank view` and the user menu) and the ticket
@@ -790,7 +796,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 633 tests / 92 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 27/27 · memory current
+pnpm check        exit 0 · typecheck 0 · 631 tests / 92 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 28/28 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -873,7 +879,7 @@ read that file.
 | --- | --- | --- | --- |
 | 1 | The join path persists a quarantined row only after an enforced hold | `security.test.ts`: a young account in enforcing mode produces `{ quarantined: true, verifiedAt: undefined }` and a verify button; an old-enough account, a dry run and an anti-raid hold produce no row and, for anti-raid, no verify button | In-memory member + case stores |
 | 2 | `start` requires a persisted quarantine | `mod.test.ts`: no record is refused with **No quarantine is recorded** and sends no DM; a disabled gate and an already-verified row are refused | In-memory member store |
-| 3 | `start` sends the button without completing | `mod.test.ts`: a quarantined row gets one DM with `keystone:verify:guild-1:new-member` and the row stays `quarantined: true` | In-memory member store |
+| 3 | `start` sends the button without completing | `mod.test.ts`: a quarantined row gets one DM with a signed `k1:` verify id for guild-1/new-member and the row stays `quarantined: true` | In-memory member store |
 | 4 | A closed DM is an explicit refusal | `mod.test.ts`: a failed `directMessage` on the moderation port throws `could not DM you` with the provider detail; pass 36's live run printed **Cannot send messages to this user** and the fix | Unit + **pass-36 live bridge** |
 | 5 | `status` reads persisted state, not roles | `mod.test.ts`: quarantined, verified, no-record and disabled-gate rows each render their own state and next step, with the `members table` footer | In-memory rows |
 | 6 | The SQL adapter is a real upsert | `member-store.test.ts`: one `members` row, `markQuarantined` clears a previous verification, verification clears `quarantined`, `joined_at` is preserved | **PGlite** |
@@ -1134,7 +1140,7 @@ remain open.
 | --- | --- | --- | --- |
 | 1 | One case spine with atomic numbering | `packages/db/src/migrations/0003-case-counters.ts`, `case-store.ts`, `modules/moderation/src/cases.ts`; `CaseService` opens the case before an action | **PGlite**, not a Postgres server |
 | 2 | Scripted raid contained | `modules/moderation/src/security.test.ts`: 10 joins + 5 invite posts + 1 webhook → 20 cases; 11 quarantine, 5 delete-message, 1 delete-webhook, 1 timeout | Policy engine + action recorder, not a live gateway |
-| 3 | Every action has reason and appeal | The same test asserts every case has a reason and every notification has a `keystone:appeal:` button; `/mod` test asserts the custom id | Recorder, not a live Discord button |
+| 3 | Every action has reason and appeal | The same test asserts every case has a reason and every notification has a signed `k1:` appeal button; `/mod` test asserts the custom id | Recorder, not a live Discord button |
 | 4 | Dry-run is default and takes no punitive action | Default-settings test: zero action calls, every case `alerted`; `/mod` dry-run test: zero cases and zero action calls | Recorder |
 | 5 | `/mod` guarded and case-first | `modules/moderation/src/mod.test.ts`: dispatch blocks without `ModerateMembers`; enforced ban creates case/reason before the action; missing reason throws | Dispatch + fake action port |
 | 6 | Appeals and verification | `mod.test.ts`: target opens an appeal, event appended, other user rejected; `status` survives a state change and refuses another member's case; `/verify start` requires a persisted quarantine and sends the button without completing it, `status` reads that row | In-memory case/member stores + recorder + **live bridge** |

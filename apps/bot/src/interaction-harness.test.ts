@@ -5,6 +5,7 @@ import {
   InMemorySettingsRepository,
   ModuleRegistry,
   SettingsService,
+  createComponentSigner,
   dispatchCommand,
   type ModerationActions,
   type ModerationActionResult,
@@ -171,6 +172,9 @@ describe("synthetic slash interaction", () => {
         queue: noopQueue,
         health: staticHealth(),
         moderation: { cases, actions, members: new InMemoryMemberStore() },
+        // The composition root always wires this; without it a case panel cannot
+        // mint its signed appeal button.
+        componentSigner: createComponentSigner("interaction-harness-secret"),
         now: () => 1_700_000_000_000,
       },
       asInteractionLike(interaction),

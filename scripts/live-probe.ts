@@ -30,6 +30,7 @@ import {
   type CommunityMessage,
   type ComponentInteractionLike,
   type ModalSpec,
+  type ModerationActions,
   type ReplyInput,
 } from "@keystone/kernel";
 import {
@@ -41,6 +42,7 @@ import {
   createConfigBaselineStore,
   createDashboardStore,
   createFormStore,
+  createMemberStore,
   createSavedTemplateStore,
   createIdempotencyStore,
   createWebhookStore,
@@ -58,7 +60,9 @@ import { modules } from "../packages/module-catalog/src/index";
 import {
   CaseService,
   TemporaryActionService,
+  appealButton,
   moderationSettingsSchema,
+  verifyButton,
 } from "../modules/moderation/src/index";
 import {
   ContentService,
@@ -2459,6 +2463,7 @@ async function main(): Promise<void> {
       expired: t("de", "component.expired"),
       noPermission: t("de", "component.noPermission"),
       guildOnly: t("de", "component.guildOnly"),
+      wrongGuild: t("de", "component.wrongGuild"),
     };
     const germanDispatch = { locale: german, messages: germanMessages };
 
@@ -2718,6 +2723,7 @@ async function main(): Promise<void> {
         expired: t("de", "component.expired"),
         noPermission: t("de", "component.noPermission"),
         guildOnly: t("de", "component.guildOnly"),
+        wrongGuild: t("de", "component.wrongGuild"),
       },
     };
 
@@ -3215,6 +3221,243 @@ async function main(): Promise<void> {
         "community.suggestions",
         "community.polls",
       ],
+    });
+  }
+
+  // --- Moderation buttons: signed appeal and DM verify ----------------------
+  {
+    // Appeal and verify are the last two ids that used to bypass the signed
+    // router. This check presses the ids the module actually mints, through
+    // the real discord.js adapter and the composition root's router, against
+    // Postgres. A gateway click cannot be produced here and is not claimed.
+    const now = Date.now();
+    const signer = createComponentSigner("live-probe-moderation-secret");
+    const caseStore = createCaseStore(database);
+    const cases = new CaseService(caseStore);
+    const members = createMemberStore(database);
+    await database.runner.exec(`
+      DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id = '${GUILD}');
+      DELETE FROM cases WHERE guild_id = '${GUILD}';
+      DELETE FROM members WHERE guild_id = '${GUILD}';
+    `);
+    const unquarantined: string[] = [];
+    const moderationActions = {
+      async unquarantine(guildId: string, userId: string, reason: string) {
+        unquarantined.push(`${guildId}:${userId}:${reason}`);
+        return { ok: true };
+      },
+    } as unknown as ModerationActions;
+    const moderationSettings = moderationSettingsSchema.parse({
+      appealsEnabled: true,
+      joinGate: { enabled: true },
+    });
+
+    const router: ComponentRouter = createComponentRouter({
+      signer,
+      forms: createFormStore(database),
+      formSettings: {
+        get: async () => formSettingsSchema.parse({}),
+        update: async () => formSettingsSchema.parse({}),
+      },
+      moderation: {
+        settings: { get: async () => moderationSettings, update: async () => moderationSettings },
+        moderation: { cases, members, actions: moderationActions },
+      },
+      community: {
+        store: {} as never,
+        actions: {} as never,
+        settings: { get: async () => ({}), update: async () => ({}) },
+      },
+      logger: createSilentLogger(),
+      now: () => now,
+    });
+
+    const press = (
+      customId: string,
+      options: { guildId?: string | null; userId?: string } = {},
+    ) => {
+      const replies: ReplyInput[] = [];
+      const interaction = {
+        customId,
+        guildId: options.guildId === undefined ? GUILD : options.guildId,
+        channelId: "live-probe-modlog",
+        user: { id: options.userId ?? "live-probe-member" },
+        memberPermissions: { toArray: () => [] },
+        replied: false,
+        deferred: false,
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        reply: async (input: ReplyInput) => {
+          replies.push(input);
+        },
+        update: async () => undefined,
+        deferReply: async () => undefined,
+        editReply: async () => undefined,
+        followUp: async () => undefined,
+      };
+      return {
+        replies,
+        like: asComponentInteraction(
+          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
+        ),
+      };
+    };
+    const idOf = (row: { components: readonly { customId?: string }[] }): string =>
+      row.components[0]?.customId ?? "";
+    const eventsFor = async (caseId: string): Promise<string[]> => {
+      const rows = await database.runner.query<{ type: string }>(
+        `SELECT type FROM case_events WHERE case_id = '${caseId}' ORDER BY created_at`,
+      );
+      return rows.map((row) => row.type);
+    };
+    const stateOf = async (caseId: string): Promise<string | undefined> => {
+      const [row] = await database.runner.query<{ state: string }>(
+        `SELECT state FROM cases WHERE id = '${caseId}'`,
+      );
+      return row?.state;
+    };
+
+    const appealCase = await cases.open({
+      guildId: GUILD,
+      actorId: "live-probe-moderator",
+      targetId: "live-probe-member",
+      action: "warn",
+      reason: "probe appeal panel",
+      state: "open",
+    });
+    const crossCase = await cases.open({
+      guildId: GUILD,
+      actorId: "live-probe-moderator",
+      targetId: "live-probe-member",
+      action: "warn",
+      reason: "probe cross-guild refusal",
+      state: "open",
+    });
+    const foreignCase = await cases.open({
+      guildId: GUILD,
+      actorId: "live-probe-moderator",
+      targetId: "someone-else",
+      action: "warn",
+      reason: "probe unauthorized refusal",
+      state: "open",
+    });
+
+    // The panel mints the id; the probe presses exactly that id.
+    const appealId = idOf(appealButton(appealCase.id, signer, now));
+    assert(appealId.startsWith("k1:"), `the appeal panel minted a non-signed id: ${appealId}`);
+    const appeal = press(appealId);
+    assert(
+      (await router.dispatch(appeal.like, signer, now)) === true,
+      "the signed appeal id was not routed",
+    );
+    assert(
+      String(appeal.replies[0]?.content).includes("Appeal opened for case #") &&
+        appeal.replies[0]?.ephemeral === true,
+      "the appeal click did not reply with the opened case",
+    );
+    assert((await stateOf(appealCase.id)) === "appealed", "the appeal did not persist the case state");
+    assert((await eventsFor(appealCase.id)).includes("appealed"), "the appeal wrote no case event");
+
+    // A DM has no guild; the signed payload carries it and the router resolves it.
+    await members.markQuarantined(GUILD, "live-probe-member");
+    const verifyId = idOf(verifyButton(GUILD, "live-probe-member", signer, now));
+    const dmVerify = press(verifyId, { guildId: null });
+    assert(
+      (await router.dispatch(dmVerify.like, signer, now)) === true,
+      "the DM verify id was not routed",
+    );
+    assert(
+      dmVerify.replies[0]?.content === "Verified. Quarantine has been lifted." &&
+        dmVerify.replies[0]?.ephemeral === false,
+      "the DM verify click did not reply with the completion",
+    );
+    assert(
+      unquarantined.length === 1 &&
+        (unquarantined[0]?.startsWith(`${GUILD}:live-probe-member:`) ?? false),
+      "the DM verify click did not call the unquarantine action",
+    );
+    const [verifiedRow] = await database.runner.query<{ quarantined: boolean; verified_at: string }>(
+      `SELECT quarantined, verified_at::text AS verified_at FROM members
+        WHERE guild_id = '${GUILD}' AND user_id = 'live-probe-member'`,
+    );
+    assert(
+      verifiedRow?.quarantined === false && verifiedRow.verified_at !== null,
+      "the DM verify click did not persist the verified row",
+    );
+
+    // Expired: the id is real, the clock has moved past its expiry.
+    const expired = press(idOf(appealButton(crossCase.id, signer, now)));
+    await router.dispatch(expired.like, signer, now + 31 * 24 * 60 * 60_000);
+    assert(
+      String(expired.replies[0]?.content ?? "").includes("expired"),
+      "an expired appeal id was not refused",
+    );
+    assert((await stateOf(crossCase.id)) === "open", "an expired appeal id still wrote the case");
+
+    // Forged: one character of the signature changes.
+    const signedCross = idOf(appealButton(crossCase.id, signer, now));
+    const forgedId = `${signedCross.slice(0, 3)}${signedCross[3] === "a" ? "b" : "a"}${signedCross.slice(4)}`;
+    const forged = press(forgedId);
+    await router.dispatch(forged.like, signer, now);
+    assert(forged.replies[0]?.ephemeral === true, "a forged appeal id was not refused");
+    assert((await stateOf(crossCase.id)) === "open", "a forged appeal id still wrote the case");
+    assert(await eventsFor(crossCase.id).then((events) => !events.includes("appealed")), "a forged appeal id wrote an event");
+
+    // Cross-guild: the panel is valid, the guild on the click is not.
+    const cross = press(signedCross, { guildId: "live-probe-other" });
+    await router.dispatch(cross.like, signer, now);
+    assert(
+      String(cross.replies[0]?.content).includes("does not exist"),
+      "a cross-guild appeal id was not refused",
+    );
+    assert((await stateOf(crossCase.id)) === "open", "a cross-guild appeal id still wrote the case");
+
+    const crossVerify = press(verifyButton(GUILD, "live-probe-member", signer, now).components[0]?.customId ?? "", { guildId: "live-probe-other" });
+    await router.dispatch(crossVerify.like, signer, now);
+    assert(
+      String(crossVerify.replies[0]?.content).includes("another server"),
+      "a cross-guild verify id was not refused",
+    );
+
+    // Unauthorized: a valid id pressed by the wrong member.
+    const foreignAppeal = press(idOf(appealButton(foreignCase.id, signer, now)));
+    await router.dispatch(foreignAppeal.like, signer, now);
+    assert(
+      String(foreignAppeal.replies[0]?.content).includes("only appeal a case against you"),
+      "an appeal for another member was not refused",
+    );
+    assert((await stateOf(foreignCase.id)) === "open", "an unauthorized appeal wrote the case");
+
+    const foreignVerify = press(idOf(verifyButton(GUILD, "someone-else", signer, now)), {});
+    await router.dispatch(foreignVerify.like, signer, now);
+    assert(
+      String(foreignVerify.replies[0]?.content).includes("belongs to another member"),
+      "a verify click from the wrong member was not refused",
+    );
+    assert(unquarantined.length === 1, "an unauthorized verify click still ran the action");
+
+    // Legacy ids: no route, no reply, no write.
+    for (const legacyId of [
+      `keystone:appeal:${crossCase.id}`,
+      `keystone:verify:${GUILD}:live-probe-member`,
+    ]) {
+      const legacy = press(legacyId);
+      assert(
+        (await router.dispatch(legacy.like, signer, now)) === false,
+        `the router accepted legacy moderation id ${legacyId}`,
+      );
+      assert(legacy.replies.length === 0, `legacy moderation id ${legacyId} produced a reply`);
+    }
+    assert((await stateOf(crossCase.id)) === "open", "a legacy moderation id wrote a case");
+    assert(unquarantined.length === 1, "a legacy moderation id ran the action");
+
+    record({
+      id: "web-moderation-interactions",
+      status: "pass",
+      detail:
+        "real discord.js adapter + the shared signed router on Postgres: the case panel's signed appeal id opened a stored appeal (state appealed, one case_events row), and the signed verify id pressed with no guild context — as in a DM — resolved its guild from the payload, ran unquarantine and persisted members.verified_at. An expired id, a forged signature, a cross-guild appeal, a cross-guild verify and clicks by the wrong member were refused without a write, and the old keystone:appeal / keystone:verify ids returned false from the router, produced no reply and wrote nothing. A live gateway click or DM is not claimed",
+      features: ["moderation.appeal-from-the-dm"],
     });
   }
 

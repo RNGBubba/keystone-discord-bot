@@ -4,10 +4,19 @@ import {
   type ActionRow,
   type CaseEvent,
   type CaseStore,
+  type ComponentSigner,
   type ModerationCase,
   type ModerationCaseState,
   type NewModerationCase,
 } from "@keystone/kernel";
+
+/** The module mints ids; it never parses or verifies them. */
+export type ModerationSigner = Pick<ComponentSigner, "sign">;
+
+/** A case panel is pinned configuration; a month matches the ticket panel. */
+export const APPEAL_PANEL_TTL_MS = 30 * 24 * 60 * 60_000;
+/** A DM verification link is a step, not a pinned panel. */
+export const VERIFY_PANEL_TTL_MS = 24 * 60 * 60_000;
 
 /**
  * In-memory case store for module tests and local development.
@@ -172,21 +181,54 @@ export class InMemoryCaseStore implements CaseStore {
   }
 }
 
-export function appealCustomId(caseId: string): string {
-  return `keystone:appeal:${caseId}`;
+export function appealCustomId(caseId: string, signer: ModerationSigner, now = Date.now()): string {
+  return signer.sign(
+    { namespace: "appeal", action: "open", payload: caseId, ttlMs: APPEAL_PANEL_TTL_MS },
+    now,
+  );
 }
 
-export function verifyCustomId(guildId: string, userId: string): string {
-  return `keystone:verify:${guildId}:${userId}`;
+/**
+ * A DM verification has no interaction guild, so the id itself must name the
+ * guild and the member it belongs to. The signed payload is `<guild>_<user>`:
+ * 39 characters for two 19-digit snowflakes, inside the signer's 40-character
+ * budget, and `_` is used because the id format itself splits on `:`.
+ */
+export function verifyCustomId(
+  guildId: string,
+  userId: string,
+  signer: ModerationSigner,
+  now = Date.now(),
+): string {
+  const payload = `${guildId}_${userId}`;
+  return signer.sign(
+    { namespace: "verify", action: "complete", payload, ttlMs: VERIFY_PANEL_TTL_MS },
+    now,
+  );
 }
 
-export function appealButton(caseId: string): ActionRow {
+/** Decode the signed pair; anything that is not exactly two parts is invalid. */
+export function parseVerifyPayload(
+  payload: string,
+): { readonly guildId: string; readonly userId: string } | undefined {
+  const parts = payload.split("_");
+  if (parts.length !== 2) return undefined;
+  const [guildId, userId] = parts;
+  if (!guildId || !userId) return undefined;
+  return { guildId, userId };
+}
+
+export function appealButton(
+  caseId: string,
+  signer: ModerationSigner,
+  now = Date.now(),
+): ActionRow {
   return {
     type: "action-row",
     components: [
       {
         type: "button",
-        customId: appealCustomId(caseId),
+        customId: appealCustomId(caseId, signer, now),
         label: "Appeal this case",
         style: "primary",
       },
@@ -194,13 +236,18 @@ export function appealButton(caseId: string): ActionRow {
   };
 }
 
-export function verifyButton(guildId: string, userId: string): ActionRow {
+export function verifyButton(
+  guildId: string,
+  userId: string,
+  signer: ModerationSigner,
+  now = Date.now(),
+): ActionRow {
   return {
     type: "action-row",
     components: [
       {
         type: "button",
-        customId: verifyCustomId(guildId, userId),
+        customId: verifyCustomId(guildId, userId, signer, now),
         label: "Verify and join",
         style: "success",
       },

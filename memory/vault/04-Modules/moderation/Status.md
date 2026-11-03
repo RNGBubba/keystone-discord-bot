@@ -62,7 +62,7 @@ P2 core shipped in pass 05 (2026-11-01).
 ## Verified
 
 ```
-pnpm test                                  # 633 tests / 92 files
+pnpm test                                  # 631 tests / 92 files
 pnpm vitest run modules/moderation         # 60 tests (including 7 temporary-expiry and 5 panic tests)
 pnpm test -- packages/db/src/cases.test.ts # 4 PGlite case-store tests, including listEvents and atomic expiry claims
 pnpm test -- packages/db/src/panic.test.ts # PGlite panic snapshot scope and clear
@@ -85,10 +85,13 @@ P2 exit evidence:
 - `/appeal open` only accepts the target's own case and appends an `appealed`
   event. `/appeal status` keeps reporting that event after `CaseService.review`
   changes the case state, and refuses a case that is not the caller's.
-  `/verify start` sends exactly one DM with the `keystone:verify:<guild>:<user>`
-  button and leaves the member unverified; a closed DM is refused with the
-  provider's detail. `/verify status` reads a persisted row, including a
-  completed verification.
+  `/verify start` sends exactly one DM with a signed `k1:` verify id carrying
+  `<guild>_<user>` and leaves the member unverified; a closed DM is refused with
+  the provider's detail. `/verify status` reads a persisted row, including a
+  completed verification. The appeal and verify buttons are registered on the
+  shared router (`apps/bot/src/moderation-buttons.ts`), and the live probe's
+  `web-moderation-interactions` proves both writes plus the expired, forged,
+  cross-guild and wrong-member refusals on Postgres.
 - `DrizzleCaseStore` allocates 1..8 without duplicates under `Promise.all` on
   PGlite, persists cases/events/state and isolates guilds.
 - `temporary.test.ts` proves the delayed job payload/key, a not-due no-op, one

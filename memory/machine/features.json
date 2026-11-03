@@ -195,10 +195,11 @@
           "phase": "P2",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "**Our edge:** one button; /appeal open | status reads the append-only appeal events, so a review cannot erase the appeal. Live 2026-11-01: #1 stayed 1 appeal after its state changed to reviewed; another member's case was refused.",
+          "note": "**Our edge:** one button; /appeal open | status reads the append-only appeal events, so a review cannot erase the appeal. Pass 64 put the case button on the signed, expiring router: on Postgres the panel's own id opened a stored appeal, and expired, forged, cross-guild and wrong-member presses wrote nothing. Live 2026-11-01: #1 stayed 1 appeal after its state changed to reviewed; another member's case was refused.",
           "evidence": [
             "modules/moderation/src/mod.test.ts",
-            "packages/db/src/cases.test.ts"
+            "packages/db/src/cases.test.ts",
+            "scripts/live-probe.ts"
           ],
           "liveVerified": true
         },
@@ -554,13 +555,14 @@
           "phase": "P2",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "An enforced join-gate hold writes the quarantined members row; /verify start requires that row, status reads it, and completion transitions only a quarantined row. Join and button completion not live-proven",
+          "note": "An enforced join-gate hold writes the quarantined members row; /verify start requires that row, status reads it, and completion transitions only a quarantined row. The DM button carries a signed, guild-bound `k1:` id and is routed by the shared router. Pass 64 on Postgres: a DM-context press (no interaction guild) resolved guild and member from the signed payload, ran unquarantine and persisted `verified_at`; expired, cross-guild and wrong-member ids wrote nothing. A live Discord DM click is not claimed",
           "evidence": [
             "apps/bot/src/moderation-buttons.test.ts",
             "modules/moderation/src/security.test.ts",
             "modules/moderation/src/verification.test.ts",
             "modules/moderation/src/mod.test.ts",
-            "packages/db/src/member-store.test.ts"
+            "packages/db/src/member-store.test.ts",
+            "scripts/live-probe.ts"
           ],
           "liveVerified": false
         },

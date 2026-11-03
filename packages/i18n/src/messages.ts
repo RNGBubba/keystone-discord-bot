@@ -13,6 +13,7 @@ export const en = {
   "component.expired": () => "That panel has expired. Run the command again to get a fresh one.",
   "component.noPermission": () => "You do not have permission to use that button.",
   "component.guildOnly": () => "That control only works inside a server.",
+  "component.wrongGuild": () => "That panel belongs to another server.",
 
   // The /form panel and its component routes.
   "form.panel.questions": () => "**Questions**",

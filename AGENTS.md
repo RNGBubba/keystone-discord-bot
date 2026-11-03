@@ -266,14 +266,22 @@ rate-limited register leaves the app with no commands.
   one-year TTL, the other three 30 days. The live probe adds
   `web-community-interactions`: every panel was pressed through the real
   adapter into a stored row, and expired, forged and cross-guild ids were
-  refused before a write. Moderation's appeal/verify ids remain the one
-  unsigned handler, scoped and named in the journal.
+  refused before a write. Moderation's appeal/verify ids were the one unsigned
+  handler until pass 64.
 - Pass 62 closed P7's command-copy gap: every registered root, subcommand and
   option gained a hand-written German description, and `/ping`, `/about`,
   `/help`, `/rank`, `/ticket` and the rank card reply through the same typed
   catalog. The copy still English is named in the journal: community's
   operator configuration replies, the other ten modules' replies, kernel guard
   copy, service-owned economy reasons and operator-owned greeting text.
+- Pass 64 moved moderation's `appeal`/`verify` ids onto the signed router, so
+  every component id in the tree is signed and expires. The verify id packs the
+  guild and member into a `<guild>_<user>` payload that fits the signer's
+  40-character budget, and the router exposes it as the id's guild: a DM click
+  is guild-bound and a click in another server is refused. The legacy parser and
+  listener branch are deleted, so an old id is unhandled. The live probe adds
+  `web-moderation-interactions`, proving the appeal row, the DM verify row, and
+  the expired/forged/cross-guild/unauthorized refusals on Postgres.
 - Pass 63 corrected that copy against the audit: option descriptions are keyed
   per declaration (`command.<root>.<sub>.option.<name>` wins over the shared
   root key), so two subcommands can describe the same option differently;
@@ -282,7 +290,7 @@ rate-limited register leaves the app with no commands.
   expected keys from the registry and classifies every command file in the
   tree as translated or deliberately English-only with a reason, so a new
   command cannot quietly ship English-only.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 633
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 631
   tests in 92 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
@@ -360,7 +368,7 @@ rate-limited register leaves the app with no commands.
   `SettingsService.update` loop, with one dashboard audit row per module;
   create/update/delete append `template.*` rows. No marketplace, second settings
   store or second write path. The carrier is still the framework-free
-  `apps/web` app. Live probe is 17/17: `web-saved-templates` saved, listed,
+  `apps/web` app. Pass 52's live probe was 17/17: `web-saved-templates` saved, listed,
   previewed two guilds without writing, refused tampered/stale previews at
   `409`, applied one audited write per guild, refused an invalidated row at
   `400`, and audited delete. OAuth exchange used a fake port.
@@ -419,8 +427,9 @@ rate-limited register leaves the app with no commands.
   answered real HTTP requests; the write path was exercised over real local HTTP
   with a fake OAuth port. Live Discord OAuth is open.
 - Environment: Docker Desktop **29.9.2** runs the repo's compose Postgres
-  **16.15** and Redis; all 16 migrations are applied, and `pnpm probe:live`
-  passed 17/17 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
+  **16.15** and Redis; all 20 migrations are applied, and `pnpm probe:live`
+  passed 28/28 SQL/Redis/queue/service/web/interaction checks on 2026-11-03 UTC.
+  `.env` points at
   localhost. The machine evidence is `memory/machine/live.json`; run
   `pnpm probe:live` after touching a SQL, Redis, queue or web path. Memory mode
   is still a supported fallback, not the configured one. Local Ollama is up; a

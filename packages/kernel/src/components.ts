@@ -32,6 +32,11 @@ export interface ComponentRouteContext {
   readonly namespace: string;
   readonly action: string;
   readonly payload: string;
+  /**
+   * The guild this id is bound to: the interaction's guild, or the guild a
+   * signed payload supplies for a DM button that has no guild context.
+   */
+  readonly guildId: string | null;
   readonly now: number;
   /** The guild's locale; handlers translate their own replies. */
   readonly locale: string;
@@ -45,6 +50,13 @@ export interface ComponentRoute {
   readonly permissions?: readonly string[];
   /** Refuse when the interaction has no guild id. */
   readonly guildOnly?: boolean;
+  /**
+   * The guild a signed id names when the interaction itself carries none, as in
+   * a DM. The router treats the result as the id's guild: it satisfies
+   * `guildOnly`, reaches the handler as `context.guildId`, and a click in a
+   * different guild is refused before the handler runs.
+   */
+  guildFromPayload?(payload: string): string | null;
   handle(context: ComponentRouteContext): Promise<void>;
 }
 
@@ -151,12 +163,14 @@ export interface ComponentMessages {
   readonly expired: string;
   readonly noPermission: string;
   readonly guildOnly: string;
+  readonly wrongGuild: string;
 }
 
 export const DEFAULT_COMPONENT_MESSAGES: ComponentMessages = {
   expired: "That panel has expired. Run the command again to get a fresh one.",
   noPermission: "You do not have permission to use that button.",
   guildOnly: "That control only works inside a server.",
+  wrongGuild: "That panel belongs to another server.",
 };
 
 export interface ComponentDispatchOptions {
@@ -207,8 +221,13 @@ export class ComponentRouter {
     );
     if (!route) return false;
 
-    if (route.guildOnly && !interaction.guildId) {
+    const guildId = route.guildFromPayload?.(parsed.payload) ?? interaction.guildId;
+    if (route.guildOnly && !guildId) {
       await refuse(interaction, messages.guildOnly);
+      return true;
+    }
+    if (interaction.guildId && guildId && interaction.guildId !== guildId) {
+      await refuse(interaction, messages.wrongGuild);
       return true;
     }
     if (
@@ -225,6 +244,7 @@ export class ComponentRouter {
         namespace: parsed.namespace,
         action: parsed.action,
         payload: parsed.payload,
+        guildId,
         now,
         locale: options.locale ?? "en",
       });

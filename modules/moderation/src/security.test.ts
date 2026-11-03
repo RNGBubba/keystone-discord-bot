@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createComponentSigner,
   createSilentLogger,
   type ModerationActions,
   type ModerationActionResult,
@@ -11,6 +12,16 @@ import { InMemoryMemberStore } from "./members";
 import { SecurityCoordinator, SecurityEngine } from "./security";
 import { moderationSettingsSchema } from "./settings";
 import { buildNativeAutoModPlan } from "./native-automod";
+
+const SIGNER = createComponentSigner("security-test-secret");
+
+/** True when an id is signed by this secret and routes to `namespace`. */
+function signedFor(customId: string, namespace: string): boolean {
+  // The coordinator fixture pins its clock at 1_000 ms; parse at that instant,
+  // not at wall-clock time, or every id would look long expired.
+  const parsed = SIGNER.parse(customId, 1_000);
+  return parsed.ok && parsed.namespace === namespace;
+}
 
 class RecordingActions implements ModerationActions {
   readonly calls: string[] = [];
@@ -134,6 +145,7 @@ function coordinator(settings: Record<string, unknown>): {
       members,
       settings: createTestSettings(settings),
       logger: createSilentLogger(),
+      signer: SIGNER,
       now: () => 1_000,
     }),
   };
@@ -188,7 +200,7 @@ describe("scripted raid", () => {
     expect(
       actions.notifications.some((notification) =>
         notification.notice.components?.some((row) =>
-          row.components.some((component) => component.customId.startsWith("keystone:verify:")),
+          row.components.some((component) => signedFor(component.customId, "verify")),
         ),
       ),
     ).toBe(false);
@@ -207,7 +219,7 @@ describe("scripted raid", () => {
     expect(
       actions.notifications.every((notification) => {
         const row = notification.notice.components?.[0];
-        return row?.components[0]?.customId.startsWith("keystone:appeal:") === true;
+        return signedFor(row?.components[0]?.customId ?? "", "appeal");
       }),
     ).toBe(true);
   });
@@ -265,7 +277,7 @@ describe("scripted raid", () => {
     expect(
       actions.notifications.some((notification) =>
         notification.notice.components?.some((row) =>
-          row.components.some((component) => component.customId.startsWith("keystone:verify:")),
+          row.components.some((component) => signedFor(component.customId, "verify")),
         ),
       ),
     ).toBe(true);

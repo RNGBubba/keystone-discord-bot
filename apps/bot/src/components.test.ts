@@ -228,6 +228,7 @@ describe("form panel components", () => {
         expired: t("de", "component.expired"),
         noPermission: t("de", "component.noPermission"),
         guildOnly: t("de", "component.guildOnly"),
+        wrongGuild: t("de", "component.wrongGuild"),
       },
     });
     expect(expired.replies[0]?.content).toContain("abgelaufen");
