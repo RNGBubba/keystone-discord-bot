@@ -1,4 +1,4 @@
-import type { AuditEventRecord } from "@keystone/kernel";
+import type { AnalyticsSnapshot, AuditEventRecord } from "@keystone/kernel";
 import type {
   DashboardModule,
   DashboardView,
@@ -140,6 +140,10 @@ export function renderOverview(
      <h1>${escapeHtml(view.guild.name)}</h1>
      <p class="muted">Guild ${escapeHtml(view.guild.id)} · P6 foundation · settings writes enabled</p>
      <div class="grid">${stats}</div>
+     <div class="panel"><h2>Analytics</h2>
+       <p class="muted">See retained activity for this server: logged events, moderation cases, invite joins, command runs and tickets. Every figure names its source table; nothing here writes.</p>
+       <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/analytics">Open analytics</a></p>
+     </div>
      <div class="panel"><h2>Portability</h2>${latest}</div>
      <div class="panel"><h2>Config export, import and drift</h2>
        <p class="muted">Download this server's effective module settings as a checksummed JSON file, import a file from another server behind a preview, or compare live settings with the last baseline.</p>
@@ -147,6 +151,137 @@ export function renderOverview(
      </div>
      ${modules}
      <p class="muted">Settings are validated by each module's own schema. <a href="/dashboard/fleet">Preview a built-in template across servers</a>.</p>
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export function renderAnalytics(
+  username: string,
+  guild: DiscordGuild,
+  snapshot: AnalyticsSnapshot | null,
+  days: number,
+  csrfToken: string,
+): string {
+  const base = `/dashboard/guilds/${encodePathSegment(guild.id)}/analytics`;
+  const windowLinks = [7, 30, 90]
+    .map(
+      (value) =>
+        `<a href="${base}?days=${value}"${value === days ? ' aria-current="page"' : ""}>${value} days</a>`,
+    )
+    .join(" · ");
+
+  if (snapshot === null) {
+    return layout(
+      "Analytics",
+      `<p><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">← Back to ${escapeHtml(guild.name)}</a></p>
+       <h1>Analytics</h1>
+       <p class="muted">Read-only aggregates over the rows Keystone already stores.</p>
+       <nav class="panel">Window: ${windowLinks}</nav>
+       <div class="panel"><h2>Not available in this process</h2>
+         <p class="muted">This dashboard is running without a shared analytics ledger adapter (memory mode). It will not show zeros as if they were measurements. Start the web process with <code>DATABASE_URL</code> to read the guild's retained rows.</p>
+       </div>
+       ${logoutForm(csrfToken)}`,
+      username,
+    );
+  }
+
+  const { overview, members, messages, commands, tickets } = snapshot;
+  const hasRows =
+    overview.loggedEvents +
+      overview.casesOpened +
+      overview.inviteJoins +
+      overview.commandsRun +
+      tickets.opened +
+      tickets.closedInWindow +
+      overview.activeCases +
+      overview.openTickets >
+    0;
+  const windowLabel = `${snapshot.window.days}d · ${escapeHtml(snapshot.window.since.slice(0, 10))} → ${escapeHtml(snapshot.window.until.slice(0, 10))}`;
+
+  const stats = [
+    ["Logged events", overview.loggedEvents],
+    ["Active cases (current)", overview.activeCases],
+    ["Cases opened", overview.casesOpened],
+    ["Invite joins", overview.inviteJoins],
+    ["Retained invites", overview.retainedInvites],
+    ["Command runs", overview.commandsRun],
+    ["Open tickets (current)", overview.openTickets],
+  ]
+    .map(
+      ([label, value]) =>
+        `<div class="stat"><b>${Number(value)}</b><span>${escapeHtml(String(label))}</span></div>`,
+    )
+    .join("");
+
+  const sourceRows = snapshot.sources
+    .map(
+      (source) =>
+        `<tr><td><code>${escapeHtml(source.id)}</code></td><td>${escapeHtml(source.label)}</td><td>${source.rows}</td></tr>`,
+    )
+    .join("");
+
+  const topCommands = commands.top.length
+    ? `<table><thead><tr><th>Command</th><th>Runs</th><th>Ok</th><th>Blocked</th><th>Error</th><th>Avg latency</th></tr></thead><tbody>${commands.top
+        .map(
+          (row) =>
+            `<tr><td><code>/${escapeHtml(row.command)}${row.path ? ` ${escapeHtml(row.path)}` : ""}</code></td><td>${row.total}</td><td>${row.ok}</td><td>${row.blocked}</td><td>${row.error}</td><td>${row.averageLatencyMs === null ? "—" : `${row.averageLatencyMs}ms`}</td></tr>`,
+        )
+        .join("")}</tbody></table>`
+    : `<p class="muted">No command runs recorded in this window.</p>`;
+
+  return layout(
+    "Analytics",
+    `<p><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">← Back to ${escapeHtml(guild.name)}</a></p>
+     <h1>Analytics</h1>
+     <p class="muted">Guild ${escapeHtml(guild.id)} · read-only aggregate over retained rows · window ${windowLabel}</p>
+     <nav class="panel">Window: ${windowLinks}</nav>
+     ${
+       hasRows
+         ? ""
+         : `<div class="notice">No rows in this window. These are counts of records Keystone retained, not an estimate of all Discord activity.</div>`
+     }
+     <div class="panel"><h2>Summary</h2><div class="grid">${stats}</div>
+       <p class="muted">Open tickets and active cases are current state. Every other count is bounded by the window. These are counts of retained rows, not estimates: zero can mean the relevant logging event or module is off, not that nothing happened in Discord.</p>
+     </div>
+     <div class="panel"><h2>Source rows</h2>
+       <p class="muted">Each figure below is a query over one of these tables; there is no analytics table or counter to reconcile.</p>
+       <table><thead><tr><th>Table</th><th>Meaning</th><th>Rows</th></tr></thead><tbody>${sourceRows}</tbody></table>
+     </div>
+     <div class="panel"><h2>Members and invites</h2>
+       <table><tbody>
+         <tr><td>Logged joins</td><td>${members.loggedJoins}</td></tr>
+         <tr><td>Logged leaves</td><td>${members.loggedLeaves}</td></tr>
+         <tr><td>Invite joins</td><td>${members.inviteJoins}</td></tr>
+         <tr><td>Left since</td><td>${members.leftSince}</td></tr>
+         <tr><td>Retained</td><td>${members.retained}</td></tr>
+         <tr><td>Flagged joins</td><td>${members.flagged}</td></tr>
+         <tr><td>Unique inviters</td><td>${members.uniqueInviters}</td></tr>
+       </tbody></table>
+     </div>
+     <div class="panel"><h2>Messages</h2>
+       <table><tbody>
+         <tr><td>Deleted</td><td>${messages.deleted}</td></tr>
+         <tr><td>Edited</td><td>${messages.edited}</td></tr>
+         <tr><td>Content-filter cases</td><td>${messages.contentFilterCases}</td></tr>
+       </tbody></table>
+       <p class="muted">Counts events captured by audit logging, not every message sent. Message content is not included.</p>
+     </div>
+     <div class="panel"><h2>Commands</h2>
+       <p class="muted">${commands.total} runs · ${commands.ok} ok · ${commands.blocked} blocked · ${commands.error} error · average ${commands.averageLatencyMs === null ? "n/a" : `${commands.averageLatencyMs}ms`}</p>
+       ${topCommands}
+     </div>
+     <div class="panel"><h2>Tickets</h2>
+       <table><tbody>
+         <tr><td>Open (current)</td><td>${tickets.open}</td></tr>
+         <tr><td>Claimed (current)</td><td>${tickets.claimed}</td></tr>
+         <tr><td>Closed (current)</td><td>${tickets.closed}</td></tr>
+         <tr><td>Opened in window</td><td>${tickets.opened}</td></tr>
+         <tr><td>Closed in window</td><td>${tickets.closedInWindow}</td></tr>
+         <tr><td>Average close</td><td>${tickets.averageCloseMinutes === null ? "—" : `${tickets.averageCloseMinutes} min`}</td></tr>
+         <tr><td>SLA breached</td><td>${tickets.slaBreached}</td></tr>
+       </tbody></table>
+     </div>
      ${logoutForm(csrfToken)}`,
     username,
   );

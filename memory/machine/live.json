@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T01:47:05.733Z",
+  "generatedAt": "2026-11-03T02:08:07.015Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -12,7 +12,7 @@
       "reachable": true,
       "version": "16.15",
       "migrations": {
-        "applied": 16,
+        "applied": 17,
         "pending": 0,
         "upToDate": true
       }
@@ -25,7 +25,7 @@
     {
       "id": "postgres-migrations",
       "status": "pass",
-      "detail": "16 migrations applied, 0 pending on Postgres 16.15",
+      "detail": "17 migrations applied, 0 pending on Postgres 16.15",
       "features": []
     },
     {
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1128ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1211ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum ce669b333449… matched after import 6b5af830",
+      "detail": "bundle checksum a30d12e235d5… matched after import 28d0597f",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -146,6 +146,14 @@
       "features": [
         "operations.config-templates",
         "operations.multi-server-fleet"
+      ]
+    },
+    {
+      "id": "web-analytics-aggregates",
+      "status": "pass",
+      "detail": "real local HTTP on Postgres: seeded 7 audit rows, 3 cases, 2 invite joins, 3 tickets and 3 command runs in the real tables, then the dashboard API and page matched every aggregate (7 logged events, 2 active cases, 3 cases opened, 2 invite joins/1 retained, 3 command runs/2 ok/1 blocked/200ms avg, 2 open tickets, 120-minute average close and 1 SLA breach); the source table counts matched; an empty guild said no rows instead of inventing activity; days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange itself used a fake port",
+      "features": [
+        "operations.dashboard-analytics"
       ]
     }
   ]

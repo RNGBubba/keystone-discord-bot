@@ -116,6 +116,7 @@ export const cases = pgTable(
     uniqueIndex("cases_guild_number_idx").on(table.guildId, table.caseNumber),
     index("cases_guild_target_idx").on(table.guildId, table.targetId),
     index("cases_guild_state_idx").on(table.guildId, table.state),
+    index("cases_guild_created_idx").on(table.guildId, table.createdAt),
     index("cases_expiry_idx")
       .on(table.guildId, table.expiresAt)
       .where(sql`${table.expiresAt} is not null`),
@@ -152,7 +153,13 @@ export const tickets = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [index("tickets_guild_state_idx").on(table.guildId, table.state)],
+  (table) => [
+    index("tickets_guild_state_idx").on(table.guildId, table.state),
+    index("tickets_guild_created_idx").on(table.guildId, table.createdAt),
+    index("tickets_guild_closed_idx")
+      .on(table.guildId, table.closedAt)
+      .where(sql`${table.closedAt} is not null`),
+  ],
 );
 
 export const levels = pgTable(
@@ -325,6 +332,7 @@ export const inviteJoins = pgTable(
       table.joinedAt,
     ),
     index("invite_joins_guild_inviter_idx").on(table.guildId, table.inviterId),
+    index("invite_joins_guild_joined_idx").on(table.guildId, table.joinedAt),
   ],
 );
 

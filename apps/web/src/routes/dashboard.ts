@@ -18,6 +18,7 @@ import {
   type SettingsFormBody,
 } from "../http";
 import {
+  renderAnalytics,
   renderConfigDrift,
   renderConfigPreview,
   renderFleet,
@@ -28,6 +29,7 @@ import {
   renderSettingsEditor,
   renderTemplatePreview,
 } from "../render";
+import { analyticsDays } from "../overview";
 import type { RouteContext } from "../request-context";
 import { SettingsValidationError, parseSettingsForm } from "../settings-form";
 import { CONFIG_TEMPLATES, findTemplate } from "../templates";
@@ -465,6 +467,24 @@ export async function guildOverview(
   send(ctx.res, 200, renderOverview(session.username, view, ctx.csrfToken), "text/html; charset=utf-8", {
     "Cache-Control": "no-store",
   });
+  return true;
+}
+
+export async function analyticsPage(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const { session, guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const days = analyticsDays(ctx.url.searchParams.get("days"));
+  const snapshot = await ctx.deps.dashboard.analytics(guild, days);
+  send(
+    ctx.res,
+    200,
+    renderAnalytics(session.username, guild, snapshot, days, ctx.csrfToken),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
   return true;
 }
 

@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-53",
+    date: "2026-11-03",
+    summary:
+      "P6 dashboard analytics: the dashboard and API show bounded aggregates over the audit, case, invite, ticket and command ledgers that already exist, with source row counts and an honest empty state.",
+    journal: "memory/journal/2026-11-03-pass-53.md",
+  },
+  {
     pass: "pass-52",
     date: "2026-11-03",
     summary:

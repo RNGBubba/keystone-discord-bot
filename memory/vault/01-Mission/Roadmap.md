@@ -130,7 +130,7 @@ before a UI framework was added; settings writes followed through the same gate.
   preview, per-guild authorization and fingerprint-gated apply (pass 50).
 - [x] Config export, import and drift: a checksummed settings file, a schema-validated preview, a fingerprint-gated apply through `SettingsService`, one audit row per module and a stored baseline for drift (pass 51).
 - [x] Named saved templates: a guild's effective settings saved, listed, renamed/refreshed, deleted and applied to selected guilds through the same preview fingerprint and audited `SettingsService.update` path; schema-validated on save and apply (pass 52).
-- [ ] Analytics aggregates.
+- [x] Analytics aggregates: the dashboard page and `/api/v1` reuse the existing `AnalyticsStore` over logs, cases, invites, tickets and command usage, with one bounded window, source row counts and an explicit empty state; migration 0017 adds only the missing window indexes (pass 53).
 - [ ] Session refresh/rotation and Discord token revocation on logout; per-route
   rate limits; `owners[]` for instance-wide actions.
 - [ ] Public API v1: hashed scoped tokens, OpenAPI, `Idempotency-Key`, webhooks,

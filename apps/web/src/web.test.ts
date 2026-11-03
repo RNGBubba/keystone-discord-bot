@@ -7,6 +7,9 @@ import {
   InMemoryDashboardStore,
   InMemorySavedTemplateStore,
   InMemorySessionStore,
+  type AnalyticsSnapshot,
+  type AnalyticsStore,
+  type AnalyticsWindow,
   InMemorySettingsRepository,
   ModuleRegistry,
   SettingsService,
@@ -30,6 +33,84 @@ const GUILD_D = "555555555555555555";
 const GUILD_Z = "999999999999999999";
 const USER = "444444444444444444";
 const ACCESS_TOKEN = "discord-access-token-should-never-reach-browser";
+
+function analyticsSnapshot(
+  guildId: string,
+  window: AnalyticsWindow,
+  populated: boolean,
+): AnalyticsSnapshot {
+  const n = populated ? 1 : 0;
+  return {
+    version: 1,
+    guildId,
+    generatedAt: window.until,
+    window,
+    sources: [
+      { id: "logging_events", label: "Audit events", rows: 12 * n },
+      { id: "cases", label: "Moderation cases", rows: 4 * n },
+      { id: "invite_joins", label: "Invite joins", rows: 2 * n },
+      { id: "tickets", label: "Tickets", rows: 3 * n },
+      { id: "command_usage", label: "Command runs", rows: 6 * n },
+    ],
+    overview: {
+      loggedEvents: 12 * n,
+      activeCases: 3 * n,
+      casesOpened: 4 * n,
+      inviteJoins: 2 * n,
+      retainedInvites: n,
+      commandsRun: 6 * n,
+      openTickets: 2 * n,
+    },
+    members: {
+      loggedJoins: 3 * n,
+      loggedLeaves: n,
+      inviteJoins: 2 * n,
+      leftSince: n,
+      retained: n,
+      flagged: n,
+      uniqueInviters: n,
+    },
+    messages: { deleted: 5 * n, edited: 2 * n, contentFilterCases: 4 * n },
+    commands: {
+      total: 6 * n,
+      ok: 5 * n,
+      blocked: n,
+      error: 0,
+      averageLatencyMs: populated ? 140 : null,
+      top: populated
+        ? [
+            {
+              command: "ping",
+              path: "",
+              total: 4,
+              ok: 4,
+              blocked: 0,
+              error: 0,
+              averageLatencyMs: 90,
+            },
+          ]
+        : [],
+    },
+    tickets: {
+      open: 2 * n,
+      claimed: 0,
+      closed: n,
+      opened: 3 * n,
+      closedInWindow: n,
+      averageCloseMinutes: populated ? 30 : null,
+      slaBreached: 0,
+    },
+  };
+}
+
+class FixedAnalyticsStore implements AnalyticsStore {
+  lastWindow: AnalyticsWindow | undefined;
+
+  async snapshot(guildId: string, window: AnalyticsWindow): Promise<AnalyticsSnapshot> {
+    this.lastWindow = window;
+    return analyticsSnapshot(guildId, window, guildId === GUILD_A);
+  }
+}
 
 class FakeOAuth implements DiscordOAuth {
   exchanges = 0;
@@ -72,6 +153,7 @@ interface Harness {
   audit: InMemoryAuditStore;
   baselines: InMemoryConfigBaselineStore;
   savedTemplates: InMemorySavedTemplateStore;
+  analytics: FixedAnalyticsStore;
   close(): Promise<void>;
 }
 
@@ -91,6 +173,7 @@ async function harness(): Promise<Harness> {
   const settings = new SettingsService(new InMemorySettingsRepository(), registry, audit);
   const baselines = new InMemoryConfigBaselineStore();
   const savedTemplates = new InMemorySavedTemplateStore();
+  const analytics = new FixedAnalyticsStore();
   const auth = new AuthService({
     oauth,
     sessions,
@@ -113,6 +196,7 @@ async function harness(): Promise<Harness> {
       audit,
       baselines,
       savedTemplates,
+      analytics,
     ),
     logger: createSilentLogger(),
     secureCookies: false,
@@ -131,6 +215,7 @@ async function harness(): Promise<Harness> {
     audit,
     baselines,
     savedTemplates,
+    analytics,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1123,6 +1208,93 @@ describe("P6 web auth and authorization", () => {
       const listAfterHtml = await listAfter.text();
       expect(listAfterHtml).toContain("Tampered");
       expect(listAfterHtml).not.toContain("Alpha six v2");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("reads analytics aggregates behind the dashboard gate and says when a window is empty", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const page = await fetch(
+        `${test.base}/dashboard/guilds/${GUILD_A}/analytics?days=30`,
+        { headers: { cookie } },
+      );
+      expect(page.status).toBe(200);
+      expect(page.headers.get("cache-control")).toContain("no-store");
+      const html = await page.text();
+      expect(html).toContain("Source rows");
+      expect(html).toContain("logging_events");
+      expect(html).toContain("<b>12</b>");
+      expect(html).toContain("30d ·");
+      expect(html).toContain("not estimates");
+      expect(test.analytics.lastWindow?.days).toBe(30);
+
+      const api = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/analytics?days=30`, {
+        headers: { cookie },
+      });
+      expect(api.status).toBe(200);
+      expect(api.headers.get("cache-control")).toContain("no-store");
+      expect(await api.json()).toMatchObject({
+        guildId: GUILD_A,
+        window: { days: 30 },
+        overview: { loggedEvents: 12, activeCases: 3, commandsRun: 6, openTickets: 2 },
+        members: { loggedJoins: 3, inviteJoins: 2, retained: 1 },
+        messages: { deleted: 5, edited: 2, contentFilterCases: 4 },
+        commands: { total: 6, ok: 5, blocked: 1, averageLatencyMs: 140 },
+        tickets: { open: 2, closed: 1, opened: 3, closedInWindow: 1 },
+      });
+
+      const emptyPage = await fetch(
+        `${test.base}/dashboard/guilds/${GUILD_D}/analytics?days=7`,
+        { headers: { cookie } },
+      );
+      expect(emptyPage.status).toBe(200);
+      const emptyHtml = await emptyPage.text();
+      expect(emptyHtml).toContain("No rows in this window");
+      expect(emptyHtml).toContain("not an estimate of all Discord activity");
+      expect(emptyHtml).not.toContain("<b>12</b>");
+
+      const emptyApi = await fetch(`${test.base}/api/v1/guilds/${GUILD_D}/analytics?days=7`, {
+        headers: { cookie },
+      });
+      expect(emptyApi.status).toBe(200);
+      expect(await emptyApi.json()).toMatchObject({
+        guildId: GUILD_D,
+        overview: { loggedEvents: 0, commandsRun: 0 },
+        sources: [
+          { id: "logging_events", label: "Audit events", rows: 0 },
+          { id: "cases", label: "Moderation cases", rows: 0 },
+          { id: "invite_joins", label: "Invite joins", rows: 0 },
+          { id: "tickets", label: "Tickets", rows: 0 },
+          { id: "command_usage", label: "Command runs", rows: 0 },
+        ],
+      });
+
+      for (const days of ["91", "abc"]) {
+        const refused = await fetch(
+          `${test.base}/dashboard/guilds/${GUILD_A}/analytics?days=${days}`,
+          { headers: { cookie } },
+        );
+        expect(refused.status).toBe(400);
+        const refusedApi = await fetch(
+          `${test.base}/api/v1/guilds/${GUILD_A}/analytics?days=${days}`,
+          { headers: { cookie } },
+        );
+        expect(refusedApi.status).toBe(400);
+      }
+
+      for (const path of [
+        `/dashboard/guilds/${GUILD_B}/analytics`,
+        `/api/v1/guilds/${GUILD_B}/analytics`,
+      ]) {
+        const nonAdmin = await fetch(`${test.base}${path}`, { headers: { cookie } });
+        expect(nonAdmin.status).toBe(403);
+      }
+
+      const signedOut = await fetch(`${test.base}/api/v1/guilds/${GUILD_A}/analytics`);
+      expect(signedOut.status).toBe(401);
     } finally {
       await test.close();
     }

@@ -63,6 +63,11 @@ const routes: readonly Route[] = [
     handler: dashboard.guildOverview,
   },
   {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/analytics`),
+    methods: ["GET"],
+    handler: dashboard.analyticsPage,
+  },
+  {
     pattern: exact(`/dashboard/guilds/${GUILD_ID}/settings/${MODULE_ID}`),
     handler: dashboard.settingsPage,
   },
@@ -107,6 +112,11 @@ const routes: readonly Route[] = [
     pattern: exact(`/api/v1/guilds/${GUILD_ID}/overview`),
     methods: ["GET"],
     handler: api.overview,
+  },
+  {
+    pattern: exact(`/api/v1/guilds/${GUILD_ID}/analytics`),
+    methods: ["GET"],
+    handler: api.analytics,
   },
   {
     pattern: exact(`/api/v1/guilds/${GUILD_ID}/settings/${MODULE_ID}`),

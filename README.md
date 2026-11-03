@@ -16,11 +16,11 @@ sessions, per-guild BigInt authorization, schema-generated settings widgets,
 audited settings writes from the dashboard and a `PATCH /api/v1` route, a fleet
 view with three built-in config templates that preview a per-guild diff, named
 saved templates with audited create/update/delete, and checksummed config
-export/import with a stored baseline and a drift page. Every apply is bound to
-the previewed plan. The dashboard stays the existing framework-free `apps/web`
-HTML app; a Next.js shell is not built and is not required for this slice.
-Analytics aggregates, session hardening, scoped API tokens and webhooks are the
-remaining P6 work. P7 now has invite tracking as
+export/import with a stored baseline and a drift page, and read-only analytics
+aggregates over the ledgers the bot already keeps. Every apply is bound to the
+previewed plan. The dashboard stays the existing framework-free `apps/web` HTML
+app; a Next.js shell is not built and is not required for this slice. Session
+hardening, scoped API tokens and webhooks are the remaining P6 work. P7 now has invite tracking as
 a sixth module (attribution, a joins/retention leaderboard and advisory
 suspicious-join flags), audit logging as a seventh module (five event kinds, one
 operator channel and a retained ledger), link/profanity/zalgo content filters,
@@ -46,7 +46,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**526 tests across 79 files** without a Discord token, database or network.
+**533 tests across 80 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -388,6 +388,7 @@ GET /dashboard/fleet                      fleet table with enabled modules per s
 POST /dashboard/fleet/preview             schema-validated template diff; no writes
 POST /dashboard/fleet/apply               apply the previewed plan; audited per module
 GET /dashboard/guilds/:id                 guild overview
+GET /dashboard/guilds/:id/analytics       bounded aggregates over the existing ledgers
 GET /dashboard/guilds/:id/settings/:module  schema-generated widgets + module audit trail
 POST /dashboard/guilds/:id/settings/:module  save named widgets (CSRF + module schema)
 GET /dashboard/guilds/:id/config/export   checksummed settings bundle as a JSON file
@@ -397,6 +398,7 @@ POST /dashboard/guilds/:id/config/import/apply    apply the previewed bundle; au
 GET /api/v1/me                            signed-in user, never a token
 GET /api/v1/guilds                        manageable servers only
 GET /api/v1/guilds/:id/overview           counts, module settings, latest import
+GET /api/v1/guilds/:id/analytics          the same AnalyticsSnapshot as /analytics
 PATCH /api/v1/guilds/:id/settings/:module  update one module (CSRF + schema)
 POST /logout                              session + CSRF; deletes the server-side session
 ```

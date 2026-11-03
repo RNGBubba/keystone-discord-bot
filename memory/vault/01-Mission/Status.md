@@ -2,6 +2,22 @@
 
 ## Now
 
+**Pass 53 added the P6 dashboard analytics aggregates** (2026-11-03):
+`GET /dashboard/guilds/:id/analytics` and
+`GET /api/v1/guilds/:id/analytics` reuse the existing `AnalyticsStore` over
+`logging_events`, `cases`, `invite_joins`, `tickets` and `command_usage`. There
+is no analytics table, new writer or second aggregation path. The window is
+bounded to 1–90 days; the page prints each source table's row count, marks open
+tickets and active cases as current state, and says plainly when a window has no
+retained rows. A web process without a shared database adapter says analytics is
+unavailable instead of rendering an unexplained zero. Migration 0017 adds only
+the four missing guild/time indexes those window queries need. Tests are **533 /
+80 files**; `pnpm probe:live` is **18/18**, adding `web-analytics-aggregates`:
+seeded rows in the real Postgres tables matched every API and page aggregate, an
+empty guild was named, `days=91`/`abc` were refused at `400` and signed-out
+reads at `401`. The OAuth exchange used a fake port; live Discord OAuth remains
+open. See [pass 53](../../journal/2026-11-03-pass-53.md).
+
 **Pass 52 finished the P6 template capability** (2026-11-03): an admin can save
 a guild's effective module settings as a named template, list it, rename or
 refresh it, delete it, and apply it to selected guilds. A saved template is a
@@ -501,9 +517,10 @@ added the fleet view and three built-in templates that preview a per-guild diff
 and apply through that same path. Pass 51 added checksummed config export, a
 previewed and audited import, and a baseline drift page through the same
 schemas and write path. Pass 52 added named saved templates and audited their
-create/update/delete through the same plan and writer. The remaining P6 exit
-items are analytics aggregates, session refresh/revocation, per-route rate
-limits, `owners[]`, scoped API tokens and the live Discord OAuth round trip. See
+create/update/delete through the same plan and writer. Pass 53 added read-only
+analytics aggregates over the existing ledgers. The remaining P6 exit items are
+session refresh/revocation, per-route rate limits, `owners[]`, scoped API tokens
+and the live Discord OAuth round trip. See
 [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
@@ -576,17 +593,18 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 526 tests / 79 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 17/17 · memory current
+pnpm check        exit 0 · typecheck 0 · 533 tests / 80 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 18/18 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 16/16 migrations · Redis reachable · pnpm probe:live 17/17 · /healthz database=postgres · migration runner transaction defect fixed
+live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 17/17 migrations · Redis reachable · pnpm probe:live 18/18 · /healthz database=postgres · migration runner transaction defect fixed
 live web widgets 2026-11-03 UTC · real local HTTP login/session/CSRF · AI form generated from schema · saved 9 · one audit row actor live-probe-web-user source dashboard · 5000 rejected at 400 with field preserved · OAuth exchange fake, live Discord OAuth open
 live fleet     2026-11-03 UTC · real local HTTP fleet page listed two Postgres-backed guilds · strict-moderation preview diff · wrong fingerprint 409 · apply 302 · one moderation write + one dashboard audit row per guild · OAuth exchange fake
 live config portability 2026-11-03 UTC · real local HTTP on Postgres · 12-module checksummed file export · multipart import preview with no write · edited checksum 400 · wrong fingerprint 409 · apply 302, one audited AI write, baseline stored · no drift, then one changed value after an out-of-band update · OAuth exchange fake
 live saved templates 2026-11-03 UTC · real local HTTP on Postgres · saved from one guild and listed · two-guild preview with no write · tampered and stale 409 · apply 302, one audited write per guild · invalid stored row reported and refused 400 · create/update/delete audited · OAuth exchange fake
+live dashboard analytics 2026-11-03 UTC · real local HTTP on Postgres · 7 audit rows, 3 cases, 2 invite joins, 3 tickets, 3 command runs seeded · API and page matched every aggregate and source count · empty guild named · days=91/abc 400 · signed-out 401 · OAuth exchange fake
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused
@@ -801,11 +819,12 @@ read that file.
 | 14 | The fleet view lists only guilds the user can manage | `web.test.ts`: `/dashboard/fleet` shows Alpha, Gamma and Delta and not the non-admin Beta; `manageableGuilds` is the same list as `/dashboard` | Real local HTTP + fake OAuth |
 | 15 | A template previews a diff and applies only after the preview, with one audit row per module | `templates.test.ts`: deep merge, schema rejection, no-write preview, fingerprint invalidation, audited apply and no-op; `web.test.ts`: two-guild preview, wrong fingerprint `409`, apply `302`, one row per guild, non-admin/bot-absent `403`, stale preview after an external change, missing CSRF `403` | Real local HTTP + in-memory repository, plus the Postgres `web-fleet-templates` live check |
 | 16 | A saved template is schema-validated on save and on apply, and its lifecycle is audited | `saved-templates.test.ts`: snapshot read through `SettingsService`, create/update/delete rows, stale preview after edit, invalid stored row reported and refused with no write; `config-template-store.test.ts`: PGlite round trip and case-insensitive unique name; `web.test.ts`: save, list, edit, two-guild apply with one audited row per guild, tampered/stale `409`, invalid row `400`, audited delete | Real local HTTP + in-memory repository and **PGlite**, plus the Postgres `web-saved-templates` live check |
+| 17 | Analytics is the existing read model, bounded and honest about sparse data | `analytics.test.ts`: the service passes a 30-day window to `AnalyticsStore`, refuses 0/91/7.5 before calling it, returns null in memory mode, and the renderer shows source rows, current-state labels and a no-rows notice; `web.test.ts`: page and API numbers, empty guild, `400` windows and authorization; `analytics-store.test.ts`: PGlite checks the four migration-0017 indexes | Real local HTTP + in-memory repository and **PGlite**, plus the Postgres `web-analytics-aggregates` live check |
 
 This table proves the foundation, the narrow write path, the schema-widget
-editor, the fleet/built-in template path and the saved-template path, not the
-exit demo. The live OAuth round trip, analytics aggregates, token
-refresh/revocation, rate limits and scoped API tokens remain open. A live Postgres-backed session is now possible — pass 44 applied
+editor, the fleet/built-in/saved template paths and the analytics read, not the
+exit demo. The live OAuth round trip, token refresh/revocation, rate limits and
+scoped API tokens remain open. A live Postgres-backed session is now possible — pass 44 applied
 the session table and `/healthz` runs with `database: postgres` — but an
 authenticated OAuth session has still not crossed a real Discord login.
 
@@ -978,7 +997,7 @@ for the dashboard. The auth gate, settings writes, schema-generated widgets and
 the settings audit trail are built in the existing `apps/web` HTML app; pass 50
 added the fleet view and built-in templates, and pass 52 added saved templates.
 The carrier decision is recorded in [[ADR-0016-dashboard-foundation]]. Next are
-analytics aggregates, token refresh and revocation, per-route rate limits,
-`owners[]`, scoped API tokens, per-token rate limits, `Idempotency-Key`,
-webhooks and OpenAPI. Before launch, close the pgvector ANN gate and run the live
+token refresh and revocation, per-route rate limits, `owners[]`, scoped API
+tokens, per-token rate limits, `Idempotency-Key`, webhooks and OpenAPI. Before
+launch, close the pgvector ANN gate and run the live
 provider/Discord/Postgres/OAuth smoke in staging.

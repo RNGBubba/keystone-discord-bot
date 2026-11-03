@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-03T02:00:00.000Z",
+  "updatedAt": "2026-11-03T02:15:00.000Z",
   "passes": [
     {
       "id": "pass-01",
@@ -693,6 +693,21 @@
         "tests": "526",
         "budget": "20/100 roots · 141 subcommands · 4 context menus",
         "live": "17/17",
+        "memory": "current",
+        "build": "pass"
+      }
+    },
+    {
+      "id": "pass-53",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 dashboard analytics: the dashboard page and GET /api/v1/guilds/:id/analytics reuse the existing AnalyticsStore over logging_events, cases, invite_joins, tickets and command_usage. There is no analytics table, new writer or second aggregation path. One bounded 1-90 day window; the page prints every source table row count, distinguishes current-state ticket/case values, and says plainly when a window has no retained rows instead of implying no Discord activity. Migration 0017 adds only the missing window indexes for cases, invite joins and tickets. Tests 533 / 80 files; live probe 18/18, adding web-analytics-aggregates over real local HTTP and Postgres: seven seeded audit rows, three cases, two invite joins, three tickets and three command runs matched every API/page aggregate, an empty guild was named, days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange used a fake port.",
+      "journal": "journal/2026-11-03-pass-53.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "533",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "18/18",
         "memory": "current",
         "build": "pass"
       }

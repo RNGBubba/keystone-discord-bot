@@ -18,6 +18,7 @@ import path from "node:path";
 import { loadEnv } from "@keystone/config";
 import { ModuleRegistry, SettingsService, createLogger } from "@keystone/kernel";
 import {
+  createAnalyticsStore,
   createAuditStore,
   createCaseStore,
   createCommunityStore,
@@ -593,6 +594,7 @@ async function main(): Promise<void> {
     const auditStore = createAuditStore(database);
     const baselineStore = createConfigBaselineStore(database);
     const savedTemplateStore = createSavedTemplateStore(database);
+    const analyticsStore = createAnalyticsStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
     const probeOAuth = new WebProbeOAuth();
     const auth = new AuthService({
@@ -617,6 +619,7 @@ async function main(): Promise<void> {
         auditStore,
         baselineStore,
         savedTemplateStore,
+        analyticsStore,
       ),
       logger,
       secureCookies: false,
@@ -1255,6 +1258,141 @@ async function main(): Promise<void> {
           "real local HTTP on Postgres: saved a template from one guild, listed it, previewed a diff for two guilds without writing, refused a tampered fingerprint at 409 and a stale preview after an edit at 409, then applied one write per guild with one dashboard audit row each; an out-of-band schema-invalid row was reported and refused at 400; create/update/delete were audited; OAuth exchange itself used a fake port",
         features: ["operations.config-templates", "operations.multi-server-fleet"],
       });
+
+      // --- Dashboard analytics aggregates over the real ledgers -------------
+      await database.runner.exec(`
+        DELETE FROM logging_events WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+        DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}'));
+        DELETE FROM cases WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+        DELETE FROM invite_joins WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+        DELETE FROM tickets WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+        DELETE FROM command_usage WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+      `);
+      await database.runner.exec(`
+        INSERT INTO logging_events (guild_id, kind, summary, created_at) VALUES
+          ('${WEB_GUILD}', 'message_delete', 'deleted one', now() - interval '3 hours'),
+          ('${WEB_GUILD}', 'message_delete', 'deleted two', now() - interval '2 hours'),
+          ('${WEB_GUILD}', 'message_delete', 'deleted three', now() - interval '1 hour'),
+          ('${WEB_GUILD}', 'message_edit', 'edited one', now() - interval '2 hours'),
+          ('${WEB_GUILD}', 'message_edit', 'edited two', now() - interval '1 hour'),
+          ('${WEB_GUILD}', 'member_join', 'joined', now() - interval '1 hour'),
+          ('${WEB_GUILD}', 'member_leave', 'left', now() - interval '30 minutes');
+
+        INSERT INTO cases (guild_id, case_number, actor_id, target_id, action, rule, state, created_at) VALUES
+          ('${WEB_GUILD}', 90001, 'probe-mod', 'probe-user-1', 'alert', 'automod.links', 'open', now() - interval '2 hours'),
+          ('${WEB_GUILD}', 90002, 'probe-mod', 'probe-user-2', 'alert', 'automod.profanity', 'open', now() - interval '1 hour'),
+          ('${WEB_GUILD}', 90003, 'probe-mod', 'probe-user-3', 'warn', NULL, 'closed', now() - interval '3 hours');
+
+        INSERT INTO invite_joins (guild_id, user_id, inviter_id, code, fake_reasons, joined_at, left_at) VALUES
+          ('${WEB_GUILD}', 'probe-invite-1', 'probe-inviter', 'probe-code', '[]'::jsonb, now() - interval '2 hours', NULL),
+          ('${WEB_GUILD}', 'probe-invite-2', 'probe-inviter', 'probe-code', '["account_age"]'::jsonb, now() - interval '1 hour', now() - interval '30 minutes');
+
+        INSERT INTO tickets (guild_id, channel_id, opener_id, state, subject, created_at, sla_due_at, closed_at) VALUES
+          ('${WEB_GUILD}', 'probe-channel-1', 'probe-user-1', 'open', 'open one', now() - interval '2 hours', NULL, NULL),
+          ('${WEB_GUILD}', 'probe-channel-2', 'probe-user-2', 'open', 'open two', now() - interval '1 hour', NULL, NULL),
+          ('${WEB_GUILD}', 'probe-channel-3', 'probe-user-3', 'closed', 'closed one', now() - interval '3 hours', now() - interval '2 hours', now() - interval '1 hour');
+
+        INSERT INTO command_usage (guild_id, command, path, status, duration_ms, created_at) VALUES
+          ('${WEB_GUILD}', 'ping', '', 'ok', 100, now() - interval '30 minutes'),
+          ('${WEB_GUILD}', 'ping', '', 'blocked', 300, now() - interval '20 minutes'),
+          ('${WEB_GUILD}', 'analytics', 'overview', 'ok', 200, now() - interval '10 minutes');
+      `);
+
+      const analyticsApi = await fetch(
+        `${base}/api/v1/guilds/${WEB_GUILD}/analytics?days=30`,
+        { headers: { cookie } },
+      );
+      assert(analyticsApi.status === 200, `analytics API returned ${analyticsApi.status}`);
+      const analyticsSnapshot = (await analyticsApi.json()) as {
+        overview: Record<string, number>;
+        members: Record<string, number>;
+        messages: Record<string, number>;
+        commands: { total: number; ok: number; blocked: number; averageLatencyMs: number | null };
+        tickets: Record<string, number | null>;
+        sources: { id: string; rows: number }[];
+        window: { days: number };
+      };
+      assert(analyticsSnapshot.window.days === 30, "the analytics API ignored the window");
+      assert(analyticsSnapshot.overview.loggedEvents === 7, `logged events: ${analyticsSnapshot.overview.loggedEvents}`);
+      assert(analyticsSnapshot.overview.activeCases === 2, "active cases did not match the seeded open cases");
+      assert(analyticsSnapshot.overview.casesOpened === 3, "cases opened did not match the window rows");
+      assert(analyticsSnapshot.overview.inviteJoins === 2, "invite joins did not match");
+      assert(analyticsSnapshot.overview.retainedInvites === 1, "invite retention did not match");
+      assert(analyticsSnapshot.overview.commandsRun === 3, "command runs did not match");
+      assert(analyticsSnapshot.overview.openTickets === 2, "open tickets did not match current state");
+      assert(analyticsSnapshot.members.loggedJoins === 1 && analyticsSnapshot.members.loggedLeaves === 1, "member event counts did not match");
+      assert(analyticsSnapshot.messages.deleted === 3 && analyticsSnapshot.messages.edited === 2, "message counts did not match");
+      assert(analyticsSnapshot.messages.contentFilterCases === 2, "content-filter cases did not match");
+      assert(
+        analyticsSnapshot.commands.total === 3 &&
+          analyticsSnapshot.commands.ok === 2 &&
+          analyticsSnapshot.commands.blocked === 1 &&
+          analyticsSnapshot.commands.averageLatencyMs === 200,
+        `command aggregate was ${JSON.stringify(analyticsSnapshot.commands)}`,
+      );
+      assert(analyticsSnapshot.tickets.opened === 3 && analyticsSnapshot.tickets.closedInWindow === 1, "ticket window counts did not match");
+      assert(analyticsSnapshot.tickets.averageCloseMinutes === 120, `average close was ${String(analyticsSnapshot.tickets.averageCloseMinutes)}`);
+      assert(analyticsSnapshot.tickets.slaBreached === 1, "SLA breach did not match the seeded close");
+      assert(
+        analyticsSnapshot.sources.find((source) => source.id === "logging_events")?.rows === 7,
+        "the source table count did not match the seeded rows",
+      );
+
+      const analyticsPage = await fetch(
+        `${base}/dashboard/guilds/${WEB_GUILD}/analytics?days=30`,
+        { headers: { cookie } },
+      );
+      assert(analyticsPage.status === 200, `analytics page returned ${analyticsPage.status}`);
+      const analyticsHtml = await analyticsPage.text();
+      assert(analyticsHtml.includes("Source rows"), "the analytics page has no source table");
+      assert(analyticsHtml.includes("logging_events"), "the analytics page does not name its source");
+      assert(analyticsHtml.includes("<b>7</b>"), "the analytics page does not show logged events");
+      assert(analyticsHtml.includes("Open tickets (current)"), "the page does not distinguish current state");
+      assert(analyticsHtml.includes("not estimates"), "the page does not caveat that counts are retained rows");
+      assert(!analyticsHtml.includes("No rows in this window"), "a populated window reported no rows");
+
+      const emptyAnalytics = await fetch(
+        `${base}/dashboard/guilds/${WEB_GUILD_B}/analytics?days=7`,
+        { headers: { cookie } },
+      );
+      assert(emptyAnalytics.status === 200, `empty analytics page returned ${emptyAnalytics.status}`);
+      const emptyAnalyticsHtml = await emptyAnalytics.text();
+      assert(emptyAnalyticsHtml.includes("No rows in this window"), "an empty window did not say so");
+      assert(emptyAnalyticsHtml.includes("not an estimate of all Discord activity"), "empty analytics overclaims");
+
+      const emptyAnalyticsApi = await fetch(
+        `${base}/api/v1/guilds/${WEB_GUILD_B}/analytics?days=7`,
+        { headers: { cookie } },
+      );
+      assert(emptyAnalyticsApi.status === 200, `empty analytics API returned ${emptyAnalyticsApi.status}`);
+      const emptySnapshot = (await emptyAnalyticsApi.json()) as { overview: Record<string, number> };
+      assert(emptySnapshot.overview.loggedEvents === 0 && emptySnapshot.overview.commandsRun === 0, "empty analytics returned nonzero counts");
+
+      for (const days of ["91", "abc"]) {
+        const refused = await fetch(
+          `${base}/dashboard/guilds/${WEB_GUILD}/analytics?days=${days}`,
+          { headers: { cookie } },
+        );
+        assert(refused.status === 400, `analytics days=${days} returned ${refused.status}`);
+        const refusedApi = await fetch(
+          `${base}/api/v1/guilds/${WEB_GUILD}/analytics?days=${days}`,
+          { headers: { cookie } },
+        );
+        assert(refusedApi.status === 400, `analytics API days=${days} returned ${refusedApi.status}`);
+      }
+
+      const signedOutAnalytics = await fetch(
+        `${base}/api/v1/guilds/${WEB_GUILD}/analytics`,
+      );
+      assert(signedOutAnalytics.status === 401, `signed-out analytics returned ${signedOutAnalytics.status}`);
+
+      record({
+        id: "web-analytics-aggregates",
+        status: "pass",
+        detail:
+          "real local HTTP on Postgres: seeded 7 audit rows, 3 cases, 2 invite joins, 3 tickets and 3 command runs in the real tables, then the dashboard API and page matched every aggregate (7 logged events, 2 active cases, 3 cases opened, 2 invite joins/1 retained, 3 command runs/2 ok/1 blocked/200ms avg, 2 open tickets, 120-minute average close and 1 SLA breach); the source table counts matched; an empty guild said no rows instead of inventing activity; days=91/abc were refused at 400 and signed-out reads at 401; OAuth exchange itself used a fake port",
+        features: ["operations.dashboard-analytics"],
+      });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -1268,6 +1406,12 @@ async function main(): Promise<void> {
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM config_baselines WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM config_templates WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM logging_events WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}'));
+    DELETE FROM cases WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM invite_joins WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM tickets WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
+    DELETE FROM command_usage WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';

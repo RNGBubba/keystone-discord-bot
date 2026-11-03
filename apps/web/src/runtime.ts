@@ -10,6 +10,7 @@ import {
   ModuleRegistry,
   SettingsService,
   createLogger,
+  type AnalyticsStore,
   type AuditStore,
   type ConfigBaselineStore,
   type DashboardStore,
@@ -19,6 +20,7 @@ import {
   type SettingsRepository,
 } from "@keystone/kernel";
 import {
+  createAnalyticsStore,
   createAuditStore,
   createConfigBaselineStore,
   createDashboardStore,
@@ -73,6 +75,7 @@ export function createWebRuntime(env: Env): WebRuntime {
   let auditStore: AuditStore;
   let baselineStore: ConfigBaselineStore;
   let savedTemplateStore: SavedTemplateStore;
+  let analyticsStore: AnalyticsStore | undefined;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
     settingsRepository = createSettingsRepository(database);
@@ -81,6 +84,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     auditStore = createAuditStore(database);
     baselineStore = createConfigBaselineStore(database);
     savedTemplateStore = createSavedTemplateStore(database);
+    analyticsStore = createAnalyticsStore(database);
     logger.info("web data: postgres");
   } else {
     logger.warn("DATABASE_URL is not set — web sessions, audit rows and dashboard reads are process-local.");
@@ -140,6 +144,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     auditStore,
     baselineStore,
     savedTemplateStore,
+    analyticsStore,
   );
   const handler = createWebHandler({
     auth,

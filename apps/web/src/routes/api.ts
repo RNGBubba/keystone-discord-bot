@@ -1,5 +1,6 @@
 import { authorizeGuild, requireSession, requireSettingsWrite } from "../authorization";
 import { csrfHeader, parseApiSettings, sendJson } from "../http";
+import { analyticsDays } from "../overview";
 import type { RouteContext } from "../request-context";
 
 export async function me(ctx: RouteContext): Promise<boolean> {
@@ -31,6 +32,27 @@ export async function overview(
   const guildId = params[0] as string;
   const { guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
   sendJson(ctx.res, 200, await ctx.deps.dashboard.view(guild));
+  return true;
+}
+
+export async function analytics(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const { guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const days = analyticsDays(ctx.url.searchParams.get("days"));
+  const snapshot = await ctx.deps.dashboard.analytics(guild, days);
+  if (!snapshot) {
+    sendJson(ctx.res, 503, {
+      error: {
+        code: "analytics_unavailable",
+        message: "Analytics needs the shared database adapter; this web process is in memory mode.",
+      },
+    });
+    return true;
+  }
+  sendJson(ctx.res, 200, snapshot);
   return true;
 }
 

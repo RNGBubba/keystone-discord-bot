@@ -6,8 +6,8 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P6",
-  "lastPass": "journal/2026-11-03-pass-52.md",
-  "nextAction": "pass-53 — finish P6: analytics aggregates, then session refresh/revocation, per-route rate limits, owners[] and scoped API tokens; the live Discord OAuth round trip is still open",
+  "lastPass": "journal/2026-11-03-pass-53.md",
+  "nextAction": "pass-54 — P6 session hardening: refresh/rotation, Discord token revocation on logout, per-route rate limits and owners[]; then scoped API v1. The live Discord OAuth round trip is still open without real credentials.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 526
+    "tests": 533
   },
   "modules": [
     {

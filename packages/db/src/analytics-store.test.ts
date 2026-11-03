@@ -155,6 +155,19 @@ describe("DrizzleAnalyticsStore", () => {
       { id: "command_usage", label: "Command runs", rows: 3 },
     ]);
 
+    const indexes = await harness.runner.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
+    );
+    const names = new Set(indexes.map((row) => row.indexname));
+    for (const name of [
+      "cases_guild_created_idx",
+      "invite_joins_guild_joined_idx",
+      "tickets_guild_created_idx",
+      "tickets_guild_closed_idx",
+    ]) {
+      expect(names.has(name)).toBe(true);
+    }
+
     await harness.close();
   });
 });

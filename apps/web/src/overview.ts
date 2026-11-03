@@ -1,5 +1,7 @@
 import { ZodError } from "zod";
 import type {
+  AnalyticsSnapshot,
+  AnalyticsStore,
   AuditEventRecord,
   AuditStore,
   ConfigBaselineStore,
@@ -111,6 +113,28 @@ export interface SavedTemplateDetail extends SavedTemplateSummary {
   readonly issues: readonly SettingsIssue[];
 }
 
+/** Windows the dashboard offers. The API accepts any bounded 1–90 day window. */
+export const ANALYTICS_WINDOWS = [7, 30, 90] as const;
+
+/**
+ * Parse a dashboard analytics window without trusting the query string.
+ *
+ * The bot's `/analytics` command caps a request at 90 days; the dashboard uses
+ * the same cap so one surface cannot ask for a scan the other refuses.
+ */
+export function analyticsDays(value: string | null | undefined): number {
+  const raw = (value ?? "").trim();
+  if (!raw) return 7;
+  if (!/^\d{1,3}$/.test(raw)) {
+    throw new HttpError(400, "The analytics window must be a whole number of days.", "analytics_window_invalid");
+  }
+  const days = Number(raw);
+  if (days < 1 || days > 90) {
+    throw new HttpError(400, "The analytics window must be between 1 and 90 days.", "analytics_window_invalid");
+  }
+  return days;
+}
+
 function templateName(value: string): string {
   const name = value.trim();
   if (!name) throw new HttpError(400, "A template name is required.", "template_name_missing");
@@ -176,6 +200,7 @@ export class DashboardService {
     private readonly audit?: AuditStore,
     private readonly baselines?: ConfigBaselineStore,
     private readonly savedTemplates?: SavedTemplateStore,
+    private readonly analyticsStore?: AnalyticsStore,
   ) {}
 
   private present(module: ModuleManifest, values: Record<string, unknown>): DashboardModule {
@@ -1097,6 +1122,28 @@ export class DashboardService {
       module: this.present(module, values),
       form: buildSettingsForm(module.settingsSchema, values),
     };
+  }
+
+  /**
+   * The existing read-only analytics aggregate, scoped to one authorized guild.
+   *
+   * This intentionally has no query of its own: `AnalyticsStore` is the same
+   * port `/analytics` uses, so the dashboard cannot disagree with the command or
+   * invent a second event stream. `null` means this process has no shared
+   * ledger adapter (the memory-mode web runtime), not "zero activity".
+   */
+  async analytics(guild: DiscordGuild, days: number): Promise<AnalyticsSnapshot | null> {
+    if (!this.analyticsStore) return null;
+    if (!Number.isInteger(days) || days < 1 || days > 90) {
+      throw new HttpError(400, "The analytics window must be between 1 and 90 days.", "analytics_window_invalid");
+    }
+    const until = new Date();
+    const since = new Date(until.getTime() - days * 86_400_000);
+    return this.analyticsStore.snapshot(guild.id, {
+      days,
+      since: since.toISOString(),
+      until: until.toISOString(),
+    });
   }
 
   /** Newest-first audit rows for one guild, optionally filtered to one target. */

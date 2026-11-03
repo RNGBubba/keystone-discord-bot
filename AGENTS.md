@@ -250,8 +250,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 526
-  tests in 79 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 533
+  tests in 80 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -333,6 +333,16 @@ rate-limited register leaves the app with no commands.
   previewed two guilds without writing, refused tampered/stale previews at
   `409`, applied one audited write per guild, refused an invalidated row at
   `400`, and audited delete. OAuth exchange used a fake port.
+- Pass 53 added the P6 analytics read. `/dashboard/guilds/:id/analytics` and
+  `GET /api/v1/guilds/:id/analytics` reuse the existing `AnalyticsStore` over
+  `logging_events`, `cases`, `invite_joins`, `tickets` and `command_usage`;
+  there is no analytics table, new writer or second aggregation path. The
+  window is bounded to 1–90 days, the page prints each source table's row
+  count, and a window with no retained rows says so instead of showing a
+  confident zero. Migration 0017 adds only the four missing guild/time read
+  indexes. Live probe is 18/18: `web-analytics-aggregates` seeded real Postgres
+  rows and matched every API/page aggregate, named an empty guild, and refused
+  `days=91`/`abc` at `400`; OAuth exchange used a fake port.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in

@@ -1719,9 +1719,9 @@
           "phase": "P6",
           "status": "open",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Auth, schema-generated settings widgets, the audit trail, the fleet view, built-in and saved templates, and config export/import/drift are in repo; a live Discord OAuth round trip is pending",
+          "note": "Auth, schema-generated settings widgets, the audit trail, the fleet view, built-in and saved templates, config export/import/drift and read-only analytics aggregates are in repo; a live Discord OAuth round trip is pending",
           "liveVerified": false,
-          "openReason": "Login, sessions, guild reads, schema forms, audited writes, the fleet view, built-in/saved templates and config portability are built; a live Discord OAuth round trip is not."
+          "openReason": "Login, sessions, guild reads, schema forms, audited writes, the fleet view, templates, config portability and analytics are built; a live Discord OAuth round trip is not."
         },
         {
           "id": "operations.dashboard-auth-foundation",
@@ -1818,6 +1818,35 @@
           "liveVerified": true,
           "liveEvidence": [
             "web-schema-widgets"
+          ]
+        },
+        {
+          "id": "operations.dashboard-analytics",
+          "name": "Dashboard analytics aggregates",
+          "competitors": {
+            "mee6": "❔",
+            "dyno": "❔",
+            "carl": "❔",
+            "ticket-tool": "❔",
+            "wick-security": "❔"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "The dashboard and GET /api/v1/guilds/:id/analytics reuse the existing AnalyticsStore over logging_events, cases, invite_joins, tickets and command_usage; there is no analytics table or second writer. One bounded 1-90 day window, source row counts, current-state ticket/case fields called out, and an explicit no-retained-rows state. Migration 0017 adds only the missing window indexes. Live 2026-11-03 over real local HTTP on Postgres with seeded rows and an empty guild.",
+          "evidence": [
+            "packages/kernel/src/analytics.ts",
+            "packages/db/src/analytics-store.ts",
+            "packages/db/src/migrations/0017-analytics-indexes.ts",
+            "apps/web/src/overview.ts",
+            "apps/web/src/render.ts",
+            "apps/web/src/analytics.test.ts",
+            "apps/web/src/web.test.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-analytics-aggregates"
           ]
         },
         {
