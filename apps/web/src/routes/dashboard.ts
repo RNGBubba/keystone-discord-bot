@@ -6,15 +6,26 @@ import {
   requireSettingsWrite,
 } from "../authorization";
 import { HttpError } from "../http-error";
+import { ConfigBundleError, type ConfigBundle } from "../config-bundle";
 import {
   encodePathSegment,
   parseBody,
+  parseConfigUpload,
   parseSettingsFormBody,
   redirect,
   send,
+  type ConfigUpload,
   type SettingsFormBody,
 } from "../http";
-import { renderFleet, renderGuildList, renderOverview, renderSettingsEditor, renderTemplatePreview } from "../render";
+import {
+  renderConfigDrift,
+  renderConfigPreview,
+  renderFleet,
+  renderGuildList,
+  renderOverview,
+  renderSettingsEditor,
+  renderTemplatePreview,
+} from "../render";
 import type { RouteContext } from "../request-context";
 import { SettingsValidationError, parseSettingsForm } from "../settings-form";
 import { CONFIG_TEMPLATES, findTemplate } from "../templates";
@@ -123,6 +134,127 @@ export async function fleetApply(ctx: RouteContext): Promise<boolean> {
     ctx.deps.logger.warn("fleet template write failed", failure);
   }
   redirect(ctx.res, `/dashboard/fleet?applied=${result.modulesWritten}&failed=${result.failures.length}`);
+  return true;
+}
+
+export async function configExport(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const { guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const bundle = await ctx.deps.dashboard.exportConfig(guild);
+  send(ctx.res, 200, `${JSON.stringify(bundle, null, 2)}\n`, "application/json; charset=utf-8", {
+    "Cache-Control": "no-store",
+    "Content-Disposition": `attachment; filename="keystone-config-${guild.id}.json"`,
+  });
+  return true;
+}
+
+export async function configDriftPage(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  const { session, guild } = await authorizeGuild(ctx.deps, ctx.session, guildId);
+  const drift = await ctx.deps.dashboard.configDrift(guild);
+  send(
+    ctx.res,
+    200,
+    renderConfigDrift(session.username, guild, drift, ctx.csrfToken, {
+      imported: count(ctx.url.searchParams.get("imported")),
+      failed: count(ctx.url.searchParams.get("failed")),
+    }),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
+  return true;
+}
+
+export async function configImportPreview(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  let upload!: ConfigUpload;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    upload = await parseConfigUpload(ctx.req);
+    return upload.csrf;
+  });
+  if (!upload.text.trim()) {
+    throw new HttpError(400, "Choose a config file to import.", "config_file_missing");
+  }
+
+  let bundle: ConfigBundle;
+  try {
+    bundle = ctx.deps.dashboard.parseConfig(upload.text);
+  } catch (error) {
+    if (!(error instanceof ConfigBundleError)) throw error;
+    const drift = await ctx.deps.dashboard.configDrift(write.guild);
+    send(
+      ctx.res,
+      400,
+      renderConfigDrift(write.session.username, write.guild, drift, ctx.csrfToken, {
+        importError: error.message,
+      }),
+      "text/html; charset=utf-8",
+      { "Cache-Control": "no-store" },
+    );
+    return true;
+  }
+
+  const plan = await ctx.deps.dashboard.previewConfigImport(write.guild, bundle);
+  send(
+    ctx.res,
+    200,
+    renderConfigPreview(write.session.username, plan, upload.text, ctx.csrfToken),
+    "text/html; charset=utf-8",
+    { "Cache-Control": "no-store" },
+  );
+  return true;
+}
+
+export async function configImportApply(
+  ctx: RouteContext,
+  params: readonly string[],
+): Promise<boolean> {
+  const guildId = params[0] as string;
+  let upload!: ConfigUpload;
+  const write = await requireSettingsWrite(ctx.deps, ctx.session, guildId, async () => {
+    upload = await parseConfigUpload(ctx.req);
+    return upload.csrf;
+  });
+  if (!upload.text.trim()) {
+    throw new HttpError(400, "Choose a config file to import.", "config_file_missing");
+  }
+
+  const fingerprint = (upload.fields.get("fingerprint") ?? "").trim();
+  if (!/^[a-f0-9]{64}$/.test(fingerprint)) {
+    throw new HttpError(
+      400,
+      "The preview fingerprint is missing. Preview the config before applying it.",
+      "preview_missing",
+    );
+  }
+
+  const bundle = ctx.deps.dashboard.parseConfig(upload.text);
+  const result = await ctx.deps.dashboard.applyConfigImport(
+    write.guild,
+    bundle,
+    fingerprint,
+    write.session.userId,
+  );
+  for (const failure of result.failures) {
+    ctx.deps.logger.warn("config import write failed", {
+      guildId: write.guild.id,
+      moduleId: failure.moduleId,
+      message: failure.message,
+    });
+  }
+  redirect(
+    ctx.res,
+    `/dashboard/guilds/${encodePathSegment(guildId)}/config/drift?imported=${result.modulesWritten}&failed=${result.failures.length}`,
+  );
   return true;
 }
 

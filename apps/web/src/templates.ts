@@ -1,6 +1,8 @@
-import { createHash } from "node:crypto";
-import type { SettingsValueChange } from "@keystone/kernel";
-import type { SettingsIssue } from "./settings-form";
+import {
+  planFingerprint,
+  type SettingsPlanGuild,
+  type SettingsPlanModule,
+} from "./settings-plan";
 
 /**
  * Built-in configuration templates.
@@ -101,21 +103,8 @@ export function findTemplate(id: string): ConfigTemplate | undefined {
   return CONFIG_TEMPLATES.find((template) => template.id === id);
 }
 
-export interface TemplateModulePlan {
-  readonly moduleId: string;
-  readonly moduleName: string;
-  readonly changes: Readonly<Record<string, SettingsValueChange>>;
-  /** The schema-parsed result; absent when the module cannot be applied. */
-  readonly target?: Readonly<Record<string, unknown>>;
-  readonly issues: readonly SettingsIssue[];
-}
-
-export interface TemplateGuildPlan {
-  readonly guild: { readonly id: string; readonly name: string };
-  readonly modules: readonly TemplateModulePlan[];
-  readonly changeCount: number;
-  readonly issueCount: number;
-}
+export type TemplateModulePlan = SettingsPlanModule;
+export type TemplateGuildPlan = SettingsPlanGuild;
 
 export interface TemplatePlan {
   readonly template: {
@@ -168,26 +157,5 @@ export function templateFingerprint(
   templateId: string,
   guilds: readonly TemplateGuildPlan[],
 ): string {
-  const canonical = {
-    template: templateId,
-    guilds: [...guilds]
-      .sort((left, right) => left.guild.id.localeCompare(right.guild.id))
-      .map((guild) => ({
-        guild: guild.guild.id,
-        modules: guild.modules
-          .filter((module) => module.issues.length === 0 && module.target)
-          .sort((left, right) => left.moduleId.localeCompare(right.moduleId))
-          .map((module) => ({
-            module: module.moduleId,
-            target: module.target,
-            // Include the before/after leaves, not only the target: an external
-            // change can leave the target identical while making the displayed
-            // diff stale.
-            changes: Object.keys(module.changes)
-              .sort()
-              .map((path) => [path, module.changes[path]]),
-          })),
-      })),
-  };
-  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+  return planFingerprint(`template:${templateId}`, guilds);
 }

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   InMemoryAuditStore,
+  InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
@@ -18,6 +19,7 @@ import { AuthService } from "./auth";
 import { SecretBox, sha256 } from "./crypto";
 import { createWebHandler } from "./server";
 import { DashboardService } from "./overview";
+import type { ConfigBundle } from "./config-bundle";
 import type { DiscordGuild, DiscordOAuth } from "./oauth";
 
 const GUILD_A = "111111111111111111";
@@ -67,6 +69,7 @@ interface Harness {
   sessions: SessionStore;
   settings: SettingsService;
   audit: InMemoryAuditStore;
+  baselines: InMemoryConfigBaselineStore;
   close(): Promise<void>;
 }
 
@@ -84,6 +87,7 @@ async function harness(): Promise<Harness> {
   const registry = new ModuleRegistry().registerAll(modules);
   const audit = new InMemoryAuditStore();
   const settings = new SettingsService(new InMemorySettingsRepository(), registry, audit);
+  const baselines = new InMemoryConfigBaselineStore();
   const auth = new AuthService({
     oauth,
     sessions,
@@ -99,7 +103,7 @@ async function harness(): Promise<Harness> {
   const handler = createWebHandler({
     auth,
     access: new GuildAccessService(oauth),
-    dashboard: new DashboardService(registry, settings, dashboardStore, audit),
+    dashboard: new DashboardService(registry, settings, dashboardStore, audit, baselines),
     logger: createSilentLogger(),
     secureCookies: false,
     databaseMode: "memory",
@@ -115,6 +119,7 @@ async function harness(): Promise<Harness> {
     sessions,
     settings,
     audit,
+    baselines,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -215,6 +220,55 @@ async function login(test: Harness): Promise<{ cookie: string; csrf: string }> {
   expect(cookie).toBeTruthy();
   expect(csrf).toBeTruthy();
   return { cookie: `keystone_session=${cookie}`, csrf: csrf as string };
+}
+
+async function downloadConfig(
+  test: Harness,
+  cookie: string,
+  guildId: string,
+): Promise<ConfigBundle> {
+  const response = await fetch(`${test.base}/dashboard/guilds/${guildId}/config/export`, {
+    headers: { cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("application/json");
+  expect(response.headers.get("content-disposition")).toContain(
+    `keystone-config-${guildId}.json`,
+  );
+  return (await response.json()) as ConfigBundle;
+}
+
+function multipartConfig(
+  fields: Record<string, string>,
+  file: { name: string; content: string },
+): { body: string; contentType: string } {
+  const boundary = "----keystone-config-test";
+  const parts = Object.entries(fields).map(
+    ([key, value]) =>
+      `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`,
+  );
+  parts.push(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/json\r\n\r\n${file.content}\r\n`,
+  );
+  parts.push(`--${boundary}--\r\n`);
+  return {
+    body: parts.join(""),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
+async function postConfigUpload(
+  test: Harness,
+  cookie: string,
+  path: string,
+  upload: { body: string; contentType: string },
+): Promise<Response> {
+  return fetch(`${test.base}${path}`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { cookie, "content-type": upload.contentType },
+    body: upload.body,
+  });
 }
 
 describe("P6 web auth and authorization", () => {
@@ -649,6 +703,241 @@ describe("P6 web auth and authorization", () => {
       expect(response.status).toBe(403);
       expect(await test.settings.get(GUILD_A, "moderation")).toMatchObject({ dryRun: true });
       expect(test.audit.records(GUILD_A)).toEqual([]);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("exports a checksummed config bundle for an authorized guild only", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const bundle = await downloadConfig(test, cookie, GUILD_A);
+      expect(bundle.sourceGuildId).toBe(GUILD_A);
+      expect(bundle.modules).toHaveLength(12);
+      expect(bundle.modules.map((module) => module.id)).toContain("ai");
+      expect(bundle.checksum).toMatch(/^[a-f0-9]{64}$/);
+      expect(JSON.stringify(bundle)).not.toContain(ACCESS_TOKEN);
+      expect(bundle.modules.find((module) => module.id === "ai")?.settings)
+        .toMatchObject({ monthlyBudgetUsd: 1 });
+
+      const nonAdmin = await fetch(`${test.base}/dashboard/guilds/${GUILD_B}/config/export`, {
+        headers: { cookie },
+      });
+      expect(nonAdmin.status).toBe(403);
+      const noBot = await fetch(`${test.base}/dashboard/guilds/${GUILD_C}/config/export`, {
+        headers: { cookie },
+      });
+      expect(noBot.status).toBe(403);
+      const signedOut = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/config/export`);
+      expect(signedOut.status).toBe(401);
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("previews an uploaded bundle, refuses a bad file and a stale apply, then writes one audited baseline", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      await test.settings.update(GUILD_A, "ai", {
+        enabled: true,
+        chat: true,
+        monthlyBudgetUsd: 7,
+      });
+      const bundle = await downloadConfig(test, cookie, GUILD_A);
+
+      const preview = await postConfigUpload(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/preview`,
+        multipartConfig({ csrf }, {
+          name: "alpha.json",
+          content: JSON.stringify(bundle),
+        }),
+      );
+      expect(preview.status).toBe(200);
+      const previewHtml = await preview.text();
+      expect(previewHtml).toContain("Nothing has been written yet");
+      expect(previewHtml).toContain("Monthly budget USD");
+      expect(previewHtml).toContain("3 changes");
+      expect(previewHtml).toContain('name="fingerprint"');
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 1 });
+      expect(test.audit.records(GUILD_D)).toEqual([]);
+      expect(await test.baselines.get(GUILD_D)).toBeUndefined();
+
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(previewHtml)?.[1];
+      expect(fingerprint).toBeTruthy();
+
+      const edited = JSON.stringify({ ...bundle, checksum: "0".repeat(64) });
+      const badFile = await postConfigUpload(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/preview`,
+        multipartConfig({ csrf }, { name: "edited.json", content: edited }),
+      );
+      expect(badFile.status).toBe(400);
+      expect(await badFile.text()).toContain("checksum");
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 1 });
+      expect(test.audit.records(GUILD_D)).toEqual([]);
+
+      const stale = new URLSearchParams({
+        csrf,
+        fingerprint: "0".repeat(64),
+        bundle: JSON.stringify(bundle),
+      });
+      const refused = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/apply`,
+        stale,
+      );
+      expect(refused.status).toBe(409);
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 1 });
+      expect(test.audit.records(GUILD_D)).toEqual([]);
+
+      const apply = new URLSearchParams({
+        csrf,
+        fingerprint: fingerprint as string,
+        bundle: JSON.stringify(bundle),
+      });
+      const applied = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/apply`,
+        apply,
+      );
+      expect(applied.status).toBe(302);
+      expect(applied.headers.get("location")).toBe(
+        `/dashboard/guilds/${GUILD_D}/config/drift?imported=1&failed=0`,
+      );
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({
+        enabled: true,
+        chat: true,
+        monthlyBudgetUsd: 7,
+      });
+      expect(test.audit.records(GUILD_D)).toMatchObject([
+        {
+          actorId: USER,
+          action: "settings.update",
+          targetId: "ai",
+          data: { source: "dashboard" },
+        },
+      ]);
+      const baseline = await test.baselines.get(GUILD_D);
+      expect(baseline?.checksum).toBe(bundle.checksum);
+      expect(baseline?.source).toBe("import");
+
+      const clean = await fetch(
+        `${test.base}/dashboard/guilds/${GUILD_D}/config/drift?imported=1&failed=0`,
+        { headers: { cookie } },
+      );
+      expect(clean.status).toBe(200);
+      const cleanHtml = await clean.text();
+      expect(cleanHtml).toContain("Imported: 1 module setting");
+      expect(cleanHtml).toContain("No drift");
+
+      await test.settings.update(GUILD_D, "ai", { monthlyBudgetUsd: 3 });
+      const drifted = await fetch(`${test.base}/dashboard/guilds/${GUILD_D}/config/drift`, {
+        headers: { cookie },
+      });
+      expect(drifted.status).toBe(200);
+      const driftHtml = await drifted.text();
+      expect(driftHtml).toContain("Monthly budget USD");
+      expect(driftHtml).toContain("1 change");
+      expect(driftHtml).toContain("<code>7</code>");
+      expect(driftHtml).toContain("<code>3</code>");
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("invalidates an import preview when a setting changes before apply", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      await test.settings.update(GUILD_A, "ai", { monthlyBudgetUsd: 8 });
+      const bundle = await downloadConfig(test, cookie, GUILD_A);
+      const preview = await postConfigUpload(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/preview`,
+        multipartConfig({ csrf }, { name: "alpha.json", content: JSON.stringify(bundle) }),
+      );
+      const fingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(
+        await preview.text(),
+      )?.[1];
+      expect(fingerprint).toBeTruthy();
+
+      await test.settings.update(GUILD_D, "ai", { monthlyBudgetUsd: 4 });
+      const apply = new URLSearchParams({
+        csrf,
+        fingerprint: fingerprint as string,
+        bundle: JSON.stringify(bundle),
+      });
+      const stale = await postSettingsForm(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/apply`,
+        apply,
+      );
+      expect(stale.status).toBe(409);
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 4 });
+      expect(await test.baselines.get(GUILD_D)).toBeUndefined();
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("requires CSRF and guild authorization for a config import", async () => {
+    const test = await harness();
+    try {
+      const { cookie, csrf } = await login(test);
+      const bundle = await downloadConfig(test, cookie, GUILD_A);
+      const noCsrf = await postConfigUpload(
+        test,
+        cookie,
+        `/dashboard/guilds/${GUILD_D}/config/import/preview`,
+        multipartConfig({}, { name: "alpha.json", content: JSON.stringify(bundle) }),
+      );
+      expect(noCsrf.status).toBe(403);
+
+      for (const guildId of [GUILD_B, GUILD_C]) {
+        const response = await postConfigUpload(
+          test,
+          cookie,
+          `/dashboard/guilds/${guildId}/config/import/preview`,
+          multipartConfig({ csrf }, { name: "alpha.json", content: JSON.stringify(bundle) }),
+        );
+        expect(response.status).toBe(403);
+      }
+
+      const signedOut = await postConfigUpload(
+        test,
+        "",
+        `/dashboard/guilds/${GUILD_D}/config/import/preview`,
+        multipartConfig({ csrf }, { name: "alpha.json", content: JSON.stringify(bundle) }),
+      );
+      expect(signedOut.status).toBe(401);
+      expect(await test.settings.get(GUILD_D, "ai")).toMatchObject({ monthlyBudgetUsd: 1 });
+      expect(await test.baselines.get(GUILD_D)).toBeUndefined();
+    } finally {
+      await test.close();
+    }
+  });
+
+  it("shows an empty baseline instead of inventing drift", async () => {
+    const test = await harness();
+    try {
+      const { cookie } = await login(test);
+      const page = await fetch(`${test.base}/dashboard/guilds/${GUILD_A}/config/drift`, {
+        headers: { cookie },
+      });
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain("No baseline yet");
+      expect(html).toContain("Download config bundle");
+      expect(html).not.toContain("No drift");
     } finally {
       await test.close();
     }

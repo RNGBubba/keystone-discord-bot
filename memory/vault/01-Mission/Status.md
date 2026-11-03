@@ -2,6 +2,26 @@
 
 ## Now
 
+**Pass 51 built the P6 config export, import and drift slice** (2026-11-03):
+`GET /dashboard/guilds/:id/config/export` downloads a guild's effective module
+settings as a checksummed `keystone.config` JSON file; credential-shaped keys
+are omitted. Import accepts a multipart file, verifies kind/version, every
+registered module, the SHA-256 checksum and each module's own Zod schema, then
+shows the exact per-setting diff without writing. Apply is bound to a SHA-256
+fingerprint of that plan; an edited checksum is refused at `400`, a stale
+preview at `409`, and each changed module goes through `SettingsService.update`
+with one dashboard audit row. Migration 0015 adds `config_baselines`, so the
+applied bundle becomes the guild's baseline and the drift page compares baseline
+to live, names an absent baseline, and reports a stored row that no longer
+parses. The carrier remains the framework-free `apps/web` HTML app; no Next.js
+shell, template table or second settings schema was added. Tests are **515 / 76
+files**; `pnpm probe:live` is **16/16**, adding
+`web-config-export-import-drift`: real local HTTP on Postgres, a 12-module file
+export, multipart upload, preview with no write, `400`/`409` refusals, one
+audited apply, a stored baseline, no drift, then one changed value after an
+out-of-band update. The OAuth exchange used a fake port; live Discord OAuth
+remains open. See [pass 51](../../journal/2026-11-03-pass-51.md).
+
 **Pass 50 built the P6 fleet slice** (2026-11-03): `/dashboard/fleet` lists the
 guilds the signed-in user can manage with their enabled modules. Three built-in
 templates — alert-first moderation, strict moderation and quiet optional modules
@@ -458,8 +478,11 @@ Pass 49 generated the settings editor from each module's own schema and made
 every accepted settings change append an `audit_events` row, so an edit is one
 generic, schema-declared path rather than a hand-built form per module. Pass 50
 added the fleet view and three built-in templates that preview a per-guild diff
-and apply through that same path. The remaining P6 exit items are custom saved
-templates, token refresh and revocation, and scoped API tokens. See
+and apply through that same path. Pass 51 added checksummed config export, a
+previewed and audited import, and a baseline drift page through the same
+schemas and write path. The remaining P6 exit items are custom saved templates,
+analytics aggregates, session refresh/revocation, per-route rate limits,
+`owners[]` and scoped API tokens. See
 [[Dashboard]] and [[ADR-0016-dashboard-foundation]].
 
 **P5 is complete in-repo** (pass 13, 2026-10-31): a versioned export bundle with
@@ -532,15 +555,16 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 502 tests / 74 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 15/15 · memory current
+pnpm check        exit 0 · typecheck 0 · 515 tests / 76 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 16/16 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
 live commands     2026-11-01 · !ping · !about · !help commands · !help browse · !help search query=ban · !ai status · !mod history · !mod links · !mod filters · !rank leaderboard · !invites leaderboard · !invites who · !logging status · !logging events · !logging retention · !logging export · !config list · !config get · !config set · !export guild · !export user · !export drift · !music status · !music add · !music queue · !music play · !music remove · !music skip · !appeal open · !appeal status · !verify start · !verify status · !event create · !event edit · !event rsvp · !event list · !event remind · !event export · !modmail setup · !modmail open · !modmail reply · !modmail close · !modmail transcript · !modmail stats
 live slash harness 2026-11-01 · nested /mod ban through asInteractionLike + dispatch · case #1 + ban port · unknown subcommand rejected
-live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 14/14 migrations · Redis reachable · pnpm probe:live 15/15 · /healthz database=postgres · migration runner transaction defect fixed
+live substrate  2026-11-03 UTC · Docker 29.9.2 · Postgres 16.15 with 15/15 migrations · Redis reachable · pnpm probe:live 16/16 · /healthz database=postgres · migration runner transaction defect fixed
 live web widgets 2026-11-03 UTC · real local HTTP login/session/CSRF · AI form generated from schema · saved 9 · one audit row actor live-probe-web-user source dashboard · 5000 rejected at 400 with field preserved · OAuth exchange fake, live Discord OAuth open
 live fleet     2026-11-03 UTC · real local HTTP fleet page listed two Postgres-backed guilds · strict-moderation preview diff · wrong fingerprint 409 · apply 302 · one moderation write + one dashboard audit row per guild · OAuth exchange fake
+live config portability 2026-11-03 UTC · real local HTTP on Postgres · 12-module checksummed file export · multipart import preview with no write · edited checksum 400 · wrong fingerprint 409 · apply 302, one audited AI write, baseline stored · no drift, then one changed value after an out-of-band update · OAuth exchange fake
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused

@@ -10,6 +10,7 @@
   "dependencies": {
     "@keystone/config": "workspace:*",
     "@keystone/db": "workspace:*",
+    "@keystone/importer": "workspace:*",
     "@keystone/kernel": "workspace:*",
     "@keystone/module-catalog": "workspace:*",
     "dotenv": "^16.4.0",

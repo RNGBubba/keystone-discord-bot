@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Env } from "@keystone/config";
 import {
   InMemoryAuditStore,
+  InMemoryConfigBaselineStore,
   InMemoryDashboardStore,
   InMemorySessionStore,
   InMemorySettingsRepository,
@@ -9,6 +10,7 @@ import {
   SettingsService,
   createLogger,
   type AuditStore,
+  type ConfigBaselineStore,
   type DashboardStore,
   type Logger,
   type SessionStore,
@@ -16,6 +18,7 @@ import {
 } from "@keystone/kernel";
 import {
   createAuditStore,
+  createConfigBaselineStore,
   createDashboardStore,
   createPostgresDatabase,
   createSessionStore,
@@ -65,12 +68,14 @@ export function createWebRuntime(env: Env): WebRuntime {
   let sessions: SessionStore;
   let dashboardStore: DashboardStore;
   let auditStore: AuditStore;
+  let baselineStore: ConfigBaselineStore;
   if (env.DATABASE_URL) {
     database = createPostgresDatabase(env.DATABASE_URL);
     settingsRepository = createSettingsRepository(database);
     sessions = createSessionStore(database);
     dashboardStore = createDashboardStore(database);
     auditStore = createAuditStore(database);
+    baselineStore = createConfigBaselineStore(database);
     logger.info("web data: postgres");
   } else {
     logger.warn("DATABASE_URL is not set — web sessions, audit rows and dashboard reads are process-local.");
@@ -78,6 +83,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     sessions = new InMemorySessionStore();
     dashboardStore = new InMemoryDashboardStore();
     auditStore = new InMemoryAuditStore();
+    baselineStore = new InMemoryConfigBaselineStore();
   }
 
   const origin = env.WEB_ORIGIN ?? `http://localhost:${env.WEB_PORT}`;
@@ -126,6 +132,7 @@ export function createWebRuntime(env: Env): WebRuntime {
     new SettingsService(settingsRepository, registry, auditStore),
     dashboardStore,
     auditStore,
+    baselineStore,
   );
   const handler = createWebHandler({
     auth,

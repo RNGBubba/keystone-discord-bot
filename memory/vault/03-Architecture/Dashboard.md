@@ -27,6 +27,10 @@ remains a later option, not a requirement for the P6 settings surface.
 | `GET /dashboard/guilds/:id` | session + guild authz | Overview page |
 | `GET /dashboard/guilds/:id/settings/:module` | session + guild authz | Schema-generated settings widgets plus the module audit trail |
 | `POST /dashboard/guilds/:id/settings/:module` | session + guild authz + CSRF | Parse named widgets, save through the module schema, re-render field errors on rejection |
+| `GET /dashboard/guilds/:id/config/export` | session + guild authz | Download the guild's effective module settings as a checksummed JSON file |
+| `GET /dashboard/guilds/:id/config/drift` | session + guild authz | Baseline vs live settings, plus the import form |
+| `POST /dashboard/guilds/:id/config/import/preview` | session + guild authz + CSRF | Validate a multipart bundle, schema-check every module and show the exact diff; no writes |
+| `POST /dashboard/guilds/:id/config/import/apply` | session + guild authz + CSRF | Revalidate the previewed bundle, check its fingerprint, write through `SettingsService`, store the baseline |
 | `GET /api/v1/me` | session | The signed-in user; never a token |
 | `GET /api/v1/guilds` | session | Manageable guilds only |
 | `GET /api/v1/guilds/:id/overview` | session + guild authz | Counts, module settings, latest import |
@@ -67,6 +71,15 @@ DashboardService.applyTemplate(guilds, template, fingerprint)
   │  recompute + fingerprint check → SettingsService.update per module → audit
   ▼
 redirect to /dashboard/fleet; no parallel writer
+
+config import: parseConfigBundle → module schemas → previewConfigImport
+  │  checksum → kind/version → module set → Zod → diff (no writes) → fingerprint
+  ▼
+applyConfigImport(guild, bundle, fingerprint)
+  │  recompute + fingerprint check → SettingsService.update per module → audit
+  │  → ConfigBaselineStore.save
+  ▼
+redirect to /dashboard/guilds/:id/config/drift
 ```
 
 Both branches use the same `GuildAccessService.authorize()` result. There is no
@@ -126,6 +139,43 @@ The preview uses `labelFor` from the schema form, so labels match the per-guild
 editor. Templates never contain channel or role ids; destinations remain
 guild-specific.
 
+## Config export, import and drift
+
+This is a settings document, not the full P5 guild bundle. It deliberately
+cannot create or delete cases, members, levels or transcripts.
+
+`apps/web/src/config-bundle.ts` owns the format: `keystone.config` version 1,
+source guild, export time, one `{ id, version, settings }` entry per registered
+module and a SHA-256 checksum over canonical JSON. Export reads effective
+settings through `SettingsService` and strips credential-shaped keys before
+hashing; the file is safe to paste somewhere but cannot restore a token.
+
+Import parses and verifies in order: object shape, kind/version, every registered
+module present exactly once, no unknown modules, checksum, then each module's own
+Zod schema. A structural or checksum failure is one footer issue; a schema
+failure names the module-qualified path. The browser may send a real multipart
+file or the URL-encoded hidden copy the apply form carries. `parseConfigUpload`
+reads the CSRF field from the same body, so the normal session -> guild
+authorization -> CSRF order is preserved before any setting is read.
+
+Preview compares the parsed bundle with live settings using the same
+`diffSettings` helper as the audit row and the template preview; it writes
+nothing. `settings-plan.ts` owns the one plan fingerprint: source seed (template
+id or bundle checksum), each module target and each sorted before/after leaf.
+Apply recomputes the plan, refuses schema issues at `400`, refuses a missing or
+stale fingerprint at `409`, then calls `SettingsService.update` per changed
+module. Each accepted write appends one dashboard audit row; there is no second
+writer.
+
+Migration 0015 adds `config_baselines`, one row per guild, holding the applied
+bundle, checksum and timestamps. The `ConfigBaselineStore` port has an in-memory
+adapter and a Drizzle adapter. Applying a bundle stores it even when the diff is
+empty; a refused preview stores nothing. Drift compares baseline -> live and
+shows exactly the changed leaves. A guild with no baseline is named as such; a
+stored row that no longer parses reports its checksum and an error rather than
+pretending every setting diverged. A full portability restore or deletion clears
+the baseline too.
+
 The guild list is fetched from Discord on each request, so a demotion or removal
 takes effect immediately. There is no browser-held permission cache. A
 sub-resource in a later write route must be checked against the authorized guild
@@ -140,12 +190,14 @@ as well; the URL id alone is never enough.
 | `apps/web/src/auth.ts` | OAuth completion, opaque sessions, CSRF |
 | `apps/web/src/access.ts` | BigInt permissions and the bot-membership check |
 | `apps/web/src/settings-form.ts` | Zod-to-widget model, named-field parser, field-level validation error |
-| `apps/web/src/templates.ts` | Built-in template patches, deep merge, preview fingerprint |
+| `apps/web/src/settings-plan.ts` | Shared plan types and the canonical SHA-256 fingerprint |
+| `apps/web/src/config-bundle.ts` | Config file format, checksum, strict parse and schema validation |
+| `apps/web/src/templates.ts` | Built-in template patches and deep merge |
 | `apps/web/src/overview.ts` | View composition, editor/history, settings update and schema-error mapping; filters credential-shaped settings |
 | `apps/web/src/server.ts` | Error boundary, request context, route dispatch and the final method/404 fallback |
 | `apps/web/src/routes/index.ts` | Ordered route table, the shared guild/module patterns and matching |
 | `apps/web/src/routes/auth.ts` | Health, login, callback, logout and landing handlers |
-| `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, overview and settings editor/form handlers |
+| `apps/web/src/routes/dashboard.ts` | Guild list, fleet preview/apply, config export/import/drift, overview and settings editor/form handlers |
 | `apps/web/src/routes/api.ts` | `/api/v1` reads, settings `PATCH` and the API 404 |
 | `apps/web/src/request-context.ts` | Web dependencies, cookie parsing and the one session lookup per request |
 | `apps/web/src/authorization.ts` | Session check, guild authorization and the one settings-write/CSRF gate |
@@ -154,10 +206,12 @@ as well; the URL id alone is never enough.
 | `apps/web/src/runtime.ts` | Composition root: Postgres or memory, OAuth or degraded |
 | `packages/kernel/src/web.ts` | `SessionStore`, `DashboardStore`, `WebSession` |
 | `packages/kernel/src/audit.ts` | `AuditStore`, in-memory adapter and the settings diff |
+| `packages/kernel/src/baselines.ts` | `ConfigBaselineStore` and its in-memory adapter |
 | `packages/kernel/src/settings.ts` | Schema validation, optional clear, audit append |
 | `packages/db/src/web-session-store.ts` | Drizzle session adapter |
 | `packages/db/src/web-dashboard-store.ts` | Guild-scoped aggregate read model |
 | `packages/db/src/audit-store.ts` | Drizzle `audit_events` adapter |
+| `packages/db/src/config-baseline-store.ts` | Drizzle `config_baselines` adapter |
 | `packages/module-catalog` | The one module list shared with the bot |
 
 The kernel owns the contracts; `packages/db` owns SQL; `apps/web` owns HTTP and
@@ -200,7 +254,7 @@ server or a browser.
 
 ## Deliberately not done yet
 
-- Custom saved templates and bulk actions beyond the three built-ins.
+- Custom saved templates, analytics aggregates and bulk actions beyond the three built-ins.
 - Token refresh/rotation, Discord token revocation on logout, idle timeout.
   No refresh token is stored until that path exists; the session re-authenticates
   when its access token expires.

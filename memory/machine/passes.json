@@ -666,6 +666,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-51",
+      "date": "2026-11-03",
+      "phase": "P6",
+      "summary": "P6 config export, import and drift: a guild's effective module settings download as a checksummed JSON bundle (credential-shaped keys omitted), and import parses and schema-validates the file before previewing the exact per-setting diff. Apply is bound to a SHA-256 fingerprint of the displayed plan, refuses an edited checksum at 400 and a stale preview at 409, reuses SettingsService.update (one dashboard audit row per module) and stores the applied bundle as the guild's baseline. A new config_baselines table (migration 0015) and ConfigBaselineStore port power a drift page that compares baseline to live and reports unreadable or absent baselines honestly. The carrier is still the framework-free apps/web app; no Next.js shell, template table or second settings schema was added. Tests 515 / 76 files; live probe 16/16, adding web-config-export-import-drift over real local HTTP and Postgres: multipart upload, preview with no write, 400/409 refusals, one audited AI write, stored baseline, no drift, then one drift after an out-of-band change; OAuth exchange used a fake port.",
+      "journal": "journal/2026-11-03-pass-51.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "515",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "16/16",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

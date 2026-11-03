@@ -37,6 +37,26 @@ const routes: readonly Route[] = [
     handler: dashboard.fleetApply,
   },
   {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/config/export`),
+    methods: ["GET"],
+    handler: dashboard.configExport,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/config/drift`),
+    methods: ["GET"],
+    handler: dashboard.configDriftPage,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/config/import/preview`),
+    methods: ["POST"],
+    handler: dashboard.configImportPreview,
+  },
+  {
+    pattern: exact(`/dashboard/guilds/${GUILD_ID}/config/import/apply`),
+    methods: ["POST"],
+    handler: dashboard.configImportApply,
+  },
+  {
     pattern: exact(`/dashboard/guilds/${GUILD_ID}`),
     methods: ["GET"],
     handler: dashboard.guildOverview,

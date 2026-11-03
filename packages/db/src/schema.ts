@@ -219,6 +219,20 @@ export const auditEvents = pgTable(
 );
 
 /**
+ * The last config bundle a guild applied or stored. One row per guild: applying
+ * again replaces the bundle but keeps `created_at`, so drift always compares
+ * against the most recent intent. The live settings stay in `settings`.
+ */
+export const configBaselines = pgTable("config_baselines", {
+  guildId: text("guild_id").primaryKey(),
+  source: text("source").notNull(),
+  bundle: jsonValue("bundle").notNull(),
+  checksum: text("checksum").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * P3 community-owned records: panels, giveaways, tags, feeds and transcript
  * events. The typed level/economy/ticket tables stay the spine; this table is
  * for feature records that do not warrant a new SQL shape yet.
@@ -587,6 +601,7 @@ export const schema = {
   xpEvents,
   economyLedger,
   auditEvents,
+  configBaselines,
   communityRecords,
   aiDocuments,
   aiUsage,

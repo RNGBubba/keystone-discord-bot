@@ -250,8 +250,8 @@ rate-limited register leaves the app with no commands.
   view prints its source row counts; there is no analytics table. Live: two
   stored audit rows matched two logged events, and one MCP edit plus one delete
   produced exactly one edited / one deleted.
-- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 502
-  tests in 74 files.
+- 12 modules, 20 global command roots, 141 subcommands, 4 context menus, 515
+  tests in 76 files.
 - Pass 45 added the first P7 timer slice: temporary bans/roles write
   `expires_at` and schedule one delayed `moderation.expire` job; reminders and
   scheduled messages use the same bot-side `content.deliver` timer. The live
@@ -305,6 +305,20 @@ rate-limited register leaves the app with no commands.
   across two Postgres-backed guilds with a real session and CSRF, refused a
   wrong fingerprint at `409`, and saw one audit row per guild. Custom saved
   templates and JSON fleet endpoints are not built.
+- Pass 51 built the P6 config export/import/drift slice. `GET
+  /dashboard/guilds/:id/config/export` downloads a checksummed settings bundle
+  (kind/version, one entry per module, SHA-256, credential-shaped keys omitted).
+  Import verifies the module set, checksum and each module's own Zod schema,
+  previews the exact per-setting diff and writes nothing; apply is bound to a
+  SHA-256 fingerprint, refuses an edited checksum at `400` and a stale preview at
+  `409`, and calls `SettingsService.update` per changed module so each write
+  appends one dashboard audit row. Migration 0015 adds `config_baselines`; the
+  applied bundle becomes the baseline and the drift page compares baseline to
+  live, names an absent baseline and reports an unreadable stored row. Live probe
+  is 16/16: `web-config-export-import-drift` exported a 12-module file, uploaded
+  it as multipart, previewed without writing, refused `400`/`409`, applied one
+  audited AI write with a stored baseline, saw no drift then exactly one changed
+  value after an out-of-band update. OAuth exchange used a fake port.
 - Live: AI Team#5758 connected; 20 roots and 2 user / 2 message
   menus registered at that run; one bot
   process (two trees were double-posting and were stopped); Qwen3:8b replied in
@@ -339,8 +353,8 @@ rate-limited register leaves the app with no commands.
   answered real HTTP requests; the write path was exercised over real local HTTP
   with a fake OAuth port. Live Discord OAuth is open.
 - Environment: Docker Desktop **29.9.2** runs the repo's compose Postgres
-  **16.15** and Redis; all 14 migrations are applied, and `pnpm probe:live`
-  passed 15/15 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
+  **16.15** and Redis; all 15 migrations are applied, and `pnpm probe:live`
+  passed 16/16 SQL/Redis/queue/service/web checks on 2026-11-03 UTC. `.env` points at
   localhost. The machine evidence is `memory/machine/live.json`; run
   `pnpm probe:live` after touching a SQL, Redis, queue or web path. Memory mode
   is still a supported fallback, not the configured one. Local Ollama is up; a
@@ -351,7 +365,8 @@ rate-limited register leaves the app with no commands.
   role/select/voice paths, a live Discord timer delivery and a live panic
   lockdown (the SQL/service halves are live-proven), a real member leave,
   pgvector ANN benchmark, MEE6 live fetch, live Discord OAuth, custom saved
-  templates, scoped API tokens, and the rest of P7.
+  templates, analytics aggregates, token refresh/revocation, scoped API tokens,
+  and the rest of P7.
 
 When you finish a pass, update `memory/machine/project.json` (`lastPass`,
 `tests`), append to `memory/machine/passes.json`, write the journal, update the

@@ -165,6 +165,15 @@ including the small calls that did not deserve an ADR.
 | 91 | Apply is bound to a SHA-256 fingerprint of the template id, targets and before/after leaves; a missing preview is `400` and a stale one is `409` before any write | [[Dashboard]] |
 | 92 | Custom saved templates, a template editor and JSON fleet endpoints are later P6 work, not part of this slice | [[Dashboard]] |
 
+## 2026-11-03 — P6 config export, import and drift
+
+| # | Decision | Where |
+| --- | --- | --- |
+| 93 | A config bundle is settings-only (`keystone.config` v1), not the P5 full guild bundle; an import must never create or delete cases, members or transcripts | [[Dashboard]], `apps/web/src/config-bundle.ts` |
+| 94 | Import verifies shape, kind/version, the complete module set, a canonical SHA-256 checksum and every module's own Zod schema before any setting is read; credential-shaped keys are omitted on export | [[Dashboard]] |
+| 95 | Apply is bound to a plan fingerprint and reuses `SettingsService.update`; each accepted module write appends one dashboard audit row, and the applied bundle becomes the baseline | [[Dashboard]] |
+| 96 | Drift compares baseline -> live and never treats a missing or unreadable baseline as empty settings; a full portability restore/delete clears the baseline | [[Dashboard]], `packages/db/src/config-baseline-store.ts` |
+
 ## How to add a decision
 
 1. If it changes the contract, write an ADR with **Alternatives**.

@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-51",
+    date: "2026-11-03",
+    summary:
+      "P6 config portability: download a checksummed settings bundle, import one behind a schema-validated preview and a stale-proof apply, and compare a stored baseline with live settings to see drift.",
+    journal: "memory/journal/2026-11-03-pass-51.md",
+  },
+  {
     pass: "pass-50",
     date: "2026-11-03",
     summary:

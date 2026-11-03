@@ -21,6 +21,7 @@ import {
   createAuditStore,
   createCaseStore,
   createCommunityStore,
+  createConfigBaselineStore,
   createDashboardStore,
   createIdempotencyStore,
   createPanicStore,
@@ -52,6 +53,7 @@ import { AuthService } from "../apps/web/src/auth";
 import { SecretBox } from "../apps/web/src/crypto";
 import { DashboardService } from "../apps/web/src/overview";
 import { createWebHandler } from "../apps/web/src/server";
+import type { ConfigBundle } from "../apps/web/src/config-bundle";
 import type { DiscordGuild, DiscordOAuth } from "../apps/web/src/oauth";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -126,6 +128,16 @@ class WebProbeOAuth implements DiscordOAuth {
 function responseCookie(response: Response, name: string): string | undefined {
   const header = response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`));
   return header?.split(";")[0];
+}
+
+function multipartFile(csrf: string, text: string): { body: string; contentType: string } {
+  const boundary = "----keystone-live-probe-config";
+  const body = [
+    `--${boundary}\r\nContent-Disposition: form-data; name="csrf"\r\n\r\n${csrf}\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="guild.json"\r\nContent-Type: application/json\r\n\r\n${text}\r\n`,
+    `--${boundary}--\r\n`,
+  ].join("");
+  return { body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
 function dockerVersion(): { version: string | null; running: boolean } {
@@ -578,6 +590,7 @@ async function main(): Promise<void> {
   {
     const registry = new ModuleRegistry().registerAll(modules);
     const auditStore = createAuditStore(database);
+    const baselineStore = createConfigBaselineStore(database);
     const settings = new SettingsService(createSettingsRepository(database), registry, auditStore);
     const probeOAuth = new WebProbeOAuth();
     const auth = new AuthService({
@@ -600,6 +613,7 @@ async function main(): Promise<void> {
         settings,
         createDashboardStore(database),
         auditStore,
+        baselineStore,
       ),
       logger,
       secureCookies: false,
@@ -848,6 +862,136 @@ async function main(): Promise<void> {
           "real local HTTP fleet page on Postgres listed both guilds; the strict-moderation preview showed the diff without writing; a wrong fingerprint was refused at 409; the previewed plan then wrote one moderation row and one dashboard audit row per guild; OAuth exchange itself used a fake port",
         features: ["operations.multi-server-fleet", "operations.config-templates"],
       });
+
+      // --- Config export, import preview/apply and drift over real HTTP ---------
+      const exported = await fetch(`${base}/dashboard/guilds/${WEB_GUILD}/config/export`, {
+        headers: { cookie },
+      });
+      assert(exported.status === 200, `config export returned ${exported.status}`);
+      assert(
+        (exported.headers.get("content-disposition") ?? "").includes(`keystone-config-${WEB_GUILD}.json`),
+        "the config export is not offered as a file",
+      );
+      const configBundle = (await exported.json()) as ConfigBundle;
+      assert(configBundle.sourceGuildId === WEB_GUILD, "the bundle names the wrong source guild");
+      assert(configBundle.modules.length === registry.listModules().length, "the bundle is missing modules");
+      assert(/^[a-f0-9]{64}$/.test(configBundle.checksum), "the bundle has no SHA-256 checksum");
+
+      const importPath = `/dashboard/guilds/${WEB_GUILD_B}/config/import`;
+      const upload = multipartFile(csrf, JSON.stringify(configBundle));
+      const importPreview = await fetch(`${base}${importPath}/preview`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": upload.contentType },
+        body: upload.body,
+      });
+      assert(importPreview.status === 200, `config preview returned ${importPreview.status}`);
+      const importPreviewHtml = await importPreview.text();
+      assert(importPreviewHtml.includes("Nothing has been written yet"), "the import preview promises no writes");
+      assert(importPreviewHtml.includes("Monthly budget USD"), "the import preview omits the changed setting");
+      const importFingerprint = /name="fingerprint" value="([a-f0-9]{64})"/.exec(importPreviewHtml)?.[1];
+      assert(importFingerprint !== undefined, "the import preview has no fingerprint");
+      assert(
+        (await settings.get(WEB_GUILD_B, "ai")).monthlyBudgetUsd === 1,
+        "the import preview wrote settings",
+      );
+      assert(
+        (await auditStore.list(WEB_GUILD_B, 10)).length === 1,
+        "the import preview wrote an audit row",
+      );
+      assert((await baselineStore.get(WEB_GUILD_B)) === undefined, "the preview stored a baseline");
+
+      const editedUpload = multipartFile(
+        csrf,
+        JSON.stringify({ ...configBundle, checksum: "0".repeat(64) }),
+      );
+      const badImport = await fetch(`${base}${importPath}/preview`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": editedUpload.contentType },
+        body: editedUpload.body,
+      });
+      assert(badImport.status === 400, `an edited bundle returned ${badImport.status}`);
+      assert((await badImport.text()).toLowerCase().includes("checksum"), "the refusal does not name the checksum");
+      assert(
+        (await settings.get(WEB_GUILD_B, "ai")).monthlyBudgetUsd === 1,
+        "an edited bundle changed settings",
+      );
+
+      const staleImport = await fetch(`${base}${importPath}/apply`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrf,
+          fingerprint: "0".repeat(64),
+          bundle: JSON.stringify(configBundle),
+        }).toString(),
+      });
+      assert(staleImport.status === 409, `a stale import returned ${staleImport.status}`);
+      assert((await baselineStore.get(WEB_GUILD_B)) === undefined, "a stale import stored a baseline");
+
+      const appliedImport = await fetch(`${base}${importPath}/apply`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrf,
+          fingerprint: importFingerprint,
+          bundle: JSON.stringify(configBundle),
+        }).toString(),
+      });
+      assert(appliedImport.status === 302, `config apply returned ${appliedImport.status}`);
+      assert(
+        (appliedImport.headers.get("location") ?? "") ===
+          `/dashboard/guilds/${WEB_GUILD_B}/config/drift?imported=1&failed=0`,
+        `config apply redirected to ${String(appliedImport.headers.get("location"))}`,
+      );
+      const importedAi = await settings.get(WEB_GUILD_B, "ai");
+      assert(importedAi.monthlyBudgetUsd === 9, `imported budget is ${String(importedAi.monthlyBudgetUsd)}`);
+      assert(importedAi.enabled === true && importedAi.chat === true, "the import did not enable AI chat");
+      const importRows = await auditStore.list(WEB_GUILD_B, 10);
+      assert(importRows.length === 2, `the import should add one audit row, found ${importRows.length}`);
+      assert(importRows[0]?.actorId === WEB_USER, "the import audit row has the wrong actor");
+      assert(
+        (importRows[0]?.data as { source?: string } | undefined)?.source === "dashboard",
+        "the import audit row does not name the dashboard",
+      );
+      assert(
+        JSON.stringify((importRows[0]?.data as { changes?: unknown } | undefined)?.changes).includes(
+          "monthlyBudgetUsd",
+        ),
+        "the import audit row does not name the changed setting",
+      );
+      const baseline = await baselineStore.get(WEB_GUILD_B);
+      assert(baseline?.checksum === configBundle.checksum, "the applied bundle is not the stored baseline");
+
+      const cleanDrift = await fetch(`${base}/dashboard/guilds/${WEB_GUILD_B}/config/drift?imported=1&failed=0`, {
+        headers: { cookie },
+      });
+      assert(cleanDrift.status === 200, `drift page returned ${cleanDrift.status}`);
+      const cleanDriftHtml = await cleanDrift.text();
+      assert(cleanDriftHtml.includes("Imported: 1 module setting"), "the drift page has no import notice");
+      assert(cleanDriftHtml.includes("No drift"), "a just-imported guild reports drift");
+
+      await settings.update(WEB_GUILD_B, "ai", { monthlyBudgetUsd: 3 });
+      const drifted = await fetch(`${base}/dashboard/guilds/${WEB_GUILD_B}/config/drift`, {
+        headers: { cookie },
+      });
+      assert(drifted.status === 200, `drifted page returned ${drifted.status}`);
+      const driftedHtml = await drifted.text();
+      assert(driftedHtml.includes("Monthly budget USD"), "drift does not name the changed setting");
+      assert(driftedHtml.includes("1 change"), "drift did not count one change");
+      assert(driftedHtml.includes("<code>9</code>"), "drift does not show the baseline value");
+      assert(driftedHtml.includes("<code>3</code>"), "drift does not show the live value");
+
+      record({
+        id: "web-config-export-import-drift",
+        status: "pass",
+        detail:
+          "real local HTTP on Postgres: exported a 12-module checksummed bundle as a file; uploaded it to another guild via multipart and previewed the diff without writing; an edited checksum was refused at 400 and a wrong fingerprint at 409; apply wrote one AI row with one dashboard audit row and stored the baseline; drift showed no changes, then exactly one changed value after an out-of-band update; OAuth exchange itself used a fake port",
+        features: ["operations.config-portability"],
+      });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -859,6 +1003,7 @@ async function main(): Promise<void> {
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM audit_events WHERE guild_id = '${WEB_GUILD_B}';
+    DELETE FROM config_baselines WHERE guild_id IN ('${WEB_GUILD}', '${WEB_GUILD_B}');
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD}';
     DELETE FROM settings WHERE guild_id = '${WEB_GUILD_B}';
     DELETE FROM web_sessions WHERE user_id = '${WEB_USER}';

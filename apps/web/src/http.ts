@@ -3,6 +3,8 @@ import { HttpError } from "./http-error";
 
 const MAX_BODY_BYTES = 2_048;
 const MAX_SETTINGS_BYTES = 32 * 1024;
+/** Enough for a 1 MB bundle plus multipart or URL-encoding overhead. */
+const MAX_CONFIG_BODY_BYTES = 4 * 1024 * 1024;
 
 export function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
@@ -110,6 +112,75 @@ export interface SettingsFormBody {
 export async function parseSettingsFormBody(req: IncomingMessage): Promise<SettingsFormBody> {
   const params = new URLSearchParams(await parseBody(req, MAX_SETTINGS_BYTES));
   return { csrf: params.get("csrf") ?? undefined, params };
+}
+
+export interface ConfigUpload {
+  readonly csrf: string | undefined;
+  readonly text: string;
+  readonly filename: string | undefined;
+  readonly fields: ReadonlyMap<string, string>;
+}
+
+/**
+ * Read a config file from either a multipart file field or a URL-encoded
+ * `bundle` field. The apply page carries the previewed JSON in a hidden
+ * textarea, so the same parser serves both steps; the bundle checksum is what
+ * proves the second copy is the file the operator saw.
+ */
+export async function parseConfigUpload(req: IncomingMessage): Promise<ConfigUpload> {
+  const contentType = req.headers["content-type"] ?? "";
+  const raw = await parseBody(req, MAX_CONFIG_BODY_BYTES);
+  if (contentType.toLowerCase().startsWith("multipart/form-data")) {
+    return parseMultipartConfig(raw, contentType);
+  }
+
+  const params = new URLSearchParams(raw);
+  const text = params.get("bundle") ?? "";
+  const fields = new Map<string, string>();
+  for (const [key, value] of params.entries()) fields.set(key, value);
+  return {
+    csrf: params.get("csrf") ?? undefined,
+    text,
+    filename: params.get("filename")?.trim() || undefined,
+    fields,
+  };
+}
+
+function parseMultipartConfig(raw: string, contentType: string): ConfigUpload {
+  const boundaryMatch = /boundary="?([^";]+)"?/i.exec(contentType);
+  if (!boundaryMatch?.[1]) {
+    // No boundary means no CSRF field either; let the write gate return its
+    // normal 403 instead of a parser error that runs before authorization.
+    return { csrf: undefined, text: "", filename: undefined, fields: new Map() };
+  }
+
+  const boundary = `--${boundaryMatch[1]}`;
+  const fields = new Map<string, string>();
+  let text = "";
+  let filename: string | undefined;
+
+  for (const part of raw.split(boundary).slice(1, -1)) {
+    const piece = part.replace(/^\r\n/, "").replace(/\r\n$/, "");
+    const separator = piece.indexOf("\r\n\r\n");
+    if (separator < 0) continue;
+    const headers = piece.slice(0, separator);
+    const body = piece.slice(separator + 4).replace(/\r\n$/, "");
+    const name = /name="([^"]+)"/i.exec(headers)?.[1];
+    if (!name) continue;
+    fields.set(name, body);
+    if (name === "csrf") continue;
+    if (name === "file" || name === "bundle") {
+      text = body;
+      filename = /filename="([^"]*)"/i.exec(headers)?.[1] || undefined;
+    }
+  }
+
+  return {
+    csrf: fields.get("csrf"),
+    text,
+    filename,
+    fields,
+  };
 }
 
 export function csrfHeader(req: IncomingMessage): string | undefined {

@@ -128,7 +128,8 @@ before a UI framework was added; settings writes followed through the same gate.
   renders the newest rows (pass 49).
 - [x] Fleet view and built-in config templates with an explicit schema-validated
   preview, per-guild authorization and fingerprint-gated apply (pass 50).
-- [ ] Custom saved templates; import/export/drift surfaces; analytics aggregates.
+- [x] Config export, import and drift: a checksummed settings file, a schema-validated preview, a fingerprint-gated apply through `SettingsService`, one audit row per module and a stored baseline for drift (pass 51).
+- [ ] Custom saved templates; analytics aggregates.
 - [ ] Session refresh/rotation and Discord token revocation on logout; per-route
   rate limits; `owners[]` for instance-wide actions.
 - [ ] Public API v1: hashed scoped tokens, OpenAPI, `Idempotency-Key`, webhooks,

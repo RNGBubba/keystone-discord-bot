@@ -282,6 +282,9 @@ importers:
       '@keystone/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@keystone/importer':
+        specifier: workspace:*
+        version: link:../../packages/importer
       '@keystone/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel

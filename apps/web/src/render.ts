@@ -1,9 +1,10 @@
 import type { AuditEventRecord } from "@keystone/kernel";
 import type { DashboardModule, DashboardView, FleetView } from "./overview";
+import type { ConfigDrift, ConfigPlan } from "./config-bundle";
 import type { DiscordGuild } from "./oauth";
 import { encodePathSegment } from "./http";
 import { labelFor, type SettingsField, type SettingsFormModel, type SettingsGroup } from "./settings-form";
-import type { ConfigTemplate, TemplatePlan } from "./templates";
+import type { ConfigTemplate, TemplateGuildPlan, TemplatePlan } from "./templates";
 
 function escapeHtml(value: string): string {
   return value
@@ -134,6 +135,10 @@ export function renderOverview(
      <p class="muted">Guild ${escapeHtml(view.guild.id)} · P6 foundation · settings writes enabled</p>
      <div class="grid">${stats}</div>
      <div class="panel"><h2>Portability</h2>${latest}</div>
+     <div class="panel"><h2>Config export, import and drift</h2>
+       <p class="muted">Download this server's effective module settings as a checksummed JSON file, import a file from another server behind a preview, or compare live settings with the last baseline.</p>
+       <p><a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/config/export">Download config bundle</a> · <a href="/dashboard/guilds/${encodePathSegment(view.guild.id)}/config/drift">Import a bundle and inspect drift</a></p>
+     </div>
      ${modules}
      <p class="muted">Settings are validated by each module's own schema. <a href="/dashboard/fleet">Preview a built-in template across servers</a>.</p>
      ${logoutForm(csrfToken)}`,
@@ -229,6 +234,24 @@ export function renderFleet(
   );
 }
 
+function renderPlanRows(modules: TemplateGuildPlan["modules"]): string {
+  return modules
+    .flatMap((module) => {
+      const issueRows = module.issues.map(
+        (issue) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
+          issue.path.split(".").map(labelFor).join(" · "),
+        )}</td><td colspan="2" class="error">${escapeHtml(issue.message)}</td></tr>`,
+      );
+      const changeRows = Object.entries(module.changes).map(
+        ([path, change]) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
+          path.split(".").map(labelFor).join(" · "),
+        )}</td><td><code>${escapeHtml(settingText(change.from))}</code></td><td><code>${escapeHtml(settingText(change.to))}</code></td></tr>`,
+      );
+      return [...issueRows, ...changeRows];
+    })
+    .join("");
+}
+
 export function renderTemplatePreview(
   username: string,
   plan: TemplatePlan,
@@ -240,25 +263,9 @@ export function renderTemplatePreview(
         return `<div class="panel"><h2>${escapeHtml(guildPlan.guild.name)}</h2><p class="muted">No changes in this guild.</p></div>`;
       }
 
-      const rows = guildPlan.modules
-        .flatMap((module) => {
-          const issueRows = module.issues.map(
-            (issue) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
-              issue.path.split(".").map(labelFor).join(" · "),
-            )}</td><td colspan="2" class="error">${escapeHtml(issue.message)}</td></tr>`,
-          );
-          const changeRows = Object.entries(module.changes).map(
-            ([path, change]) => `<tr><td>${escapeHtml(module.moduleName)}</td><td>${escapeHtml(
-              path.split(".").map(labelFor).join(" · "),
-            )}</td><td><code>${escapeHtml(settingText(change.from))}</code></td><td><code>${escapeHtml(settingText(change.to))}</code></td></tr>`,
-          );
-          return [...issueRows, ...changeRows];
-        })
-        .join("");
-
       return `<div class="panel">
         <h2>${escapeHtml(guildPlan.guild.name)} <span class="muted">· ${escapeHtml(guildPlan.guild.id)}</span></h2>
-        <table><thead><tr><th>Module</th><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Module</th><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${renderPlanRows(guildPlan.modules)}</tbody></table>
       </div>`;
     })
     .join("");
@@ -290,6 +297,114 @@ export function renderTemplatePreview(
      <div class="notice">${escapeHtml(summary)}</div>
      ${panels}
      ${apply}
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export function renderConfigPreview(
+  username: string,
+  plan: ConfigPlan,
+  bundleText: string,
+  csrfToken: string,
+): string {
+  const rows = plan.modules.length === 0
+    ? `<p class="muted">No changes: this guild already matches the bundle.</p>`
+    : `<table><thead><tr><th>Module</th><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${renderPlanRows(plan.modules)}</tbody></table>`;
+  const summary = plan.issueCount > 0
+    ? `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"}; ${plan.issueCount} schema issue${plan.issueCount === 1 ? "" : "s"}. Apply is disabled.`
+    : `${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"} in ${plan.guild.name}. Nothing has been written yet.`;
+  const action = `/dashboard/guilds/${encodePathSegment(plan.guild.id)}/config/import/apply`;
+  const apply = plan.issueCount > 0
+    ? `<div class="form-error">This bundle cannot be applied. Fix the reported fields and import it again.</div>`
+    : `<form method="post" action="${action}">
+        <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+        <input type="hidden" name="fingerprint" value="${escapeHtml(plan.fingerprint)}">
+        <textarea name="bundle" hidden>${escapeHtml(bundleText)}</textarea>
+        <p><button type="submit">Apply ${plan.changeCount} change${plan.changeCount === 1 ? "" : "s"}</button></p>
+      </form>`;
+
+  return layout(
+    "Config import preview",
+    `<p><a href="/dashboard/guilds/${encodePathSegment(plan.guild.id)}/config/drift">← Back to config and drift</a></p>
+     <h1>Config import preview</h1>
+     <p class="muted">Bundle from guild ${escapeHtml(plan.bundle.sourceGuildId)} · exported ${escapeHtml(plan.bundle.exportedAt)} · checksum <code>${escapeHtml(plan.bundle.checksum.slice(0, 12))}…</code> · ${plan.bundle.moduleCount} modules</p>
+     <div class="notice">${escapeHtml(summary)}</div>
+     <div class="panel"><h2>${escapeHtml(plan.guild.name)}</h2>${rows}</div>
+     <div class="panel">
+       <p class="muted">Apply re-parses and re-validates this exact file, recomputes the plan and refuses it if the checksum, the schemas or this guild's settings changed after the preview. Each accepted module write appends one dashboard audit row, and the bundle becomes this guild's baseline for drift.</p>
+       ${apply}
+     </div>
+     ${logoutForm(csrfToken)}`,
+    username,
+  );
+}
+
+export interface ConfigDriftOptions {
+  readonly imported?: number;
+  readonly failed?: number;
+  readonly importError?: string;
+}
+
+function configTime(ms: number): string {
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? "unknown" : `${date.toISOString().replace("T", " ").slice(0, 19)} UTC`;
+}
+
+export function renderConfigDrift(
+  username: string,
+  guild: DiscordGuild,
+  drift: ConfigDrift,
+  csrfToken: string,
+  options: ConfigDriftOptions = {},
+): string {
+  const base = `/dashboard/guilds/${encodePathSegment(guild.id)}/config`;
+  const notice = options.imported !== undefined
+    ? `<div class="notice">Imported: ${options.imported} module setting${options.imported === 1 ? "" : "s"} written. Each accepted module write is in the audit trail, and this bundle is now the drift baseline.</div>`
+    : "";
+  const failure = options.failed && options.failed > 0
+    ? `<div class="form-error">${options.failed} module write${options.failed === 1 ? "" : "s"} failed. The baseline was stored; review the audit trail and apply again.</div>`
+    : "";
+  const error = options.importError || drift.error;
+  const errorHtml = error
+    ? `<div class="form-error">${escapeHtml(error)}</div>`
+    : "";
+
+  const baseline = drift.baseline
+    ? `<div class="panel"><h2>Baseline</h2>
+        <p class="muted">source ${escapeHtml(drift.baseline.source)} · exported ${escapeHtml(drift.baseline.exportedAt || "unknown")} · from guild ${escapeHtml(drift.baseline.sourceGuildId || "unknown")} · stored ${escapeHtml(configTime(drift.baseline.createdAt))} · updated ${escapeHtml(configTime(drift.baseline.updatedAt))} · checksum <code>${escapeHtml(drift.baseline.checksum.slice(0, 12))}…</code></p>
+      </div>`
+    : `<div class="panel"><h2>Baseline</h2><p class="muted">No baseline yet. Applying an imported bundle stores it; until then there is nothing to compare.</p></div>`;
+
+  const driftPanel = drift.baseline === null
+    ? `<div class="panel"><h2>Drift</h2><p class="muted">Import a bundle to start a baseline.</p></div>`
+    : drift.changeCount === 0 && drift.issueCount === 0
+      ? `<div class="panel"><h2>Drift</h2><p class="muted">No drift: this guild's live settings match the baseline.</p></div>`
+      : `<div class="panel"><h2>Drift <span class="muted">· baseline → live</span></h2>
+          <p class="muted">${drift.changeCount} changed value${drift.changeCount === 1 ? "" : "s"}${drift.issueCount > 0 ? ` · ${drift.issueCount} unreadable value${drift.issueCount === 1 ? "" : "s"}` : ""}.</p>
+          <table><thead><tr><th>Module</th><th>Setting</th><th>Baseline</th><th>Live</th></tr></thead><tbody>${renderPlanRows(drift.modules)}</tbody></table>
+        </div>`;
+
+  return layout(
+    "Config and drift",
+    `<p><a href="/dashboard/guilds/${encodePathSegment(guild.id)}">← Back to ${escapeHtml(guild.name)}</a></p>
+     <h1>Config export, import and drift</h1>
+     <p class="muted">A config bundle carries every module's effective settings and a checksum. Import validates it against the same Zod schemas the bot uses, previews the exact per-setting diff, and writes only after confirmation.</p>
+     ${notice}${failure}${errorHtml}
+     <div class="panel"><h2>Export</h2>
+       <p class="muted">Download a portable JSON file. Stored values and schema defaults are included; credential-shaped keys are omitted.</p>
+       <p><a href="${base}/export">Download config bundle</a></p>
+     </div>
+     <div class="panel"><h2>Import</h2>
+       <p class="muted">Choose a bundle exported by any guild. Preview writes nothing; apply is bound to the preview and re-authorized.</p>
+       <form method="post" enctype="multipart/form-data" action="${base}/import/preview">
+         <input type="hidden" name="csrf" value="${escapeHtml(csrfToken)}">
+         <div class="field"><label for="config-file">Config bundle (.json)</label><input id="config-file" type="file" name="file" accept="application/json,.json" required></div>
+         <p><button type="submit">Preview import</button></p>
+       </form>
+     </div>
+     ${baseline}
+     ${driftPanel}
      ${logoutForm(csrfToken)}`,
     username,
   );

@@ -1873,6 +1873,37 @@
           ]
         },
         {
+          "id": "operations.config-portability",
+          "name": "Config export, import and drift",
+          "competitors": {
+            "mee6": "❔",
+            "dyno": "❔",
+            "carl": "❔",
+            "ticket-tool": "❔",
+            "wick-security": "❔"
+          },
+          "phase": "P6",
+          "status": "shipped-in-repo",
+          "source": "memory/vault/01-Mission/Parity-Matrix.md",
+          "note": "A guild's effective module settings download as a checksummed JSON file; import parses and schema-validates the file, previews the exact diff, and applies only with a matching SHA-256 fingerprint, writing through SettingsService with one dashboard audit row per module. The applied bundle becomes the guild's baseline, and the drift page compares baseline to live. Custom saved templates are still open.",
+          "evidence": [
+            "apps/web/src/config-bundle.ts",
+            "apps/web/src/config-bundle.test.ts",
+            "apps/web/src/overview.ts",
+            "apps/web/src/routes/dashboard.ts",
+            "apps/web/src/render.ts",
+            "packages/kernel/src/baselines.ts",
+            "packages/db/src/config-baseline-store.ts",
+            "packages/db/src/config-baseline-store.test.ts",
+            "apps/web/src/web.test.ts",
+            "scripts/live-probe.ts"
+          ],
+          "liveVerified": true,
+          "liveEvidence": [
+            "web-config-export-import-drift"
+          ]
+        },
+        {
           "id": "operations.public-api-webhooks",
           "name": "Public API / webhooks",
           "competitors": {

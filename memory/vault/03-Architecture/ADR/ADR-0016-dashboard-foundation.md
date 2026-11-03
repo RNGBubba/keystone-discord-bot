@@ -145,3 +145,19 @@ re-authorizes every selected guild through `authorizeMany` before calling
 each accepted write is audited as a normal dashboard settings change. There is
 no template table, no custom template editor and no JSON fleet API yet; those
 remain later P6 work.
+
+## Follow-up (pass 51) — config portability and drift
+
+The dashboard now exports a guild's effective module settings as a checksummed
+`keystone.config` file. Import verifies the module set, checksum and each module's
+Zod schema before previewing the exact diff; apply is bound to the same kind of
+SHA-256 fingerprint as the fleet plan and writes through `SettingsService.update`,
+so every accepted module change is audited normally. The applied bundle becomes
+the guild's baseline in `config_baselines` (migration 0015), and the drift page
+compares baseline to live. A full P5 restore or delete clears that baseline.
+
+This deliberately does **not** reuse the full `keystone.export` bundle: config
+import must not create or delete cases, members or transcripts. It is a
+settings-only contract with its own kind and version. The carrier is still the
+framework-free `apps/web` app; custom saved templates and analytics aggregates
+remain later P6 work.
