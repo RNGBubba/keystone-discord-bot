@@ -3,6 +3,7 @@ import {
   cooldown,
   defineCommand,
   requireGuild,
+  requirePanelSigner,
   type CommandContext,
   type MemberVerification,
   type ModerationPort,
@@ -87,8 +88,7 @@ async function startVerification(ctx: CommandContext): Promise<void> {
     );
   }
 
-  const signer = ctx.componentSigner;
-  if (!signer) throw new UserError("Verification links are not configured in this process.");
+  const signer = requirePanelSigner(ctx.componentSigner);
   const sent = await moderation.actions.directMessage(ctx.userId, {
     content:
       "Keystone verification: click the button below to leave quarantine in this server. If you did not request this, ignore it.",

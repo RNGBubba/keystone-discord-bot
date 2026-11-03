@@ -7,9 +7,10 @@ expiring router. `ReactionRoleService`, `GiveawayService`, `SuggestionService`
 and `ContentService` now mint `k1:` ids with the bot's signer; posting a panel
 without one is an explicit refusal. Role buttons and role-select menus use a
 one-year TTL because they are pinned configuration, while giveaway, suggestion
-and poll panels use 30 days. The handlers in `apps/bot/src/components.ts` call
-the same `toggle`/`applySelection`, `enter` and `vote` methods as the old
-listener, and the entire `InteractionCreate` branch was deleted from
+and poll panels use 30 days. The handlers in
+`apps/bot/src/community-interactions.ts` (moved there from `components.ts` in
+pass 65) call the same `toggle`/`applySelection`, `enter` and `vote` methods as
+the old listener, and the entire `InteractionCreate` branch was deleted from
 `community-events.ts`, so a legacy `keystone:` id is unhandled. The live probe
 adds `web-community-interactions`: all five signed panels were pressed through
 the real discord.js adapter, the role action and the giveaway/suggestion/poll
@@ -78,8 +79,8 @@ than a live click.
 
 Pass 60 moved the ticket panel onto the same layer. `ticketPanel` posts a V2
 container whose Open button carries a signed, guild-bound, 30-day id; the press
-is handled by the shared component router in `apps/bot/src/components.ts` and
-calls the same `TicketService.open`. The legacy `keystone:ticket:open` branch was
+is handled by the shared component router through
+`apps/bot/src/community-interactions.ts` and calls the same `TicketService.open`. The legacy `keystone:ticket:open` branch was
 deleted from `community-events.ts`, so an old panel is unhandled rather than
 silently served; expired, copied and permission-gated ids are refused before a
 row is written. The welcome and goodbye channel messages now render through

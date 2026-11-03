@@ -153,6 +153,75 @@ function assert(ok: boolean, message: string): asserts ok {
   if (!ok) fail(message);
 }
 
+interface ProbeComponentCapture {
+  replies: ReplyInput[];
+  modal?: { custom_id?: string; title?: string; components?: unknown[] };
+}
+
+interface ProbeComponentOptions {
+  readonly kind?: "button" | "select" | "modal";
+  readonly customId: string;
+  readonly guildId?: string | null;
+  readonly channelId?: string;
+  readonly userId?: string;
+  readonly permissions?: readonly string[] | null;
+  readonly values?: readonly string[];
+  readonly fields?: Readonly<Record<string, string>>;
+}
+
+/**
+ * One structural interaction for every probe block. It is fed through the real
+ * discord.js adapter, so the checks cannot drift from each other or from the
+ * shapes `asComponentInteraction` expects; the wrappers below only supply each
+ * block's defaults.
+ */
+function probeComponent(options: ProbeComponentOptions): {
+  captured: ProbeComponentCapture;
+  like: ComponentInteractionLike;
+} {
+  const captured: ProbeComponentCapture = { replies: [] };
+  const kind = options.kind ?? "button";
+  const permissions = options.permissions === undefined ? [] : options.permissions;
+  const interaction = {
+    customId: options.customId,
+    guildId: options.guildId === undefined ? GUILD : options.guildId,
+    channelId: options.channelId ?? "live-probe-channel",
+    user: { id: options.userId ?? "live-probe-member" },
+    values: options.values ?? [],
+    memberPermissions: permissions === null ? null : { toArray: () => permissions },
+    replied: false,
+    deferred: false,
+    isButton: () => kind === "button",
+    isStringSelectMenu: () => kind === "select",
+    isModalSubmit: () => kind === "modal",
+    ...(kind === "modal"
+      ? {
+          fields: {
+            fields: new Map(
+              Object.entries(options.fields ?? {}).map(([key, value]) => [key, { value }]),
+            ),
+          },
+        }
+      : {}),
+    reply: async (input: ReplyInput) => {
+      captured.replies.push(input);
+    },
+    update: async () => undefined,
+    deferReply: async () => undefined,
+    editReply: async () => undefined,
+    followUp: async () => undefined,
+    showModal: async (built: { toJSON(): unknown }) => {
+      captured.modal = built.toJSON() as ProbeComponentCapture["modal"];
+    },
+  };
+  return {
+    captured,
+    like: asComponentInteraction(
+      interaction as unknown as Parameters<typeof asComponentInteraction>[0],
+    ),
+  };
+}
+
 class WebProbeOAuth implements DiscordOAuth {
   /** The probe has no Discord login, so it selects which user the fake returns. */
   userId = WEB_USER;
@@ -2516,74 +2585,17 @@ async function main(): Promise<void> {
       now: () => now,
     });
 
-    interface Captured {
-      replies: ReplyInput[];
-      modal?: { custom_id?: string; title?: string; components?: unknown[] };
-    }
+    const button = (customId: string, permissions: string[] = []) =>
+      probeComponent({ customId, permissions, channelId: "live-probe-channel" });
 
-    const button = (customId: string, permissions: string[] = []) => {
-      const captured: Captured = { replies: [] };
-      const interaction = {
+    const modal = (customId: string, fields: Record<string, string>) =>
+      probeComponent({
+        kind: "modal",
         customId,
-        guildId: GUILD,
+        fields,
+        permissions: null,
         channelId: "live-probe-channel",
-        user: { id: "live-probe-member" },
-        memberPermissions: { toArray: () => permissions },
-        replied: false,
-        deferred: false,
-        isButton: () => true,
-        isStringSelectMenu: () => false,
-        isModalSubmit: () => false,
-        reply: async (input: ReplyInput) => {
-          captured.replies.push(input);
-        },
-        update: async () => undefined,
-        deferReply: async () => undefined,
-        editReply: async () => undefined,
-        followUp: async () => undefined,
-        showModal: async (built: { toJSON(): unknown }) => {
-          captured.modal = built.toJSON() as Captured["modal"];
-        },
-      };
-      return {
-        captured,
-        like: asComponentInteraction(
-          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
-        ),
-      };
-    };
-
-    const modal = (customId: string, fields: Record<string, string>) => {
-      const captured: Captured = { replies: [] };
-      const interaction = {
-        customId,
-        guildId: GUILD,
-        channelId: "live-probe-channel",
-        user: { id: "live-probe-member" },
-        memberPermissions: null,
-        replied: false,
-        deferred: false,
-        isButton: () => false,
-        isStringSelectMenu: () => false,
-        isModalSubmit: () => true,
-        fields: {
-          fields: new Map(Object.entries(fields).map(([key, value]) => [key, { value }])),
-        },
-        reply: async (input: ReplyInput) => {
-          captured.replies.push(input);
-        },
-        update: async () => undefined,
-        deferReply: async () => undefined,
-        editReply: async () => undefined,
-        followUp: async () => undefined,
-      };
-      return {
-        captured,
-        like: asComponentInteraction(
-          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
-        ),
-      };
-    };
+      });
 
     const applyId = signer.sign(
       { namespace: "form", action: "apply", payload: "probe", ttlMs: 15 * 60_000 },
@@ -2898,9 +2910,6 @@ async function main(): Promise<void> {
       now: () => now,
     });
 
-    interface Clicked {
-      replies: ReplyInput[];
-    }
     const click = (
       customId: string,
       permissions: string[] = [],
@@ -2910,36 +2919,16 @@ async function main(): Promise<void> {
         kind?: "button" | "select";
         values?: string[];
       } = {},
-    ) => {
-      const captured: Clicked = { replies: [] };
-      const isButton = (options.kind ?? "button") === "button";
-      const interaction = {
+    ) =>
+      probeComponent({
+        kind: options.kind,
         customId,
-        guildId: options.guildId ?? GUILD,
+        permissions,
         channelId: "probe-support",
-        user: { id: options.userId ?? "probe-ticket-requester" },
-        values: options.values ?? [],
-        memberPermissions: { toArray: () => permissions },
-        replied: false,
-        deferred: false,
-        isButton: () => isButton,
-        isStringSelectMenu: () => !isButton,
-        isModalSubmit: () => false,
-        reply: async (input: ReplyInput) => {
-          captured.replies.push(input);
-        },
-        update: async () => undefined,
-        deferReply: async () => undefined,
-        editReply: async () => undefined,
-        followUp: async () => undefined,
-      };
-      return {
-        captured,
-        like: asComponentInteraction(
-          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
-        ),
-      };
-    };
+        userId: options.userId ?? "probe-ticket-requester",
+        guildId: options.guildId,
+        values: options.values,
+      });
 
     const open = click(ticketOpen);
     assert(
@@ -3276,32 +3265,13 @@ async function main(): Promise<void> {
       customId: string,
       options: { guildId?: string | null; userId?: string } = {},
     ) => {
-      const replies: ReplyInput[] = [];
-      const interaction = {
+      const { captured, like } = probeComponent({
         customId,
-        guildId: options.guildId === undefined ? GUILD : options.guildId,
         channelId: "live-probe-modlog",
-        user: { id: options.userId ?? "live-probe-member" },
-        memberPermissions: { toArray: () => [] },
-        replied: false,
-        deferred: false,
-        isButton: () => true,
-        isStringSelectMenu: () => false,
-        isModalSubmit: () => false,
-        reply: async (input: ReplyInput) => {
-          replies.push(input);
-        },
-        update: async () => undefined,
-        deferReply: async () => undefined,
-        editReply: async () => undefined,
-        followUp: async () => undefined,
-      };
-      return {
-        replies,
-        like: asComponentInteraction(
-          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
-        ),
-      };
+        userId: options.userId ?? "live-probe-member",
+        guildId: options.guildId,
+      });
+      return { replies: captured.replies, like };
     };
     const idOf = (row: { components: readonly { customId?: string }[] }): string =>
       row.components[0]?.customId ?? "";

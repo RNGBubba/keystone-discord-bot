@@ -54,8 +54,8 @@ The newest journal entry is the best short history of the current work. Read its
 ## Layout
 
 ```text
-apps/bot              gateway, discord.js adapter, composition root, dispatch,
-                      development `!` bridge
+apps/bot              gateway, discord.js adapter, per-module component routes,
+                      composition root, dispatch, development `!` bridge
 apps/worker           BullMQ consumer with idempotent handlers
 apps/web              optional dashboard/API: OAuth sessions, guild authz, reads
 packages/kernel       registry, guards, settings, dispatch, budget, component router, ports
@@ -282,6 +282,13 @@ rate-limited register leaves the app with no commands.
   listener branch are deleted, so an old id is unhandled. The live probe adds
   `web-moderation-interactions`, proving the appeal row, the DM verify row, and
   the expired/forged/cross-guild/unauthorized refusals on Postgres.
+- Pass 65 contained the component seams without changing behaviour. Form routes
+  live in `apps/bot/src/form-interactions.ts` and community routes in
+  `apps/bot/src/community-interactions.ts`, beside `moderation-buttons.ts`;
+  `apps/bot/src/components.ts` is dependency wiring plus the one gateway
+  listener. `PanelSigner`/`requirePanelSigner` live in the kernel, and the probe
+  uses one `probeComponent()` fake. The check count stayed 28/28 and the test
+  count 631/92.
 - Pass 63 corrected that copy against the audit: option descriptions are keyed
   per declaration (`command.<root>.<sub>.option.<name>` wins over the shared
   root key), so two subcommands can describe the same option differently;

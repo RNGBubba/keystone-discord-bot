@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-65",
+    date: "2026-11-03",
+    summary:
+      "Structure only: each module's component routes now sit beside that module's adapter and every module shares one signer contract. No command, reply or interaction changed.",
+    journal: "memory/journal/2026-11-03-pass-65.md",
+  },
+  {
     pass: "pass-64",
     date: "2026-11-03",
     summary:

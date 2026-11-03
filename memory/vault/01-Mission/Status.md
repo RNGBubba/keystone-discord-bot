@@ -2,6 +2,16 @@
 
 ## Now
 
+**Pass 65 contained the component seams** (2026-11-03): each module's component
+routes now sit beside its adapter — `form-interactions.ts` and
+`community-interactions.ts`, next to `moderation-buttons.ts` — and
+`apps/bot/src/components.ts` is dependency wiring plus the gateway listener.
+`PanelSigner` and `requirePanelSigner` have one owner in the kernel, and the
+probe has one interaction fake instead of three. No command, reply, check id or
+count moved: tests are **631 / 92 files** and `pnpm probe:live` stays **28/28**
+with the same check ids. See
+[pass 65](../../journal/2026-11-03-pass-65.md).
+
 **Pass 64 signed moderation's last two buttons** (2026-11-03): the case appeal
 and the DM verification button now carry `k1:` ids on the shared router, so no
 component id anywhere bypasses signature, expiry, guild and permission checks.

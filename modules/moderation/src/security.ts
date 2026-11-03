@@ -1,5 +1,6 @@
 import type {
   MemberStore,
+  PanelSigner,
   ModerationActions,
   ModerationActionResult,
   ModerationCase,
@@ -7,7 +8,7 @@ import type {
   ModuleSettings,
   Logger,
 } from "@keystone/kernel";
-import { CaseService, appealButton, verifyButton, type ModerationSigner } from "./cases";
+import { CaseService, appealButton, verifyButton } from "./cases";
 import { moderationSettingsSchema, type ModerationSettings } from "./settings";
 
 /**
@@ -537,7 +538,7 @@ export interface SecurityCoordinatorOptions {
   settings: ModuleSettings;
   logger: Logger;
   /** Mints the signed appeal/verify ids; the same secret the router verifies. */
-  signer: ModerationSigner;
+  signer: PanelSigner;
   now?: () => number;
 }
 

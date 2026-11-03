@@ -14,7 +14,6 @@ export {
   parseVerifyPayload,
   verifyButton,
   verifyCustomId,
-  type ModerationSigner,
 } from "./cases";
 export { SecurityEngine, SecurityCoordinator, type SecurityEvent, type SecurityFinding } from "./security";
 export {

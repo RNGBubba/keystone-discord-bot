@@ -1197,7 +1197,7 @@
             "modules/community/src/panels.ts",
             "modules/community/src/tickets.ts",
             "modules/community/src/commands/ticket.ts",
-            "apps/bot/src/components.ts",
+            "apps/bot/src/community-interactions.ts",
             "apps/bot/src/components.test.ts",
             "apps/bot/src/community-events.test.ts",
             "scripts/live-probe.ts"
@@ -2093,7 +2093,7 @@
             "modules/setup/src/settings.test.ts",
             "modules/forms/src/panel.ts",
             "modules/forms/src/commands/form.ts",
-            "apps/bot/src/components.ts",
+            "apps/bot/src/form-interactions.ts",
             "apps/bot/src/adapt.ts",
             "apps/bot/src/adapt.test.ts",
             "apps/web/src/settings-form.test.ts",
@@ -2383,7 +2383,7 @@
           "evidence": [
             "modules/forms/src/forms.test.ts",
             "modules/forms/src/panel.ts",
-            "apps/bot/src/components.ts",
+            "apps/bot/src/form-interactions.ts",
             "packages/db/src/form-store.test.ts",
             "memory/journal/2026-11-01-pass-40.md"
           ],

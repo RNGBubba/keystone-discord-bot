@@ -6,7 +6,7 @@
 > A passing local suite does not prove a service; this page records the last
 > `pnpm probe:live` run against the configured Postgres and Redis.
 
-Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:45:15.484Z.
+Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T11:05:51.391Z.
 
 | Service | Result |
 | --- | --- |
@@ -22,12 +22,12 @@ Last probe: **2026-11-03** (`live-2026-11-03`), generated 2026-11-03T10:45:15.48
 | postgres-settings-restart | pass | one settings row written, pool closed and reopened, same value read back | operations.in-bot-config |
 | redis-shared-cooldown | pass | two clients: first allowed, second refused with 1999ms remaining |  |
 | bullmq-job-idempotency | pass | two enqueues with one idempotency key produced one handler call and a completed Postgres receipt |  |
-| bullmq-delayed-timer | pass | one delayed job fired once after 1217ms and wrote a completed receipt |  |
+| bullmq-delayed-timer | pass | one delayed job fired once after 1150ms and wrote a completed receipt |  |
 | temporary-moderation-expiry | pass | a real Postgres case was scheduled through the three-part BullMQ id, expired through TemporaryActionService, the release action ran once and the case closed with an expired event |  |
 | panic-snapshot-persistence | pass | a panic snapshot was written, read back and cleared on Postgres; Discord lockdown calls are adapter-tested only |  |
 | content-timer-delivery | pass | a real community record delivered a reminder and a scheduled message once, and two concurrent claims produced exactly one send |  |
 | portability-dry-run | pass | dry run reported 1 added / 0 changed / 0 removed setting(s) | portability.dry-run-import-diff |
-| portability-import-verify | pass | bundle checksum 6edb864bf1b1… matched after import 075a259e | portability.restore-and-config-hash, security.backup-restore |
+| portability-import-verify | pass | bundle checksum a9d025055652… matched after import f371f22a | portability.restore-and-config-hash, security.backup-restore |
 | portability-rollback | pass | the applied import restored its pre-import backup; the destination has no settings rows | portability.rollback-window, security.backup-restore |
 | portability-deletion-receipt | pass | deletion receipt retained 1 setting(s) and the guild row is gone | portability.deletion-receipt |
 | web-health-postgres | pass | /healthz returned 200 with database=postgres on an ephemeral port |  |

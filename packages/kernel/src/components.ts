@@ -91,6 +91,19 @@ export interface ComponentSigner {
   parse(customId: string, now?: number): ComponentIdParse;
 }
 
+/** The signer shape a panel or button needs; the composition root owns the secret. */
+export type PanelSigner = Pick<ComponentSigner, "sign">;
+
+/**
+ * Fail before a message is posted rather than shipping an unsigned control.
+ * One refusal for every module: a bot composed without a signer cannot produce
+ * a safe button, whichever module owns the panel.
+ */
+export function requirePanelSigner(signer: PanelSigner | undefined): PanelSigner {
+  if (!signer) throw new UserError("Interactive panels are not configured on this bot.");
+  return signer;
+}
+
 /**
  * A component id carries its own namespace, action, payload and expiry, signed
  * with an HMAC. That means a stale panel is refused without a database read,

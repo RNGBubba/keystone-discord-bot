@@ -121,7 +121,7 @@ box means the code and its tests exist, not that a live guild has run it.
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Panels | P3 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/tickets.ts`, `modules/community/src/commands/ticket.ts`, `apps/bot/src/components.ts`, `apps/bot/src/components.test.ts`, `apps/bot/src/community-events.test.ts`, `scripts/live-probe.ts` · live verified |
+| Panels | P3 | ✅ in repo | `modules/community/src/panels.ts`, `modules/community/src/tickets.ts`, `modules/community/src/commands/ticket.ts`, `apps/bot/src/community-interactions.ts`, `apps/bot/src/components.test.ts`, `apps/bot/src/community-events.test.ts`, `scripts/live-probe.ts` · live verified |
 | Thread-based tickets | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
 | Claiming | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
 | Transcripts | P3 | ✅ in repo | `modules/community/src/commands.test.ts` · live unverified |
@@ -181,7 +181,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Config export, import and drift | P6 | ✅ in repo | `apps/web/src/config-bundle.ts`, `apps/web/src/config-bundle.test.ts`, `apps/web/src/overview.ts`, `apps/web/src/routes/dashboard.ts`, `apps/web/src/render.ts`, `packages/kernel/src/baselines.ts`, `packages/db/src/config-baseline-store.ts`, `packages/db/src/config-baseline-store.test.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
 | Scoped API tokens | P6 | ✅ in repo | `packages/kernel/src/api-tokens.ts`, `packages/db/src/api-token-store.ts`, `packages/db/src/migrations/0018-api-tokens.ts`, `packages/db/src/web-store.test.ts`, `apps/web/src/api-tokens.ts`, `apps/web/src/api-tokens.test.ts`, `apps/web/src/openapi.ts`, `apps/web/src/openapi.test.ts`, `apps/web/src/authorization.ts`, `apps/web/src/routes/tokens.ts`, `apps/web/src/web.test.ts`, `scripts/live-probe.ts` · live verified |
 | Public API / webhooks | P6 | ✅ in repo | `packages/kernel/src/webhooks.ts`, `packages/db/src/webhook-store.ts`, `packages/db/src/migrations/0019-webhooks.ts`, `apps/web/src/webhooks.ts`, `apps/web/src/routes/webhooks.ts`, `apps/web/src/idempotency.ts`, `apps/web/src/routes/api.ts`, `apps/web/src/webhooks.test.ts`, `packages/db/src/webhook-store.test.ts`, `packages/db/src/idempotency.test.ts`, `scripts/live-probe.ts` · live verified |
-| i18n | P7 | ✅ in repo | `packages/i18n/src/messages.ts`, `packages/i18n/src/index.ts`, `packages/i18n/src/de.ts`, `packages/i18n/src/i18n.test.ts`, `modules/setup/src/settings.ts`, `modules/setup/src/settings.test.ts`, `modules/forms/src/panel.ts`, `modules/forms/src/commands/form.ts`, `apps/bot/src/components.ts`, `apps/bot/src/adapt.ts`, `apps/bot/src/adapt.test.ts`, `apps/web/src/settings-form.test.ts`, `scripts/live-probe.ts` · live verified |
+| i18n | P7 | ✅ in repo | `packages/i18n/src/messages.ts`, `packages/i18n/src/index.ts`, `packages/i18n/src/de.ts`, `packages/i18n/src/i18n.test.ts`, `modules/setup/src/settings.ts`, `modules/setup/src/settings.test.ts`, `modules/forms/src/panel.ts`, `modules/forms/src/commands/form.ts`, `apps/bot/src/form-interactions.ts`, `apps/bot/src/adapt.ts`, `apps/bot/src/adapt.test.ts`, `apps/web/src/settings-form.test.ts`, `scripts/live-probe.ts` · live verified |
 | Status page | P9 | ⏳ planned | Public incidents |
 
 ## Portability
@@ -213,7 +213,7 @@ box means the code and its tests exist, not that a live guild has run it.
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Application forms | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `modules/forms/src/panel.ts`, `apps/bot/src/components.ts`, `packages/db/src/form-store.test.ts`, `memory/journal/2026-11-01-pass-40.md` · live verified |
+| Application forms | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `modules/forms/src/panel.ts`, `apps/bot/src/form-interactions.ts`, `packages/db/src/form-store.test.ts`, `memory/journal/2026-11-01-pass-40.md` · live verified |
 | Review queue | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `packages/db/src/form-store.test.ts` · live verified |
 | Submission export | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `memory/vault/04-Modules/forms/Status.md` · live verified |
 

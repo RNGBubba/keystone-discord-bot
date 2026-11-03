@@ -4,15 +4,13 @@ import {
   type ActionRow,
   type CaseEvent,
   type CaseStore,
-  type ComponentSigner,
+  type PanelSigner,
   type ModerationCase,
   type ModerationCaseState,
   type NewModerationCase,
 } from "@keystone/kernel";
 
 /** The module mints ids; it never parses or verifies them. */
-export type ModerationSigner = Pick<ComponentSigner, "sign">;
-
 /** A case panel is pinned configuration; a month matches the ticket panel. */
 export const APPEAL_PANEL_TTL_MS = 30 * 24 * 60 * 60_000;
 /** A DM verification link is a step, not a pinned panel. */
@@ -181,7 +179,7 @@ export class InMemoryCaseStore implements CaseStore {
   }
 }
 
-export function appealCustomId(caseId: string, signer: ModerationSigner, now = Date.now()): string {
+export function appealCustomId(caseId: string, signer: PanelSigner, now = Date.now()): string {
   return signer.sign(
     { namespace: "appeal", action: "open", payload: caseId, ttlMs: APPEAL_PANEL_TTL_MS },
     now,
@@ -197,7 +195,7 @@ export function appealCustomId(caseId: string, signer: ModerationSigner, now = D
 export function verifyCustomId(
   guildId: string,
   userId: string,
-  signer: ModerationSigner,
+  signer: PanelSigner,
   now = Date.now(),
 ): string {
   const payload = `${guildId}_${userId}`;
@@ -220,7 +218,7 @@ export function parseVerifyPayload(
 
 export function appealButton(
   caseId: string,
-  signer: ModerationSigner,
+  signer: PanelSigner,
   now = Date.now(),
 ): ActionRow {
   return {
@@ -239,7 +237,7 @@ export function appealButton(
 export function verifyButton(
   guildId: string,
   userId: string,
-  signer: ModerationSigner,
+  signer: PanelSigner,
   now = Date.now(),
 ): ActionRow {
   return {

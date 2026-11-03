@@ -2,6 +2,7 @@ import {
   UserError,
   defineCommand,
   requireGuild,
+  requirePanelSigner,
   requirePermissions,
   type ActionRow,
   type CommandContext,
@@ -124,8 +125,7 @@ function appealComponents(
   record: ModerationCase,
 ): ActionRow[] {
   if (!settings.appealsEnabled) return [];
-  const signer = ctx.componentSigner;
-  if (!signer) throw new UserError("Case panels are not configured in this process.");
+  const signer = requirePanelSigner(ctx.componentSigner);
   return [appealButton(record.id, signer, ctx.now())];
 }
 

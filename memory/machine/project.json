@@ -6,7 +6,7 @@
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
   "phase": "P7",
-  "lastPass": "journal/2026-11-03-pass-64.md",
+  "lastPass": "journal/2026-11-03-pass-65.md",
   "nextAction": "Every component id now goes through the signed, expiring router, including moderation's appeal and DM verify. P7's remaining reply copy is named in passes 62 and 63: community's operator configuration replies and the other ten modules' command replies are still English, service-owned economy reasons keep their own sentences, and kernel guard copy has no locale; parity role persistence is also open. A live gateway click, right-click, modal submit or member join still needs a human Discord client. P8 playback needs a Lavalink node; P9/P10 need outside input.",
   "live": {
     "report": "machine/live.json",

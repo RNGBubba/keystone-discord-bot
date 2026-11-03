@@ -876,6 +876,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-65",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "Containment pass for the pass-64 audit, with no behaviour change and no new capability. The route table left `apps/bot/src/components.ts`: `form-interactions.ts` owns the form Apply/submit/review routes and `community-interactions.ts` owns the ticket, role, role-select, giveaway, suggestion and poll routes, each beside the moderation adapter's `registerModerationRoutes`. `components.ts` is now dependency types, three registration calls and the gateway listener. The signer concept has one owner: `PanelSigner` and `requirePanelSigner` live in `packages/kernel/src/components.ts`; community re-exports them and moderation's `ModerationSigner` alias is gone, leaving one refusal sentence for a composition built without a signer. `scripts/live-probe.ts` now has one `probeComponent()` factory through the real adapter, with thin per-block wrappers so the form, community and moderation checks stopped carrying three copies of the same fake; the DM `guildId: null` case is the helper's default capability. Every handler, reply, permission, clock and service call was copied unchanged, and the probe pass stayed 28/28 with the same check ids. Tests 631 / 92 files; typecheck, check, build and the memory gate green.",
+      "journal": "journal/2026-11-03-pass-65.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "631",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "28/28",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }
