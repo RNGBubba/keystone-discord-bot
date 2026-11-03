@@ -116,10 +116,13 @@ Components V2 allows **40 components per message, total**, and the flag is
 irreversible once set. A panel with a container, three text displays, two
 separators and four action rows has already spent ten slots.
 
-A `packages/ui` package (planned for P7; it does not exist yet) will expose
-`layout()` that counts slots as it builds and throws in development when a panel
-exceeds 40. Until then, the rule is: a panel is one container, at most four
-action rows, and no nested sections for decoration.
+`packages/ui` (shipped in pass 58) exposes `layout()`, which counts every node,
+select option and character as it builds and throws `LayoutError` when a panel
+exceeds 40 components or 4,000 characters, or when a row, select, button,
+container or section has a shape Discord rejects. The rule stays: a panel is one
+container, at most four action rows, and no nested sections for decoration.
+`signedComponentId` lives in the kernel; a component id carries its own
+expiry and signature, so a stale panel is refused without a table read.
 
 ## Anti-patterns with receipts
 

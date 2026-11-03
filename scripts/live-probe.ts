@@ -16,7 +16,17 @@ import { createServer } from "node:http";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadEnv } from "@keystone/config";
-import { ModuleRegistry, SettingsService, createLogger } from "@keystone/kernel";
+import {
+  ComponentRouter,
+  ModuleRegistry,
+  SettingsService,
+  createComponentSigner,
+  createLogger,
+  createSilentLogger,
+  type ComponentInteractionLike,
+  type ModalSpec,
+  type ReplyInput,
+} from "@keystone/kernel";
 import {
   createAnalyticsStore,
   createApiTokenStore,
@@ -25,6 +35,7 @@ import {
   createCommunityStore,
   createConfigBaselineStore,
   createDashboardStore,
+  createFormStore,
   createSavedTemplateStore,
   createIdempotencyStore,
   createWebhookStore,
@@ -49,6 +60,9 @@ import {
   communitySettingsSchema,
 } from "../modules/community/src/index";
 import { PortabilityService } from "@keystone/importer";
+import { FormService, formPanel, formSettingsSchema } from "@keystone/module-forms";
+import { createFormRouter } from "../apps/bot/src/components";
+import { asComponentInteraction, toV2Components } from "../apps/bot/src/adapt";
 import { createCooldownStore } from "../packages/cache/src/index";
 import { BullJobQueue, createBullWorker } from "../packages/queue/src/index";
 import { createWebRuntime } from "../apps/web/src/runtime";
@@ -2378,6 +2392,197 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Components V2 panels and modal routing -------------------------------
+  {
+    // This check drives the real discord.js adapter (`asComponentInteraction`),
+    // the real signed-id router and the real FormService against Postgres. It
+    // is not a gateway event: a real click or modal submit cannot be produced
+    // from this environment and is not claimed.
+    const now = Date.now();
+    const signer = createComponentSigner("live-probe-interaction-secret");
+    const formSettings = formSettingsSchema.parse({});
+    const formStore = createFormStore(database);
+    await database.runner.exec(`
+      DELETE FROM form_submissions WHERE guild_id = '${GUILD}';
+      DELETE FROM forms WHERE guild_id = '${GUILD}';
+    `);
+    const formService = new FormService(formStore, formSettings, () => now);
+    const seeded = await formService.create(GUILD, GUILD, {
+      name: "Probe application",
+      key: "probe",
+      fields: "why:Why join, tz:Timezone",
+    });
+    await formService.edit(GUILD, seeded.key, { state: "open" });
+
+    const router: ComponentRouter = createFormRouter({
+      signer,
+      forms: formStore,
+      formSettings: {
+        get: async () => formSettings,
+        update: async () => formSettings,
+      },
+      moderation: {
+        settings: { get: async () => ({}), update: async () => ({}) },
+        moderation: {} as never,
+      },
+      logger: createSilentLogger(),
+      now: () => now,
+    });
+
+    interface Captured {
+      replies: ReplyInput[];
+      modal?: { custom_id?: string; title?: string; components?: unknown[] };
+    }
+
+    const button = (customId: string, permissions: string[] = []) => {
+      const captured: Captured = { replies: [] };
+      const interaction = {
+        customId,
+        guildId: GUILD,
+        channelId: "live-probe-channel",
+        user: { id: "live-probe-member" },
+        memberPermissions: { toArray: () => permissions },
+        replied: false,
+        deferred: false,
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        reply: async (input: ReplyInput) => {
+          captured.replies.push(input);
+        },
+        update: async () => undefined,
+        deferReply: async () => undefined,
+        editReply: async () => undefined,
+        followUp: async () => undefined,
+        showModal: async (built: { toJSON(): unknown }) => {
+          captured.modal = built.toJSON() as Captured["modal"];
+        },
+      };
+      return {
+        captured,
+        like: asComponentInteraction(
+          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
+        ),
+      };
+    };
+
+    const modal = (customId: string, fields: Record<string, string>) => {
+      const captured: Captured = { replies: [] };
+      const interaction = {
+        customId,
+        guildId: GUILD,
+        channelId: "live-probe-channel",
+        user: { id: "live-probe-member" },
+        memberPermissions: null,
+        replied: false,
+        deferred: false,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        fields: {
+          fields: new Map(Object.entries(fields).map(([key, value]) => [key, { value }])),
+        },
+        reply: async (input: ReplyInput) => {
+          captured.replies.push(input);
+        },
+        update: async () => undefined,
+        deferReply: async () => undefined,
+        editReply: async () => undefined,
+        followUp: async () => undefined,
+      };
+      return {
+        captured,
+        like: asComponentInteraction(
+          interaction as unknown as Parameters<typeof asComponentInteraction>[0],
+        ),
+      };
+    };
+
+    const applyId = signer.sign(
+      { namespace: "form", action: "apply", payload: "probe", ttlMs: 15 * 60_000 },
+      now,
+    );
+    const reviewId = signer.sign(
+      { namespace: "form", action: "review", payload: "probe", ttlMs: 15 * 60_000 },
+      now,
+    );
+
+    // The panel is a valid V2 layout on the real builder path, not a mock.
+    const panel = formPanel(seeded, { apply: applyId, review: reviewId });
+    const panelJson = (toV2Components(panel)[0] as unknown as { toJSON(): unknown }).toJSON() as {
+      type?: number;
+      components?: Array<{ type: number; components?: Array<{ custom_id?: string }> }>;
+    };
+    assert(panelJson.type === 17, "the form panel did not render as a container");
+    const rowIds = (panelJson.components ?? []).flatMap((child) =>
+      child.type === 1 ? (child.components ?? []).map((entry) => entry.custom_id) : [],
+    );
+    assert(rowIds.includes(applyId), "the Apply button's signed id is missing from the panel");
+    assert(rowIds.includes(reviewId), "the staff button's signed id is missing from the panel");
+
+    const apply = button(applyId);
+    assert(await router.dispatch(apply.like, signer, now), "the Apply button was not routed");
+    assert(apply.captured.modal?.title === "Probe application", "the modal title was not the form name");
+    const modalId = apply.captured.modal?.custom_id;
+    assert(typeof modalId === "string", "the Apply button did not open a modal");
+
+    const submit = modal(modalId as string, { why: "because", tz: "UTC" });
+    await router.dispatch(submit.like, signer, now);
+    assert(
+      String(submit.captured.replies[0]?.content).includes("Submission received"),
+      "a valid modal submit did not reach FormService",
+    );
+    const [stored] = await database.runner.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM form_submissions WHERE guild_id = '${GUILD}'`,
+    );
+    assert(stored?.count === "1", "the modal submit did not write one submission row");
+
+    const invalid = modal(modalId as string, { why: "because" });
+    await router.dispatch(invalid.like, signer, now);
+    assert(
+      String(invalid.captured.replies[0]?.content).includes("Missing required field: tz"),
+      "a bad modal submit was not re-prompted with the missing field",
+    );
+    const [stillOne] = await database.runner.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM form_submissions WHERE guild_id = '${GUILD}'`,
+    );
+    assert(stillOne?.count === "1", "a bad modal submit wrote a second row");
+
+    const expiredId = signer.sign(
+      { namespace: "form", action: "apply", payload: "probe", ttlMs: 1_000 },
+      now,
+    );
+    const expired = button(expiredId);
+    await router.dispatch(expired.like, signer, now + 1_000);
+    assert(
+      String(expired.captured.replies[0]?.content).includes("expired"),
+      "an expired component id was not refused",
+    );
+    assert(expired.captured.modal === undefined, "an expired button still opened a modal");
+
+    const memberReview = button(reviewId);
+    await router.dispatch(memberReview.like, signer, now);
+    assert(
+      String(memberReview.captured.replies[0]?.content).includes("permission"),
+      "a member without ManageGuild reached the review queue",
+    );
+
+    const staffReview = button(reviewId, ["ManageGuild"]);
+    await router.dispatch(staffReview.like, signer, now);
+    assert(
+      String(staffReview.captured.replies[0]?.content).includes("1 pending application"),
+      "the staff button did not list the pending application",
+    );
+
+    record({
+      id: "web-component-panels",
+      status: "pass",
+      detail:
+        "real discord.js adapter + signed component router on Postgres: the form panel rendered as a V2 container with signed Apply and staff ids; the Apply button opened a modal whose title and two inputs came from the form; a valid modal submit wrote one form_submissions row; a submit missing a required field was re-prompted with the field name and wrote nothing; an expired id was refused before the handler and opened no modal; a member without ManageGuild was refused while a manager saw the one pending application. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed",
+      features: ["forms.application-forms"],
+    });
+  }
+
   // --- Cleanup ---------------------------------------------------------------
   await database.runner.exec(`
     DELETE FROM imports WHERE guild_id LIKE 'live-probe%';
@@ -2399,6 +2604,8 @@ async function main(): Promise<void> {
       WHERE idempotency_key LIKE 'live-probe-%'
          OR idempotency_key = '${temporaryKey}';
     DELETE FROM settings WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM form_submissions WHERE guild_id LIKE 'live-probe%';
+    DELETE FROM forms WHERE guild_id LIKE 'live-probe%';
     DELETE FROM community_records WHERE guild_id LIKE 'live-probe%';
     DELETE FROM case_events WHERE case_id IN (SELECT id FROM cases WHERE guild_id LIKE 'live-probe%');
     DELETE FROM cases WHERE guild_id LIKE 'live-probe%';

@@ -11,6 +11,7 @@ import {
   type FormSubmission,
 } from "@keystone/kernel";
 import { FormService, type FormExport, type FormSummary } from "../forms";
+import { FORM_MODAL_TTL_MS, formPanel } from "../panel";
 import { formSettingsSchema } from "../settings";
 
 const OPTIONS = {
@@ -288,29 +289,27 @@ export const form = defineCommand({
       const published = await svc.panelForm(guildId, reference);
       const channelId = ctx.interaction.channelId;
       if (!channelId) throw new UserError("Post the panel from a server channel.");
+      const signer = ctx.componentSigner;
+      if (!signer) throw new UserError("Interactive panels are not configured on this bot.");
 
-      await ctx.interaction.reply({
-        embeds: [
-          {
-            title: published.name,
-            description:
-              published.description ||
-              `Applications for **${published.name}** are open. Staff review every submission.`,
-            color: 0x5865f2,
-            fields: [
-              { name: "Questions", value: clip(fieldLines(published.fields)), inline: false },
-              {
-                name: "How to apply",
-                value: `Use \`/form submit form:${published.key} answers:"${published.fields
-                  .map((field) => `${field.key}=...`)
-                  .join("; ")}"\``,
-                inline: false,
-              },
-            ],
-            footer: { text: "Answers are stored in this server and read only by staff." },
-          },
-        ],
+      // V2 is a layout, so the message must be created by an edit: deferring
+      // first also keeps the 3-second acknowledgement inside the budget.
+      const panel = formPanel(published, {
+        apply: signer.sign({
+          namespace: "form",
+          action: "apply",
+          payload: published.key,
+          ttlMs: FORM_MODAL_TTL_MS,
+        }),
+        review: signer.sign({
+          namespace: "form",
+          action: "review",
+          payload: published.key,
+          ttlMs: FORM_MODAL_TTL_MS,
+        }),
       });
+      await ctx.interaction.deferReply();
+      await ctx.interaction.editReply({ v2: panel });
       await svc.markPanel(guildId, published.id, channelId);
       return;
     }
@@ -454,5 +453,5 @@ export const form = defineCommand({
     ],
   },
   notes:
-    "One pending submission per member per form, enforced by a partial unique index. Deleting a form is refused once it has submissions; close it instead. Modal input is not in this build, so `submit` accepts the answers option directly and the panel prints the exact syntax.",
+    "One pending submission per member per form, enforced by a partial unique index. Deleting a form is refused once it has submissions; close it instead. `/form panel` posts a Components V2 panel whose Apply button opens a modal when the form holds five questions or fewer; `submit` keeps the answers-option path for longer forms and for scripting.",
 });

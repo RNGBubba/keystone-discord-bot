@@ -35,11 +35,11 @@ lesson and the code disagree, the gate fails rather than the prose winning.
 
 ## Not written yet
 
-Two topics from the original plan are deliberately absent because the code they
-would teach does not exist: Components V2 panels (`packages/ui` is not built) and
-sharding (the bot does not shard). Writing either now would be a design essay
-pretending to be a lesson. They belong here when there is a runnable change and a
-check to fail.
+Two topics from the original plan have no lesson yet. The Components V2 layer
+landed in pass 58, so a lesson on the signed component ids and the 40-slot
+budget can be written against running code. Sharding has no lesson because the
+bot does not shard; writing one now would be a design essay pretending to be a
+lesson. Both belong here when there is a runnable change and a check to fail.
 
 ## Each lesson has the same shape
 

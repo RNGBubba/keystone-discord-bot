@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@keystone/kernel": "workspace:*",
+    "@keystone/ui": "workspace:*",
     "zod": "^3.25.0"
   },
   "devDependencies": {

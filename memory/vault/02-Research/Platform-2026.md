@@ -39,9 +39,9 @@ the id. A hidden channel is a typed, non-fatal outcome. This shipped in P4.5.
 - Modals now use Label wrappers; Action Row + Text Input is deprecated.
 - New modal components: File Upload, Radio Group, Checkbox Group, Checkbox.
 
-**Consequence:** when `packages/ui` lands (planned; it does not exist yet), it
-must be a layout budgeter, not an embed-string builder. No V2 panel ships before
-the budgeter exists. See [[Command-Budget]].
+**Consequence:** `packages/ui` (pass 58) is a layout budgeter, not an
+embed-string builder. No V2 panel ships unless it passes that budgeter. See
+[[Command-Budget]].
 
 ## The limits we still design around
 

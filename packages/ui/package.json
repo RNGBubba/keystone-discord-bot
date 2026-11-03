@@ -1,0 +1,13 @@
+{
+  "name": "@keystone/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed Components V2 layouts and modals with Discord's 40-component and 4,000-character budgets enforced at build time.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@keystone/kernel": "workspace:*"
+  }
+}

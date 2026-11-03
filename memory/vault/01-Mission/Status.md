@@ -2,6 +2,28 @@
 
 ## Now
 
+**Pass 58 opened P7 with the Components V2 layer** (2026-11-03): `packages/ui` now
+exists as a framework-free builder. `layout()` emits a typed container, text,
+section, separator and action-row tree and throws when a panel would exceed
+Discord's 40 components or ~4,000 characters, or when a row, select, button or
+section has a shape Discord rejects; `modal()` builds Label-wrapped text inputs
+under the five-row and 45-character-title limits. The kernel owns the structural
+`V2Component`/`ModalSpec` types, an HMAC signer for `k1:` component ids that
+carry their own namespace, action, payload and expiry, and a router that checks
+kind, signature, expiry, guild and route permission before a handler runs. One
+bot listener now handles buttons, string selects and modal submits; legacy
+moderation ids still reach their existing handler. `/form panel` is a V2
+container with signed Apply and staff buttons: Apply opens a modal built from
+the form's fields, a valid submit calls the same `FormService.submit`, a missing
+answer is refused by field name, and a form over five questions keeps the
+command path. `INTERACTION_SECRET` is optional; without it the signing key is
+per-process, so panels from before a restart are refused rather than sharing a
+default. Tests are **604 / 89 files**; `pnpm probe:live` is **24/24**, adding
+`web-component-panels` through the real discord.js adapter and router on
+Postgres. A live gateway click, right-click or modal submit is not claimed. i18n
+and the remaining embed panels are still open. See
+[pass 58](../../journal/2026-11-03-pass-58.md).
+
 **Pass 57 closed P6's landable work with the session idle timeout and refresh-token
 path** (2026-11-03): the opaque session now carries `last_seen_at`, a sealed
 refresh token and an access expiry. A session unused past the configured window
@@ -671,7 +693,7 @@ public packaging pass also added the README and `AGENTS.md` read paths.
 ## Gate
 
 ```
-pnpm check        exit 0 · typecheck 0 · 573 tests / 85 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 23/23 · memory current
+pnpm check        exit 0 · typecheck 0 · 604 tests / 89 files · budget 20/100 roots (141 subcommands · 161 actions · 4 context menus) · claims current · live 24/24 · memory current
 pnpm build        exit 0 · bot, worker, web, migrate and portability artefacts
 live              2026-11-01 · AI Team#5758 · 2 guilds · 20 roots / 138 subcommands / 2 user menus / 2 message menus · one bot process · qwen3:8b reply in #ai-chat · /modmail open → reply → 2-message archive → duplicate close refused → stats 1/0/2 · /event create → open → rsvp 1/2 → reminder → decline → 1.2 KB export parsed with the same row · /form create → open → panel → submit → 1 pending → accepted → 1.5 KB export parsed with the same answers and decision · logging edit/delete/case embeds delivered · /config alert→delete→alert read back · /export 12.8 KB bundle parsed · /music 2/25 saved → 1/25 after remove, playback refused · /setup 9 modules, music enable → reset → disabled read-back · /appeal case #1 appealed → reviewed with the event retained, other member's case refused · /verify status no record → start refused with no quarantine → no row written
 live menus        2026-11-01 · boot found Report message / Case history / Rank card / Explain with AI missing · one clear + re-register · 21 application commands · doctor reports 2 user + 2 message menus, no drift · right-click invocation not performed (MCP cannot)
@@ -686,6 +708,7 @@ live dashboard analytics 2026-11-03 UTC · real local HTTP on Postgres · 7 audi
 live webhooks    2026-11-03 UTC · real local HTTP on Postgres · endpoint created, secret shown once and sealed at rest · local receiver verified t/v1 HMAC independently · settings.updated delivered with module/actor/source · always-500 receiver tried 3 times then failed with HTTP 500 on the receipt page · both removals audited · non-loopback http 400 · OAuth exchange fake
 live idempotency 2026-11-03 UTC · real local HTTP on Postgres · same key and body replayed byte-identically with Idempotent-Replayed: true · different body 409 idempotency_conflict · exactly one settings.update audit row · receipt stored the fingerprint and 200 status · OAuth exchange fake
 live session lifecycle 2026-11-03 UTC · real local HTTP on Postgres · 4 idle minutes of a 5-minute window accepted and last_seen_at moved · 6 idle minutes 401 with the row deleted · one refresh call for two concurrent requests · rotated sealed refresh token and new access expiry stored · spent refresh token replay 401 with the row deleted · logout revoked the refresh grant · OAuth exchange/refresh/revoke fake
+live components   2026-11-03 UTC · real discord.js adapter + signed router on Postgres · V2 form panel container with signed Apply/staff ids · Apply opened a modal with the form title and two inputs · valid submit wrote one form_submissions row · missing tz refused with no row · expired id refused before the handler · member refused, manager saw 1 pending · gateway click/modal submit not claimed
 live analytics    2026-11-01 · 2 stored audit rows = 2 logged events · 1 MCP edit + 1 delete = 1 edited / 1 deleted · command runs 0 → 3 → 4
 live config       2026-11-01 · moderation.automod.links alert → delete → alert read back · bogus rejected by the enum schema with no write · one reply per bridge command
 live export       2026-11-01 · 12.8 KB guild bundle downloaded and parsed = 49 settings / 1 case / 1 case event / 1 ledger row / 1 record; checksum matched; 2 KB member file; drift 1 missing → 0 missing; wrong-id delete and memory rollback refused

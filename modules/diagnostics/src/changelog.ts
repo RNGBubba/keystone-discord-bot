@@ -23,6 +23,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    pass: "pass-58",
+    date: "2026-11-03",
+    summary:
+      "P7 Components V2: panels are now built through a typed layout that refuses to exceed Discord's 40-component or 4,000-character budget, buttons and modals carry signed expiring ids, and `/form panel` posts a real Apply button that opens a modal and files the same validated submission as the command path.",
+    journal: "memory/journal/2026-11-03-pass-58.md",
+  },
+  {
     pass: "pass-57",
     date: "2026-11-03",
     summary:

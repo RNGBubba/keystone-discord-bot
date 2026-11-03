@@ -54,6 +54,7 @@
     "@keystone/db": "workspace:*",
     "@keystone/importer": "workspace:*",
     "@keystone/kernel": "workspace:*",
+    "@keystone/module-forms": "workspace:*",
     "@types/node": "^24.0.0",
     "tsup": "^9.0.0",
     "tsx": "^4.20.0",

@@ -85,9 +85,10 @@ the query before adding the command.
 - **Echoing answers in the submit reply.** The reply is ephemeral for a slash
   command but a prefix bridge posts ordinary messages. Return the submission id
   and the count, not the answers.
-- **Claiming modals.** A button that replies "use the command" is a dead end; a
-  button that opens a modal needs an adapter that does not exist. Ship the input
-  path that works and name the missing layer in [[04-Modules/forms/Status|Status]].
+- **Claiming a modal without a live submit.** The pass-58 layer opens a real
+  modal and validates it, but the MCP bot cannot press Apply; say the probe
+  drove the adapter in [[04-Modules/forms/Status|Status]] instead of implying a
+  human click.
 - **Forgetting the guild in the store call.** Every read and write is
   `(guildId, …)`. The PGlite test asserts guild B cannot see guild A's form or
   submissions.

@@ -32,9 +32,9 @@ cannot be removed from that message**.
   Checkbox Group, Checkbox.
 - `custom_id` ≤ 100 chars and unique per message.
 
-**Consequence:** when it exists, `packages/ui` will need a layout budgeter, not
-an embed-string builder. Every interactive surface is designed against a 40-slot
-budget; no V2 surface ships until that budgeter exists.
+**Consequence:** `packages/ui` (pass 58) is that layout budgeter, not an
+embed-string builder. Every interactive surface is designed against a 40-slot
+budget; no V2 surface ships unless the budgeter accepts it.
 
 ### 3. Privileged intents
 

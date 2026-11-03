@@ -45,6 +45,12 @@ export interface ReplyInput {
   embeds?: EmbedPayload[];
   ephemeral?: boolean;
   components?: ActionRow[];
+  /**
+   * Components V2 layout. Mutually exclusive with `content`, `embeds` and the
+   * legacy `components` rows: Discord rejects a V2 message that carries either.
+   * The adapter sets `MessageFlags.IsComponentsV2` and converts the tree.
+   */
+  v2?: readonly V2Component[];
   /** Optional attachments; the adapter turns each one into a file upload. */
   files?: ReplyFile[];
 }
@@ -84,6 +90,92 @@ export type MessageComponent = ButtonComponent | SelectComponent;
 export interface ActionRow {
   type: "action-row";
   components: MessageComponent[];
+}
+
+// --- Components V2 ---------------------------------------------------------
+// The structural subset of Discord's V2 component tree. `@keystone/ui` is the
+// only builder: it enforces the 40-component and ~4,000-character budgets and
+// the shape rules Discord rejects at runtime. The adapter is the only place
+// that turns these into discord.js builders.
+
+export interface V2Button {
+  type: "button";
+  style: ButtonStyle;
+  label: string;
+  customId?: string;
+  url?: string;
+  disabled?: boolean;
+}
+
+export interface V2Select {
+  type: "select";
+  customId: string;
+  placeholder: string;
+  options: SelectOption[];
+  minValues?: number;
+  maxValues?: number;
+  disabled?: boolean;
+}
+
+export type V2ActionComponent = V2Button | V2Select;
+
+export interface V2ActionRow {
+  type: "action-row";
+  components: V2ActionComponent[];
+}
+
+export interface V2TextDisplay {
+  type: "text-display";
+  content: string;
+}
+
+export interface V2Separator {
+  type: "separator";
+  divider?: boolean;
+  spacing?: "small" | "large";
+}
+
+export interface V2Thumbnail {
+  type: "thumbnail";
+  url: string;
+  description?: string;
+  spoiler?: boolean;
+}
+
+export interface V2Section {
+  type: "section";
+  texts: V2TextDisplay[];
+  accessory?: V2Button | V2Thumbnail;
+}
+
+export type V2ContainerChild = V2TextDisplay | V2Separator | V2Section | V2ActionRow;
+
+export interface V2Container {
+  type: "container";
+  accentColor?: number;
+  spoiler?: boolean;
+  components: V2ContainerChild[];
+}
+
+export type V2Component = V2Container | V2ContainerChild;
+
+/** One modal text input. Discord shows it inside a Label (type 18). */
+export interface ModalTextInput {
+  type: "text-input";
+  customId: string;
+  label: string;
+  style: "short" | "paragraph";
+  placeholder?: string;
+  value?: string;
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+}
+
+export interface ModalSpec {
+  customId: string;
+  title: string;
+  components: ModalTextInput[];
 }
 
 /** The narrow slice of a Discord interaction that commands are allowed to use. */
@@ -308,6 +400,11 @@ export interface CommandContext {
   readonly events?: import("./events").EventStore;
   /** Present when the composition root wired the private modmail store. */
   readonly modmail?: import("./modmail").ModmailStore;
+  /**
+   * Signs a button, select or modal id so it carries its own expiry and cannot
+   * be forged. Present in a running bot; tests get a fixed-secret signer.
+   */
+  readonly componentSigner?: import("./components").ComponentSigner;
 }
 
 /**
@@ -315,6 +412,9 @@ export interface CommandContext {
  * budget; user and message context menus live in their own 15 + 15 budgets.
  */
 export type CommandType = "chat-input" | "user" | "message";
+
+/** The three component interactions the bot routes. */
+export type ComponentKind = "button" | "select" | "modal";
 
 export type GuardResult = { ok: true } | { ok: false; message: string };
 export type Guard = (ctx: CommandContext) => GuardResult | Promise<GuardResult>;

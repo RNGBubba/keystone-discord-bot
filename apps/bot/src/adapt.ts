@@ -5,26 +5,51 @@ import {
   AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ContainerBuilder,
   ContextMenuCommandBuilder,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   SlashCommandBuilder,
   SlashCommandSubcommandBuilder,
+  TextDisplayBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ThumbnailBuilder,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type CommandInteractionOption,
   type InteractionEditReplyOptions,
   type InteractionReplyOptions,
+  type InteractionUpdateOptions,
   type MessageContextMenuCommandInteraction,
+  type ModalSubmitInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
   type RESTPostAPIContextMenuApplicationCommandsJSONBody,
+  type StringSelectMenuInteraction,
+  type TextInputComponent,
   type UserContextMenuCommandInteraction,
 } from "discord.js";
 import type {
   ActionRow,
   CommandDefinition,
   CommandOption,
+  ComponentInteractionLike,
   InteractionLike,
+  ModalSpec,
   ReplyInput,
+  V2ActionComponent,
+  V2Button,
+  V2Component,
+  V2Container,
+  V2ContainerChild,
+  V2Section,
+  V2Select,
 } from "@keystone/kernel";
 
 /**
@@ -149,9 +174,18 @@ export function buildApplicationCommandJson(
  * importing discord.js into 40 modules.
  */
 export function toReplyOptions(input: ReplyInput): InteractionReplyOptions {
-  const { components, files, ...rest } = input;
+  const { components, files, v2, ...rest } = input;
   const options = rest as unknown as InteractionReplyOptions;
-  if (components) options.components = toComponents(components);
+  if (v2) {
+    // A V2 message is layout, not content: Discord rejects the flag when the
+    // payload also carries content or embeds.
+    delete options.content;
+    delete options.embeds;
+    options.components = toV2Components(v2);
+    options.flags = MessageFlags.IsComponentsV2;
+  } else if (components) {
+    options.components = toComponents(components);
+  }
   if (files?.length) options.files = toFiles(files);
   return options;
 }
@@ -172,9 +206,34 @@ function toFiles(files: NonNullable<ReplyInput["files"]>): AttachmentBuilder[] {
  * instead of reusing the reply one.
  */
 function toEditOptions(input: ReplyInput): InteractionEditReplyOptions {
-  const { components, files, ...rest } = input;
+  const { components, files, v2, ...rest } = input;
   const options = rest as unknown as InteractionEditReplyOptions;
-  if (components) options.components = toComponents(components);
+  if (v2) {
+    delete options.content;
+    delete options.embeds;
+    options.components = toV2Components(v2);
+    options.flags = MessageFlags.IsComponentsV2;
+  } else if (components) {
+    options.components = toComponents(components);
+  }
+  if (files?.length) options.files = toFiles(files);
+  return options;
+}
+
+/**
+ * An interaction.update sends components but never a flag: the message keeps
+ * the V2 marker it was created with, so repeating it is not part of the call.
+ */
+function toUpdateOptions(input: ReplyInput): InteractionUpdateOptions {
+  const { components, files, v2, ...rest } = input;
+  const options = rest as unknown as InteractionUpdateOptions;
+  if (v2) {
+    delete options.content;
+    delete options.embeds;
+    options.components = toV2Components(v2);
+  } else if (components) {
+    options.components = toComponents(components);
+  }
   if (files?.length) options.files = toFiles(files);
   return options;
 }
@@ -224,6 +283,203 @@ const STYLES = {
   success: ButtonStyle.Success,
   danger: ButtonStyle.Danger,
 } as const;
+
+/**
+ * Components V2 is a layout tree, not a set of action rows. The builder in
+ * `@keystone/ui` has already enforced the budgets and shapes; this function
+ * only maps each node onto the discord.js builder that serialises it.
+ */
+export function toV2Components(
+  components: readonly V2Component[],
+): NonNullable<InteractionReplyOptions["components"]> {
+  return components.map((component) => {
+    switch (component.type) {
+      case "container":
+        return toV2Container(component);
+      case "text-display":
+        return new TextDisplayBuilder().setContent(component.content);
+      case "separator":
+        return toV2Separator(component);
+      case "section":
+        return toV2Section(component);
+      case "action-row":
+        return toV2ActionRow(component.components);
+    }
+  });
+}
+
+function toV2Container(container: V2Container): ContainerBuilder {
+  const builder = new ContainerBuilder();
+  if (container.accentColor !== undefined) builder.setAccentColor(container.accentColor);
+  if (container.spoiler) builder.setSpoiler(true);
+  for (const child of container.components) {
+    addContainerChild(builder, child);
+  }
+  return builder;
+}
+
+function addContainerChild(builder: ContainerBuilder, child: V2ContainerChild): void {
+  switch (child.type) {
+    case "text-display":
+      builder.addTextDisplayComponents(new TextDisplayBuilder().setContent(child.content));
+      return;
+    case "separator":
+      builder.addSeparatorComponents(toV2Separator(child));
+      return;
+    case "section":
+      builder.addSectionComponents(toV2Section(child));
+      return;
+    case "action-row":
+      builder.addActionRowComponents(toV2ActionRow(child.components));
+      return;
+  }
+}
+
+function toV2Separator(separator: { divider?: boolean; spacing?: "small" | "large" }): SeparatorBuilder {
+  const builder = new SeparatorBuilder();
+  if (separator.divider !== undefined) builder.setDivider(separator.divider);
+  if (separator.spacing) {
+    builder.setSpacing(
+      separator.spacing === "large" ? SeparatorSpacingSize.Large : SeparatorSpacingSize.Small,
+    );
+  }
+  return builder;
+}
+
+function toV2Section(section: V2Section): SectionBuilder {
+  const builder = new SectionBuilder();
+  builder.addTextDisplayComponents(
+    ...section.texts.map((text) => new TextDisplayBuilder().setContent(text.content)),
+  );
+  if (section.accessory?.type === "button") {
+    builder.setButtonAccessory(toV2Button(section.accessory));
+  } else if (section.accessory?.type === "thumbnail") {
+    builder.setThumbnailAccessory(toV2Thumbnail(section.accessory));
+  }
+  return builder;
+}
+
+function toV2ActionRow(
+  components: readonly V2ActionComponent[],
+): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder> {
+  const builder = new ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>();
+  for (const component of components) {
+    builder.addComponents(component.type === "select" ? toV2Select(component) : toV2Button(component));
+  }
+  return builder;
+}
+
+function toV2Button(button: V2Button): ButtonBuilder {
+  const builder = new ButtonBuilder().setLabel(button.label);
+  if (button.style === "link") {
+    builder.setStyle(ButtonStyle.Link);
+    if (button.url) builder.setURL(button.url);
+  } else {
+    builder.setStyle(STYLES[button.style]);
+    if (button.customId) builder.setCustomId(button.customId);
+  }
+  if (button.disabled) builder.setDisabled(true);
+  return builder;
+}
+
+function toV2Select(select: V2Select): StringSelectMenuBuilder {
+  const builder = new StringSelectMenuBuilder()
+    .setCustomId(select.customId)
+    .setPlaceholder(select.placeholder)
+    .setMinValues(select.minValues ?? 0)
+    .setMaxValues(select.maxValues ?? 1)
+    .addOptions(
+      select.options.map((option) => {
+        const item = new StringSelectMenuOptionBuilder().setLabel(option.label).setValue(option.value);
+        if (option.description) item.setDescription(option.description);
+        if (option.default) item.setDefault(true);
+        return item;
+      }),
+    );
+  if (select.disabled) builder.setDisabled(true);
+  return builder;
+}
+
+function toV2Thumbnail(thumbnail: { url: string; description?: string; spoiler?: boolean }): ThumbnailBuilder {
+  const builder = new ThumbnailBuilder().setURL(thumbnail.url);
+  if (thumbnail.description) builder.setDescription(thumbnail.description);
+  if (thumbnail.spoiler) builder.setSpoiler(true);
+  return builder;
+}
+
+/** A modal is a title plus one Label per text input; nothing else is sent. */
+export function toModalBuilder(spec: ModalSpec): ModalBuilder {
+  const builder = new ModalBuilder().setCustomId(spec.customId).setTitle(spec.title);
+  for (const input of spec.components) {
+    const textInput = new TextInputBuilder()
+      .setCustomId(input.customId)
+      .setStyle(input.style === "paragraph" ? TextInputStyle.Paragraph : TextInputStyle.Short)
+      .setRequired(input.required ?? true);
+    if (input.placeholder) textInput.setPlaceholder(input.placeholder);
+    if (input.value) textInput.setValue(input.value);
+    if (input.minLength !== undefined) textInput.setMinLength(input.minLength);
+    if (input.maxLength !== undefined) textInput.setMaxLength(input.maxLength);
+    builder.addLabelComponents(new LabelBuilder().setLabel(input.label).setTextInputComponent(textInput));
+  }
+  return builder;
+}
+
+type AnyComponentInteraction =
+  | ButtonInteraction
+  | StringSelectMenuInteraction
+  | ModalSubmitInteraction;
+
+/**
+ * The component counterpart of `asInteractionLike`: one structural shape for a
+ * button, a string select and a modal submit, so routing is testable without a
+ * gateway. `replied` treats a deferred interaction as answered, because a
+ * second `reply` would be refused.
+ */
+export function asComponentInteraction(
+  interaction: AnyComponentInteraction,
+): ComponentInteractionLike {
+  // A modal submit has already replaced the message; only buttons and selects
+  // may update it, so the optional method exists only where Discord allows it.
+  const update = "update" in interaction ? interaction.update.bind(interaction) : undefined;
+  const base = {
+    customId: interaction.customId,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId ?? null,
+    userId: interaction.user.id,
+    permissions: interaction.memberPermissions ? interaction.memberPermissions.toArray() : [],
+    get replied() {
+      return interaction.replied || interaction.deferred;
+    },
+    reply: (input: ReplyInput) => interaction.reply(toReplyOptions(input)),
+    ...(update ? { update: (input: ReplyInput) => update(toUpdateOptions(input)) } : {}),
+    deferReply: (input?: { ephemeral?: boolean }) => interaction.deferReply(input ?? {}),
+    editReply: (input: ReplyInput) => interaction.editReply(toEditOptions(input)),
+    followUp: (input: ReplyInput) => interaction.followUp(toReplyOptions(input)),
+  };
+
+  if (interaction.isButton()) {
+    return {
+      ...base,
+      kind: "button",
+      showModal: (modal: ModalSpec) => interaction.showModal(toModalBuilder(modal)),
+    };
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    return {
+      ...base,
+      kind: "select",
+      values: interaction.values,
+      showModal: (modal: ModalSpec) => interaction.showModal(toModalBuilder(modal)),
+    };
+  }
+
+  const fields: Record<string, string> = {};
+  for (const [customId, component] of interaction.fields.fields) {
+    fields[customId] = (component as TextInputComponent).value;
+  }
+  return { ...base, kind: "modal", fields };
+}
 
 export function buildCommandJson(
   definition: CommandDefinition,

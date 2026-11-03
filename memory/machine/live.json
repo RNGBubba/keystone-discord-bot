@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "live-2026-11-03",
   "date": "2026-11-03",
-  "generatedAt": "2026-11-03T07:46:05.740Z",
+  "generatedAt": "2026-11-03T08:13:26.380Z",
   "docker": {
     "version": "29.9.2",
     "running": true
@@ -51,7 +51,7 @@
     {
       "id": "bullmq-delayed-timer",
       "status": "pass",
-      "detail": "one delayed job fired once after 1129ms and wrote a completed receipt",
+      "detail": "one delayed job fired once after 1187ms and wrote a completed receipt",
       "features": []
     },
     {
@@ -83,7 +83,7 @@
     {
       "id": "portability-import-verify",
       "status": "pass",
-      "detail": "bundle checksum 4d99187142e2… matched after import 3f193783",
+      "detail": "bundle checksum a47d829264cb… matched after import 6282b731",
       "features": [
         "portability.restore-and-config-hash",
         "security.backup-restore"
@@ -194,6 +194,14 @@
       "detail": "real local HTTP on Postgres: the instance console was 401 anonymous, 403 for a guild admin and 200 for an owner; the owner's revocation deleted the admin's session and that cookie then failed at 401; a tight limiter returned 429 + Retry-After on the auth, dashboard, write and API classes and each recovered in the next window while /healthz stayed exempt; past the rotation interval the opaque cookie was re-keyed, the old value was refused and the new one worked; logout asked the OAuth port to revoke the sealed refresh grant and the session then failed at 401. Token revocation is asserted at the fake port; no live Discord revocation or login is claimed",
       "features": [
         "operations.dashboard-session-hardening"
+      ]
+    },
+    {
+      "id": "web-component-panels",
+      "status": "pass",
+      "detail": "real discord.js adapter + signed component router on Postgres: the form panel rendered as a V2 container with signed Apply and staff ids; the Apply button opened a modal whose title and two inputs came from the form; a valid modal submit wrote one form_submissions row; a submit missing a required field was re-prompted with the field name and wrote nothing; an expired id was refused before the handler and opened no modal; a member without ManageGuild was refused while a manager saw the one pending application. The interactions were constructed as discord.js objects and passed through asComponentInteraction; a live gateway click or modal submit is not claimed",
+      "features": [
+        "forms.application-forms"
       ]
     }
   ]

@@ -41,6 +41,8 @@ export interface DispatchDeps {
   modmail?: import("./modmail").ModmailStore;
   /** Optional: records one real row per dispatched guild command. */
   usage?: import("./analytics").CommandUsageStore;
+  /** Optional: components render without buttons when it is absent. */
+  componentSigner?: import("./components").ComponentSigner;
   /** Optional: when absent, tracing is a no-op and costs nothing. */
   telemetry?: Telemetry;
   /** Injectable clock; defaults to the real one. */
@@ -140,6 +142,7 @@ export async function dispatchCommand(
     forms: deps.forms,
     events: deps.events,
     modmail: deps.modmail,
+    componentSigner: deps.componentSigner,
   };
 
   const startedAt = deps.now?.() ?? Date.now();

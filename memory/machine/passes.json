@@ -771,6 +771,21 @@
         "memory": "current",
         "build": "pass"
       }
+    },
+    {
+      "id": "pass-58",
+      "date": "2026-11-03",
+      "phase": "P7",
+      "summary": "P7 Components V2 layer, signed component routing and form modals. `packages/ui` now exists as a framework-free package: `layout()` builds a typed container/text/section/action-row tree and enforces Discord's 40-component and 4,000-character budgets plus row and option shapes, and `modal()` builds Label-wrapped text inputs under a five-row, 45-character-title limit; both throw instead of truncating. The kernel owns `V2Component`/`ModalSpec` and adds `createComponentSigner` (HMAC-signed `k1:` ids carrying namespace, action, payload and expiry, at most 100 chars) and `ComponentRouter` (kind + namespace + action match, signature and expiry check, guild and permission gates, UserError to ephemeral reply). `apps/bot/src/adapt.ts` maps the tree to discord.js builders and sets `MessageFlags.IsComponentsV2`; one component listener now handles buttons, selects and modal submits, handing legacy moderation ids to their existing handler. `/form panel` is a V2 container with signed Apply and staff buttons; Apply opens a modal built from the form's fields and a valid submit calls the same FormService.submit, while a missing answer is refused by name and a form over five questions keeps the command path. `INTERACTION_SECRET` is optional: without it the key is per-process so pre-restart panels are honestly stale. No i18n work and no other panel was migrated. Tests 604 / 89 files; live probe 24/24, adding web-component-panels through the real discord.js adapter and router on Postgres: panel JSON, modal title and inputs, one stored submission, a bad submit refused with no row, an expired id refused before the handler, a member refused and a manager shown the pending queue. A live gateway click and modal submit are not claimed.",
+      "journal": "journal/2026-11-03-pass-58.md",
+      "checks": {
+        "typecheck": "pass",
+        "tests": "604",
+        "budget": "20/100 roots · 141 subcommands · 4 context menus",
+        "live": "24/24",
+        "memory": "current",
+        "build": "pass"
+      }
     }
   ]
 }

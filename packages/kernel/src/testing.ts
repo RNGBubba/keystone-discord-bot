@@ -1,3 +1,4 @@
+import { createComponentSigner, type ComponentSigner } from "./components";
 import { InMemoryCooldownStore } from "./cooldowns";
 import { createSilentLogger } from "./logger";
 import type {
@@ -186,6 +187,7 @@ export interface TestContextOptions {
   events?: import("./events").EventStore;
   modmail?: import("./modmail").ModmailStore;
   catalog?: readonly CommandCatalogEntry[];
+  componentSigner?: ComponentSigner;
 }
 
 export type TestContext = CommandContext & { interaction: FakeInteraction };
@@ -222,5 +224,6 @@ export function createTestContext(options: TestContextOptions = {}): TestContext
     forms: options.forms,
     events: options.events,
     modmail: options.modmail,
+    componentSigner: options.componentSigner ?? createComponentSigner("keystone-test-secret"),
   };
 }

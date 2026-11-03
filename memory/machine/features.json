@@ -705,7 +705,7 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Embed today; a V2 image card is planned (no `packages/ui` yet).",
+          "note": "Embed today; the V2 layer exists (pass 58) and the image card is not migrated yet.",
           "evidence": [
             "modules/community/src/community.test.ts"
           ],
@@ -923,7 +923,7 @@
           "phase": "P7",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Text welcome with placeholder substitution, an immediate or delayed autorole and an optional DM; a member leave sends the configured goodbye text to one channel with no role or DM branch. `/tools welcome | goodbye`. A richer panel is still planned (no packages/ui).",
+          "note": "Text welcome with placeholder substitution, an immediate or delayed autorole and an optional DM; a member leave sends the configured goodbye text to one channel with no role or DM branch. `/tools welcome | goodbye`. The V2 layer exists (pass 58); a richer panel is not built yet.",
           "evidence": [
             "modules/community/src/community.test.ts",
             "modules/community/src/commands.test.ts",
@@ -1160,7 +1160,7 @@
           "phase": "P3",
           "status": "shipped-in-repo",
           "source": "memory/vault/01-Mission/Parity-Matrix.md",
-          "note": "Thread/embed panels today; V2 layout is planned (no `packages/ui` yet).",
+          "note": "Thread/embed ticket panels today; the V2 form panel shipped in pass 58, while the ticket panel is not migrated yet.",
           "evidence": [
             "modules/community/src/commands.test.ts"
           ],
@@ -2320,9 +2320,11 @@
           "phase": "P7",
           "status": "shipped-in-repo",
           "source": "memory/vault/02-Research/Competitive-2026.md",
-          "note": "`/form create | edit | delete | list | panel | submit | export` over `forms` and `form_submissions`. Fields are validated, required and capped; a pending row is unique per member and form. Modal input is deferred: the panel prints the validated `answers` syntax instead of shipping a button that opens nothing. Live 2026-11-01: create → open → panel → submit → review accept → export, with the downloaded file matching the rows.",
+          "note": "`/form create | edit | delete | list | panel | submit | review | export` over `forms` and `form_submissions`. Fields are validated, required and capped; a pending row is unique per member and form. The pass-58 panel is a Components V2 container whose signed Apply button opens a modal built from the form's fields and files the same `FormService.submit` row; a form over five questions keeps the validated `answers` option. Live 2026-11-01: create → open → panel → submit → review accept → export, with the downloaded file matching the rows; the modal path is adapter/probe-proven, not gateway-clicked.",
           "evidence": [
             "modules/forms/src/forms.test.ts",
+            "modules/forms/src/panel.ts",
+            "apps/bot/src/components.ts",
             "packages/db/src/form-store.test.ts",
             "memory/journal/2026-11-01-pass-40.md"
           ],
@@ -2385,8 +2387,8 @@
           "phase": "P7",
           "status": "open",
           "source": "memory/vault/02-Research/Competitive-2026.md",
-          "note": "Command RSVP is shipped: `/event rsvp event:<key> rsvp:going|not_going`, one row per member, capacity counted from `event_rsvps`. Interactive going/maybe/no buttons are not built; a button needs the modal/component interaction layer this build does not have.",
-          "openReason": "A real RSVP button needs the component interaction layer (button ids, actor checks, component routing) that this build does not have; shipping an unclickable button would be a dead end.",
+          "note": "Command RSVP is shipped: `/event rsvp event:<key> rsvp:going|not_going`, one row per member, capacity counted from `event_rsvps`. Interactive going/maybe/no buttons are not built yet; the signed component layer exists (pass 58).",
+          "openReason": "The component layer now exists (pass 58), but the event buttons and their state transitions are not built; shipping an inert button would still be a dead end.",
           "evidence": [
             "modules/events/src/events.test.ts"
           ],

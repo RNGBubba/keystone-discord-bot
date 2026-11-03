@@ -213,7 +213,7 @@ box means the code and its tests exist, not that a live guild has run it.
 
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
-| Application forms | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `packages/db/src/form-store.test.ts`, `memory/journal/2026-11-01-pass-40.md` · live verified |
+| Application forms | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `modules/forms/src/panel.ts`, `apps/bot/src/components.ts`, `packages/db/src/form-store.test.ts`, `memory/journal/2026-11-01-pass-40.md` · live verified |
 | Review queue | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `packages/db/src/form-store.test.ts` · live verified |
 | Submission export | P7 | ✅ in repo | `modules/forms/src/forms.test.ts`, `memory/vault/04-Modules/forms/Status.md` · live verified |
 
@@ -222,7 +222,7 @@ box means the code and its tests exist, not that a live guild has run it.
 | Feature | Phase | Status | Evidence / note |
 | --- | --- | --- | --- |
 | Event creation | P7 | ✅ in repo | `modules/events/src/events.test.ts`, `packages/db/src/event-store.test.ts`, `memory/journal/2026-11-01-pass-41.md` · live verified |
-| RSVP buttons | P7 | ◐ open | A real RSVP button needs the component interaction layer (button ids, actor checks, component routing) that this build does not have; shipping an unclickable button would be a dead end. · `modules/events/src/events.test.ts` |
+| RSVP buttons | P7 | ◐ open | The component layer now exists (pass 58), but the event buttons and their state transitions are not built; shipping an inert button would still be a dead end. · `modules/events/src/events.test.ts` |
 | Reminders | P7 | ◐ open | Scheduled delivery needs a recurring queue job, a per-event wake-up and a delivery port; manual `remind` is real, and the scheduler is named rather than faked. · `modules/events/src/events.test.ts`, `packages/db/src/event-store.test.ts` · live verified |
 | ICS export | P7 | ◐ open | ICS needs a calendar serializer and a real calendar consumer; the checksummed JSON is the portable format the other modules already export. · `modules/events/src/events.test.ts` · live verified |
 

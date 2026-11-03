@@ -1,15 +1,17 @@
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 import { Events, Routes } from "discord.js";
 import {
   ModuleRegistry,
   auditBudget,
+  createComponentSigner,
   createLogger,
   dispatchCommand,
   formatBudgetReport,
   type DispatchDeps,
 } from "@keystone/kernel";
 import { loadEnv, requireToken } from "@keystone/config";
-import { asInteractionLike, buildApplicationCommandJson, toReplyOptions } from "./adapt";
+import { asInteractionLike, buildApplicationCommandJson } from "./adapt";
 import { commandDrift, hasDrift, type CommandJson } from "./command-sync";
 import { createClient } from "./client";
 import { modules } from "./modules";
@@ -27,17 +29,29 @@ import { registerAiEvents } from "./ai-events";
 import { registerPrefixCommands } from "./prefix";
 import { createDiscordAttachmentReader, createDiscordExportFacts } from "./export-discord";
 import { LoggingService } from "@keystone/module-logging";
+import { registerComponentInteractions } from "./components";
 import {
   TemporaryActionService,
   buildNativeAutoModPlan,
   moderationSettingsSchema,
 } from "@keystone/module-moderation";
-import { handleModerationButton } from "./moderation-buttons";
 
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = createLogger("keystone", env.LOG_LEVEL);
   const token = requireToken(env);
+
+  // A component id is signed so a stale or forged button is refused without a
+  // database read. Without a configured secret the key is per-process: that is
+  // honest (a panel from before a restart is stale) and never a shared default.
+  if (!env.INTERACTION_SECRET) {
+    logger.warn(
+      "INTERACTION_SECRET is not set — buttons and modals issued before a restart will be refused.",
+    );
+  }
+  const componentSigner = createComponentSigner(
+    env.INTERACTION_SECRET ?? randomBytes(32).toString("base64url"),
+  );
 
   const registry = new ModuleRegistry().registerAll(modules);
   const budget = auditBudget(registry);
@@ -100,6 +114,7 @@ async function main(): Promise<void> {
     events: runtime.events,
     modmail: runtime.modmail,
     usage: runtime.usage,
+    componentSigner,
   };
 
   const loggingService = new LoggingService(
@@ -208,24 +223,15 @@ async function main(): Promise<void> {
     });
   });
 
-  client.on(Events.InteractionCreate, (interaction) => {
-    if (!interaction.isButton()) return;
-    void handleModerationButton(
-      {
-        customId: interaction.customId,
-        guildId: interaction.guildId,
-        userId: interaction.user.id,
-        reply: (input) => interaction.reply(toReplyOptions(input)),
-      },
-      {
-        settings: runtime.settings.forModule("moderation"),
-        moderation: runtime.moderation,
-      },
-    ).catch((error: unknown) => {
-      logger.error("moderation button failed", {
-        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
-      });
-    });
+  registerComponentInteractions(client, {
+    signer: componentSigner,
+    forms: runtime.forms,
+    formSettings: runtime.settings.forModule("forms"),
+    moderation: {
+      settings: runtime.settings.forModule("moderation"),
+      moderation: runtime.moderation,
+    },
+    logger: logger.child("components"),
   });
 
   const devTestGuild =

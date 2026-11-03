@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@keystone/testing": "workspace:*",
+    "@keystone/ui": "workspace:*",
     "zod": "^3.25.0"
   }
 }

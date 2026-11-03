@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { ChatInputCommandInteraction } from "discord.js";
-import { defineCommand } from "@keystone/kernel";
+import type { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction } from "discord.js";
+import { MessageFlags } from "discord.js";
+import { defineCommand, type ModalSpec, type V2Component } from "@keystone/kernel";
+import { layout } from "@keystone/ui";
 import {
+  asComponentInteraction,
   asInteractionLike,
   buildApplicationCommandJson,
   buildCommandJson,
   buildContextMenuJson,
+  toModalBuilder,
+  toReplyOptions,
 } from "./adapt";
 
 interface JsonOption {
@@ -286,5 +291,132 @@ describe("asInteractionLike", () => {
       files: [{ name: "keystone.json", content: "{}" }],
     });
     expect(captured[0]?.files?.[0]?.name).toBe("keystone.json");
+  });
+});
+
+describe("Components V2 adapter", () => {
+  const panel: V2Component[] = layout((ui) => {
+    ui.container({ accentColor: 0x5865f2 }, (box) => {
+      box.text("## Form");
+      box.separator();
+      box.actions([ui.button({ style: "primary", label: "Apply", customId: "k1:x:y:form:apply:staff" })]);
+    });
+  });
+
+  it("marks a v2 reply and drops content and embeds instead of sending both", () => {
+    const options = toReplyOptions({ content: "ignored", embeds: [{ title: "ignored" }], v2: panel });
+    expect(options.flags).toBe(MessageFlags.IsComponentsV2);
+    expect(options.content).toBeUndefined();
+    expect(options.embeds).toBeUndefined();
+    expect(options.components).toHaveLength(1);
+    expect((options.components?.[0] as unknown as { toJSON(): unknown }).toJSON()).toMatchObject({
+      type: 17,
+      accent_color: 0x5865f2,
+      components: [
+        { type: 10, content: "## Form" },
+        { type: 14 },
+        { type: 1, components: [{ type: 2, style: 1, label: "Apply" }] },
+      ],
+    });
+  });
+
+  it("turns a modal spec into Label-wrapped text inputs", () => {
+    const spec: ModalSpec = {
+      customId: "form-submit-staff",
+      title: "Staff application",
+      components: [
+        {
+          type: "text-input",
+          customId: "why",
+          label: "Why join",
+          style: "paragraph",
+          required: true,
+          minLength: 0,
+          maxLength: 500,
+        },
+      ],
+    };
+    const json = toModalBuilder(spec).toJSON();
+    expect(json).toMatchObject({
+      title: "Staff application",
+      custom_id: "form-submit-staff",
+      components: [
+        {
+          type: 18,
+          label: "Why join",
+          component: { type: 4, custom_id: "why", style: 2, required: true, max_length: 500 },
+        },
+      ],
+    });
+  });
+
+  it("adapts a button and opens the modal through showModal", async () => {
+    let shown: { custom_id?: string } | undefined;
+    const interaction = {
+      customId: "k1:abc:def:form:apply:staff",
+      guildId: "guild-1",
+      channelId: "channel-1",
+      user: { id: "user-1" },
+      memberPermissions: { toArray: () => ["ManageGuild"] },
+      replied: false,
+      deferred: false,
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      reply: noop,
+      update: noop,
+      deferReply: noop,
+      editReply: noop,
+      followUp: noop,
+      showModal: async (modal: unknown) => {
+        shown = (modal as { toJSON: () => { custom_id?: string } }).toJSON();
+      },
+    } as unknown as ButtonInteraction;
+
+    const like = asComponentInteraction(interaction);
+    expect(like).toMatchObject({
+      kind: "button",
+      customId: "k1:abc:def:form:apply:staff",
+      userId: "user-1",
+      permissions: ["ManageGuild"],
+    });
+    await like.showModal?.({
+      customId: "form-submit-staff",
+      title: "Staff",
+      components: [
+        { type: "text-input", customId: "why", label: "Why join", style: "short", required: true },
+      ],
+    });
+    expect(shown?.custom_id).toBe("form-submit-staff");
+  });
+
+  it("maps a modal submit's fields by input custom id", async () => {
+    const interaction = {
+      customId: "form-submit-staff",
+      guildId: "guild-1",
+      channelId: "channel-1",
+      user: { id: "user-1" },
+      memberPermissions: null,
+      replied: false,
+      deferred: false,
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      fields: {
+        fields: new Map([
+          ["why", { value: "I like helping" }],
+          ["tz", { value: "UTC+2" }],
+        ]),
+      },
+      reply: noop,
+      update: noop,
+      deferReply: noop,
+      editReply: noop,
+      followUp: noop,
+    } as unknown as ModalSubmitInteraction;
+
+    const like = asComponentInteraction(interaction);
+    expect(like.kind).toBe("modal");
+    expect(like.fields).toEqual({ why: "I like helping", tz: "UTC+2" });
   });
 });

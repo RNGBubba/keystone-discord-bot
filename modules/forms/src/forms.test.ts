@@ -99,8 +99,17 @@ describe("/form vertical slice", () => {
       values: { form: "staff-application" },
     });
     await form.execute(panel);
+    expect(panel.interaction.deferred).toBe(true);
     expect(panel.interaction.lastReply?.ephemeral).toBeUndefined();
-    expect(panel.interaction.lastReply?.embeds?.[0]?.title).toBe("Staff application");
+    // A Components V2 panel is a layout tree, not an embed.
+    const container = panel.interaction.lastReply?.v2?.[0];
+    expect(container?.type).toBe("container");
+    if (container?.type === "container") {
+      const text = container.components.find((child) => child.type === "text-display");
+      expect(text?.type === "text-display" ? text.content : "").toContain("Staff application");
+      const rows = container.components.filter((child) => child.type === "action-row");
+      expect(rows).toHaveLength(2);
+    }
     expect(await store.getForm("1", "staff-application")).toMatchObject({
       panelChannelId: "99",
     });

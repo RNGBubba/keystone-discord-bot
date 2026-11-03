@@ -5,9 +5,9 @@
   "mission": "vault/01-Mission/Mission.md",
   "northStar": "vault/01-Mission/North-Star.md",
   "updatedAt": "2026-11-03",
-  "phase": "P6",
-  "lastPass": "journal/2026-11-03-pass-57.md",
-  "nextAction": "P6 is complete in repo, including the idle timeout and the refresh-token path. The only remaining P6 item is the live Discord OAuth round trip with real login, refresh and token revocation, which cannot be completed here without client credentials and a human browser. Then P7 Components V2 UI and i18n; P8 playback needs a Lavalink node, and P9/P10 need outside input.",
+  "phase": "P7",
+  "lastPass": "journal/2026-11-03-pass-58.md",
+  "nextAction": "P7 Components V2 is in repo as packages/ui plus the signed component router, with the form panel migrated to a V2 layout and a working modal submit. The remaining P7 UI work is i18n (packages/i18n, typed keys, per-guild locale) and the embeds that have not moved yet (rank card, welcome/goodbye, ticket panel). A live gateway click, right-click and modal submit still need a human Discord client; P8 playback needs a Lavalink node, and P9/P10 need outside input.",
   "live": {
     "report": "machine/live.json",
     "id": "live-2026-11-03"
@@ -19,7 +19,7 @@
     "contextMenus": 4,
     "commandLimit": 100,
     "modules": 12,
-    "tests": 573
+    "tests": 604
   },
   "modules": [
     {

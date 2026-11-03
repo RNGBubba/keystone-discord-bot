@@ -20,8 +20,17 @@ table reached 59 of 59.
   index and by the in-memory store. A decided applicant may apply again.
 - `delete` is refused once any submission exists; history is closed, not erased.
 - `export` attaches `keystone.forms.<guild>.json` with a SHA-256 checksum.
-- **Modal input is not shipped.** `submit` takes a validated `answers` string
-  and the panel prints the exact syntax. There is no button that opens nothing.
+- **Modal input ships on the panel (pass 58).** `/form panel` posts a
+  Components V2 container with a signed **Apply** button; pressing it opens a
+  modal whose Label inputs come from the form's fields (five or fewer) and whose
+  signed id expires in 15 minutes. A valid submit calls the same
+  `FormService.submit` as the command path, and a missing answer is refused by
+  field name. A form with more than five questions keeps the `/form submit`
+  path and the button says so. The panel's **Review submissions** button
+  requires `ManageGuild`.
+- Legacy moderation buttons still use their pre-pass-58 ids; new panels use
+  HMAC-signed `k1:` ids whose signature, expiry, guild and route permission are
+  checked before a handler runs.
 - Forms are enabled by default; `enabled: false` blocks `create` and `submit`,
   not `list`, `review` or `export`.
 - The module requests only `Guilds`; no gateway event or privileged intent is
@@ -34,7 +43,7 @@ pnpm vitest run modules/forms packages/db/src/form-store.test.ts
   ✓ modules/forms/src/forms.test.ts (12 tests)
   ✓ packages/db/src/form-store.test.ts (3 tests)
 pnpm test
-  573 tests / 85 files
+  604 tests / 89 files
 pnpm budget
   20/100 roots · 141 subcommands · 161 actions · 4 context menus, OK
 ```
@@ -131,27 +140,24 @@ including `form`, and no drift.
 
 ## Known limitations
 
-- **No modal input.** The MCP bridge and Discord slash both use the `answers`
-  option. A real modal needs a kernel method, an adapter for modal submits and a
-  UI layer; none exists here.
-- The panel embed is not readable through the MCP text reader. The message was
-  posted (it has a real message id) and the command test asserts its fields; the
-  live text proves the command ran.
+- **A live modal submit is not claimed.** The pass-58 probe drives the real
+  `asComponentInteraction` adapter and signed router with constructed discord.js
+  objects; the MCP bot cannot click Apply or submit a modal, so a live gateway
+  click and modal submit still need a human client.
+- The panel's V2 layout is not readable through the MCP text reader. The probe
+  asserts the V2 JSON and the stored row; the live bridge proved the command
+  path, not the rendered panel.
 - The live window was memory mode at pass 40; pass 44 has since opened
   Postgres and Redis.
 - `/export guild` (the portability bundle) does **not** include `forms` or
   `form_submissions`. The dedicated `/form export` is the truthful export; the
   guild bundle gap is open.
-- The MCP bot holds `ManageGuild` in the test guild, so the member-without-
-  permission refusal is test-only.
-- No buttons, selects or modals; the panel is a plain message plus instructions.
+- A form with more than five fields cannot use the modal; that is a Discord
+  limit, not a silent truncation.
 - A human slash `InteractionCreate` was not observed; the bridge is message-based.
 
 ## Next
 
-- Add a modal `InteractionLike` method and a modal-submit adapter, then have the
-  panel button open a form whose fields come from `FormDefinition.fields`. Keep
-  `FormService.submit` as the one write path.
 - Add forms to `GuildSnapshot` / `PortabilityService` so `/export guild` includes
   them, with a restore test that preserves form ids and submission states.
 - Decide whether a denied applicant should have a cooldown; the current rule

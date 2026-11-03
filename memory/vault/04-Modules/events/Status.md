@@ -28,7 +28,7 @@ pnpm vitest run modules/events packages/db/src/event-store.test.ts
   ✓ modules/events/src/events.test.ts (9 tests)
   ✓ packages/db/src/event-store.test.ts (3 tests)
 
-pnpm test                          # 573 tests / 85 files
+pnpm test                          # 604 tests / 89 files
 pnpm budget                        # 20/100 roots · 141 subcommands · 161 actions · 4 context menus
 pnpm commands:doctor               # Registry 20 roots · 141 subcommands · 4 context menus
 ```
@@ -128,7 +128,8 @@ is unreachable; PGlite covers them.
 ## Open
 
 - Scheduled reminders and per-member timezones.
-- RSVP buttons with a maybe answer (needs the component interaction layer).
+- RSVP buttons with a maybe answer. The component layer now exists (pass 58);
+  the buttons themselves are not built.
 - ICS calendar export.
 - A delivery port for event-open notifications if it is ever wanted.
 - Include events and RSVPs in the guild portability bundle so `/export guild`

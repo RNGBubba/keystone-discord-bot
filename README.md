@@ -49,7 +49,7 @@ owner-or-staff threads, a first-staff-reply claim, side-aware unread counters an
 a transcript archived once by a conditional update. The command ledger is
 **20/100 roots** with **141 real subcommands**, **161 actions** and **4 context
 menus** (2 user, 2 message), there are **12 modules**, and `pnpm check` covers
-**573 tests across 85 files** without a Discord token, database or network.
+**604 tests across 89 files** without a Discord token, database or network.
 Pass 43 audited the documented counts, paths and capability claims against the
 code: `pnpm audit:claims` now fails the gate when a claim drifts. The stale
 root, module, changelog and Docker notes are corrected. Live on 2026-11-01: the
@@ -99,7 +99,7 @@ the documents that speak in the present tense, and `pnpm memory:check` recompute
 the roots, subcommands, actions, menus, modules, test count and pass count from
 the generated files. A current-tense sentence that disagrees fails the gate; a
 historical sentence is allowed only when it names its pass. A capability claim
-with no code behind it — Components V2, i18n and the Next.js shell today — must
+with no code behind it — i18n and the Next.js shell today — must
 be marked planned. The same pass added the root governance and issue/PR files.
 See [pass 48](memory/journal/2026-11-02-pass-48.md).
 
@@ -622,8 +622,9 @@ Everything below is free. No feature is moved behind a paywall.
 - **P7:** invite tracking, audit logging, the link/profanity/zalgo filters,
   auto-responders, guild analytics, `/config`, `/export`, the `/music` saved
   queue, `/form`, `/event`, `/modmail` and the four context menus are done; the
-  rest is parity completion (role persistence), the planned Components V2 UI
-  and i18n.
+  rest is parity completion (role persistence), the planned i18n work, and the
+  panels still rendered as embeds. The Components V2 layer (`packages/ui`) and
+  the form panel's modal submit landed in pass 58.
 - **P8:** `/music` queue control ships disabled by default; bring-your-own
   Lavalink playback is the open piece (no bundled streamer).
 - **P9:** docs site, release workflow and self-host kit; the 14-lesson curriculum is already in `memory/vault/05-Learning/` and checked by `pnpm memory:check`.
@@ -1077,7 +1078,8 @@ clear followed by a rate-limited register leaves the app with no commands.
 apps/bot        gateway adapter, composition root, dispatch, dev prefix bridge
 apps/worker     BullMQ consumer with idempotent handlers
 apps/web        optional dashboard/API: OAuth sessions, guild authz, settings writes
-packages/kernel registry · guards · settings · dispatch · budget · ports
+packages/kernel registry · guards · settings · dispatch · budget · component router · ports
+packages/ui     typed Components V2 layouts and modals; enforces the 40/4,000 budget
 packages/module-catalog  the one module list shared by bot and web
 packages/db     Drizzle schema, migrations, Postgres repositories
 packages/importer  bundles, restore/rollback, importers, drift

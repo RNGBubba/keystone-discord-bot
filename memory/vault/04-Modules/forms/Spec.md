@@ -11,11 +11,12 @@ pitches, partnership requests. A panel that only prints instructions is not a
 form; the value is that an answer becomes a row a reviewer can find, decide on
 and export. This module keeps that whole chain in one owned store.
 
-The build has **no modal support**. Discord modals would require a new
-`InteractionLike` method, a modal-submit adapter and a UI layer. Rather than
-ship a panel button that opens nothing, `/form submit` accepts the answers as a
-validated option and the panel prints the exact syntax. A future modal layer can
-call the same service and change no store rule.
+The panel uses the P7 component layer (pass 58). `/form panel` posts a
+Components V2 container whose **Apply** button opens a modal built from the
+form's fields, and the modal submit calls the same `FormService.submit` as the
+command. A form with more than five questions keeps the validated `answers`
+option because a Discord modal holds five inputs. Both input paths share the
+same parser, the same one-pending rule and the same store.
 
 ## Commands
 
